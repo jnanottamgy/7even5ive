@@ -8,7 +8,7 @@ Each stage hands on only what it could not settle.
 |---|---|---|
 | 0. Structured source | Google Classroom coursework already has `dueDate`; use it directly | Free |
 | 1. Rules | Date parser anchored to the message's **sent time** (so "next Friday" is right even if read days later); Indian day-month order; patterns such as "due by", "on or before", "submit before", "EOD" = 11:59 pm | Free |
-| 2. Subject | SHELF's cascade: exact name → cached alias → course-code pattern → mention scan → fuzzy match | Free |
+| 2. Subject | Exact name → cached alias → course-code pattern → mention scan → fuzzy match | Free |
 | 3. Jev | Intent classification with calibrated confidence, if API access arrives in time | Very cheap |
 | 4. LLM | Claude on Bedrock fills only the fields still missing | Paid, rare |
 | 5. Ask | Low confidence → a notification asks the student | Free |
@@ -16,14 +16,13 @@ Each stage hands on only what it could not settle.
 A confidence score decides the outcome: ≥ 0.9 acts alone, 0.6–0.9 calls the LLM, < 0.6 asks.
 Thresholds are tuned on a set of sample professor emails and class-group messages.
 
-**What the LLM resolves is cached** (SHELF already does this for subject aliases), so the same
-phrasing never needs the LLM twice.
+**What the LLM resolves is cached**, so the same phrasing never needs the LLM twice.
 
 ## 2. Deduplication
 
 The same assignment often arrives three times (email, Classroom, WhatsApp forward).
 
-- Files: SHA-256 of the bytes (SHELF already stores this).
+- Files: SHA-256 of the bytes.
 - Deadlines: key of (subject, normalised title, due date ± 1 day). A match merges sources into one
   deadline instead of creating three.
 

@@ -18,7 +18,7 @@ can change what the model proposes, but not what the policy permits.
 
 | Action | Level | Notes |
 |---|---|---|
-| `save_deadline` (SHELF) | alone | Undo deletes it |
+| `save_deadline` | alone | Undo deletes it |
 | `attendance_warning` | alone | Notification only |
 | `voice_note_to_deadline` | alone | Same as save_deadline, source = voice note |
 | `morning_briefing` | alone | Read-only summary |
