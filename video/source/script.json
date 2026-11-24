@@ -42,6 +42,30 @@
   "text": "Announcements drown in a class group, under forty memes, and a voice note nobody plays."
  },
  {
+  "id": "L07a",
+  "scene": "problem",
+  "voice": "narr",
+  "text": "And the night before an exam, every group chat turns into the same hunt."
+ },
+ {
+  "id": "L07b",
+  "scene": "problem",
+  "voice": "narr",
+  "text": "Someone asks for the unit three notes. Someone sends unit two. The drive link needs access, and the file you need is buried under six hundred messages."
+ },
+ {
+  "id": "L07c",
+  "scene": "problem",
+  "voice": "narr",
+  "text": "Search for notes, and you get two hundred results. Not one of them is the file."
+ },
+ {
+  "id": "L07d",
+  "scene": "problem",
+  "voice": "narr",
+  "text": "And placement mails go to a college inbox nobody checks. The drive registration closed at six."
+ },
+ {
   "id": "L08",
   "scene": "problem",
   "voice": "narr",
@@ -108,6 +132,24 @@
   "text": "Add to calendar. One tap. Done, and logged, with undo."
  },
  {
+  "id": "L18a",
+  "scene": "flow",
+  "voice": "narr",
+  "text": "Files work the same way. Every P D F you forward is filed by subject: notes, question papers, circulars."
+ },
+ {
+  "id": "L18b",
+  "scene": "flow",
+  "voice": "narr",
+  "text": "Ask for the unit three notes, and you get the file. Not two hundred results."
+ },
+ {
+  "id": "L18c",
+  "scene": "flow",
+  "voice": "narr",
+  "text": "It reads your college email too, and keeps only what a student needs: placements, internships, and exam notices."
+ },
+ {
   "id": "L19",
   "scene": "voice",
   "voice": "narr",
@@ -135,7 +177,7 @@
   "id": "D03",
   "scene": "voice",
   "voice": "agent",
-  "text": "Done. I'll remind you before every D B M S class."
+  "text": "Done. And the campus drive form closes at six. The link is in your library."
  },
  {
   "id": "L21",
@@ -256,12 +298,6 @@
   "scene": "forge",
   "voice": "narr",
   "text": "Portal Forge learns a portal once, writes an Open A P I spec, and the gateway turns it into tools."
- },
- {
-  "id": "L41",
-  "scene": "forge",
-  "voice": "narr",
-  "text": "And on stage, a live counter shows how much ran on rules, how much needed A I, and what it cost per student. Measured, never estimated."
  },
  {
   "id": "L42",

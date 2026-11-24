@@ -80,10 +80,10 @@
   const layersG = ['Inbound auth', 'Interceptor λ', 'Cedar policy', 'Identity vault'].map((n, i) => box(slab, 28, 200 + i * 118, 274, 96, 'abs', { borderRadius: '18px', background: 'rgba(0,0,0,.35)', border: '1px solid rgba(255,255,255,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '26px', fontWeight: 600 }, n));
   tl.fromTo(slab, { opacity: 0, scale: 0.9 }, { opacity: 1, scale: 1, duration: 0.6, ease: 'power3.out' }, w28(19) - 0.15);
   tl.fromTo(layersG, { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.4, stagger: 0.08 }, w28(21));
-  const tools = ['WhatsApp Cloud API', 'Google Calendar API', 'College portal', 'Agent tools λ'].map((n, i) => box(gw, 1400, 270 + i * 150, 'auto', 'auto', 'chip', {}, n));
+  const tools = ['WhatsApp Cloud API', 'Gmail API · read-only', 'Google Calendar API', 'College portal', 'Agent tools λ'].map((n, i) => box(gw, 1400, 240 + i * 125, 'auto', 'auto', 'chip', {}, n));
   tl.fromTo(tools, { x: 40, opacity: 0 }, { x: 0, opacity: 1, duration: 0.5, stagger: 0.07, ease: 'power4.out' }, w28(21));
   const gsv = svgLayer(gw);
-  const sy = [340, 510, 680], ty = [310, 460, 610, 760];
+  const sy = [340, 510, 680], ty = [270, 395, 520, 645, 770];
   const inP = sy.map(y => pathEl(gsv, `M 500 ${y} C 650 ${y}, 690 550, 800 550`, { stroke: 'rgba(244,241,234,.18)', w: 2 }));
   const outP = ty.map(y => pathEl(gsv, `M 1130 550 C 1240 550, 1280 ${y}, 1395 ${y}`, { stroke: 'rgba(244,241,234,.18)', w: 2 }));
   inP.forEach((p, i) => drawPath(p, w28(19) + i * 0.08, 0.6));
@@ -91,7 +91,7 @@
   for (let k = 0; k < 6; k++) {
     const t0 = T.L28 + 1.2 + k * 1.1;
     packet(gsv, inP[k % 3], t0, 0.55, k % 3 === 1 ? '#F4F1EA' : '#FFB547');
-    packet(gsv, outP[k % 4], t0 + 0.75, 0.5, '#5BE49B');
+    packet(gsv, outP[k % 5], t0 + 0.75, 0.5, '#5BE49B');
     tl.to(slab, { boxShadow: '0 0 120px rgba(255,160,60,.55), inset 0 0 50px rgba(255,181,71,.2)', duration: 0.12 }, t0 + 0.55);
     tl.to(slab, { boxShadow: '0 0 80px rgba(255,160,60,.25), inset 0 0 40px rgba(255,181,71,.08)', duration: 0.4 }, t0 + 0.67);
   }

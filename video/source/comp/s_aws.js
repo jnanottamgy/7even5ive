@@ -17,11 +17,12 @@ const Wt = (txt, id) => i => wordTime(txt, i, T[id], E[id] - T[id]);
   const title = box(cam, 110, 70, 1200, 80, 'abs', { fontSize: '64px', fontWeight: 600, letterSpacing: '-0.03em', whiteSpace: 'nowrap' }, 'Serverless, on <span style="color:var(--aws)">AWS</span>');
   inn(title, T.L34 + 0.3, { y: 20, d: 0.6 });
   // columns: sources | SQS | λ workers | AgentCore Gateway | tools ; bottom row: Bedrock | Supabase | phone
-  const A1 = node(cam, 110, 218, 270, 88, 'WhatsApp', 'forwards · Cloud API', 'wa');
-  const A2 = node(cam, 110, 318, 270, 88, 'Share sheet', 'S3 → Scribe', 'aws');
-  const A4 = node(cam, 110, 418, 270, 88, 'Google Classroom', 'assignments · API');
-  const A3 = node(cam, 110, 534, 270, 80, 'EventBridge', '07:00 · daily', 'aws');
-  const B1 = node(cam, 440, 320, 200, 84, 'SQS', '+ dead-letter queue', 'aws');
+  const A1 = node(cam, 110, 204, 270, 76, 'WhatsApp', 'forwards · Cloud API', 'wa');
+  const A5 = node(cam, 110, 290, 270, 76, 'College mail', 'Gmail push · read-only');
+  const A2 = node(cam, 110, 376, 270, 76, 'Share sheet', 'S3 → Scribe', 'aws');
+  const A4 = node(cam, 110, 462, 270, 76, 'Google Classroom', 'assignments · API');
+  const A3 = node(cam, 110, 582, 270, 76, 'EventBridge', '07:00 · daily', 'aws');
+  const B1 = node(cam, 440, 329, 200, 84, 'SQS', '+ dead-letter queue', 'aws');
   const EL = node(cam, 720, 196, 260, 80, 'ElevenLabs Agents', 'voice · MCP client', 'el');
   const LY = [334, 414, 494, 574, 654];
   const lam = ['cascade', 'planner', 'approve', 'briefing', 'notify'].map((n, i) => node(cam, 720, LY[i] - 34, 260, 68, `λ ${n}`, null, 'aws'));
@@ -30,8 +31,8 @@ const Wt = (txt, id) => i => wordTime(txt, i, T[id], E[id] - T[id]);
   G.style.justifyContent = 'flex-start';
   G.style.paddingTop = '30px';
   const gRows = ['Cedar policy', 'Interceptor λ', 'Identity vault'].map((n, i) => box(G, 24, 170 + i * 104, 250, 84, 'abs', { borderRadius: '16px', background: 'rgba(0,0,0,.35)', border: '1px solid rgba(255,255,255,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', fontWeight: 600 }, n));
-  const TY = [250, 354, 458, 562];
-  const tools = ['WhatsApp Cloud API', 'Google Calendar API', 'College portal', 'Agent tools λ'].map((n, i) => node(cam, 1410, TY[i] - 40, 400, 80, n, null, i === 0 ? 'wa' : 'plain'));
+  const TY = [236, 328, 420, 512, 604];
+  const tools = ['WhatsApp Cloud API', 'Gmail API · read-only', 'Google Calendar API', 'College portal', 'Agent tools λ'].map((n, i) => node(cam, 1410, TY[i] - 38, 400, 76, n, null, i === 0 ? 'wa' : 'plain'));
   const SB = node(cam, 500, 770, 640, 200, '', '', 'supa');
   SB.style.justifyContent = 'flex-start';
   SB.innerHTML = `<div style="display:flex;align-items:center;gap:14px"><span style="font-size:28px;font-weight:650">Supabase</span><span class="mono" style="font-size:16px;color:var(--supa);letter-spacing:.12em">POSTGRES · MUMBAI</span></div>`;
@@ -39,8 +40,8 @@ const Wt = (txt, id) => i => wordTime(txt, i, T[id], E[id] - T[id]);
   const BR = node(cam, 110, 790, 330, 110, 'Amazon Bedrock', 'Claude Haiku · India', 'aws');
   const PH = node(cam, 1500, 780, 310, 180, 'Your phone', 'WhatsApp + web app', 'plain');
   PH.style.justifyContent = 'flex-start';
-  const all = [A1, A2, A4, A3, B1, EL, ...lam, G, ...tools, SB, BR, PH];
-  tl.fromTo([A1, A2, A4, A3], { x: -60, opacity: 0 }, { x: 0, opacity: 1, duration: 0.6, stagger: 0.06, ease: 'power4.out' }, t0 + 0.2);
+  const all = [A1, A5, A2, A4, A3, B1, EL, ...lam, G, ...tools, SB, BR, PH];
+  tl.fromTo([A1, A5, A2, A4, A3], { x: -60, opacity: 0 }, { x: 0, opacity: 1, duration: 0.6, stagger: 0.06, ease: 'power4.out' }, t0 + 0.2);
   tl.fromTo([B1, ...lam], { y: 30, opacity: 0 }, { y: 0, opacity: 0.45, duration: 0.6, stagger: 0.06, ease: 'power4.out' }, t0 + 0.45);
   tl.fromTo(EL, { y: 30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: 'power4.out' }, t0 + 0.45);
   tl.fromTo(G, { scale: 0.9, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.7, ease: 'power4.out' }, t0 + 0.7);
@@ -59,27 +60,28 @@ const Wt = (txt, id) => i => wordTime(txt, i, T[id], E[id] - T[id]);
   };
   const P = (pts, o) => pathEl(sv, rp(pts), Object.assign({ stroke: 'rgba(244,241,234,.24)', w: 2 }, o || {}));
   const M = pts => pathEl(sv, rp(pts), { stroke: 'none' });        // invisible route a packet can ride
-  const pA1B = P([[380, 262], [410, 262], [410, 362], [440, 362]]);
-  const pA2B = P([[380, 362], [440, 362]]);
-  const pA4B = P([[380, 462], [410, 462], [410, 362], [440, 362]]);
-  const pBbus = P([[640, 362], [690, 362]]);
+  const pA1B = P([[380, 242], [410, 242], [410, 371], [440, 371]]);
+  const pA5B = P([[380, 328], [410, 328]]);
+  const pA2B = P([[380, 414], [410, 414], [410, 371], [440, 371]]);
+  const pA4B = P([[380, 500], [410, 500], [410, 371], [440, 371]]);
+  const pBbus = P([[640, 371], [690, 371]]);
   const pLin = P([[690, LY[0]], [690, LY[4]]]);
   const pLst = LY.map(y => P([[690, y], [720, y]]));
-  const pA3C = P([[380, 574], [690, 574]]);
+  const pA3C = P([[380, 620], [690, 620]]);
   const pLout = [236, ...LY].map(y => P([[980, y], [1010, y]]));
   const pGin = P([[1010, 236], [1010, LY[4]]]);
   const pGin2 = P([[1010, 450], [1040, 450]]);
   const pGt = P([[1340, 450], [1375, 450]]);
-  const pTbus = P([[1375, TY[0]], [1375, TY[3]]]);
+  const pTbus = P([[1375, TY[0]], [1375, TY[4]]]);
   const pTst = TY.map(y => P([[1375, y], [1410, y]]));
   const pCS = P([[850, 688], [850, 770]]);
   const pCB = P([[850, 730], [275, 730], [275, 790]], { dash: '5 8' });
   const pSP = P([[1140, 870], [1500, 870]]);
   const pWP = P([[1810, TY[0]], [1855, TY[0]], [1855, 870], [1810, 870]], { stroke: 'rgba(37,211,102,.35)' });
-  [pA1B, pA2B, pA4B, pBbus, pLin, ...pLst, pA3C, ...pLout, pGin, pGin2, pGt, pTbus, ...pTst, pCS, pSP, pWP].forEach((p, i) => drawPath(p, t0 + 1.0 + i * 0.025, 0.7));
+  [pA1B, pA5B, pA2B, pA4B, pBbus, pLin, ...pLst, pA3C, ...pLout, pGin, pGin2, pGt, pTbus, ...pTst, pCS, pSP, pWP].forEach((p, i) => drawPath(p, t0 + 1.0 + i * 0.025, 0.7));
   tl.fromTo(pCB.p, { opacity: 0 }, { opacity: 1, duration: 0.6 }, t0 + 1.6);   // dashed: Bedrock is called only when the rules are unsure
-  const mBC = M([[640, 362], [690, 362], [690, LY[0]], [720, LY[0]]]);
-  const mA3C = M([[380, 574], [720, 574]]);
+  const mBC = M([[640, 371], [690, 371], [690, LY[0]], [720, LY[0]]]);
+  const mA3C = M([[380, 620], [690, 620], [690, LY[3]], [720, LY[3]]]);
 
   // L35 — Lambdas wake only when needed; SQS retry-safe; EventBridge at 7
   const L35 = 'Lambda workers wake only when needed. S Q S makes every event retry-safe. Event Bridge wakes us at seven.';
@@ -90,7 +92,7 @@ const Wt = (txt, id) => i => wordTime(txt, i, T[id], E[id] - T[id]);
   wake(lam[0], w35(2) + 0.45);
   [1, 2, 3, 4].forEach((k, j) => wake(lam[k], w35(3) + j * 0.3));
   tl.to(B1, { opacity: 1, boxShadow: '0 0 40px rgba(255,153,0,.45)', duration: 0.3 }, w35(6));
-  const retry = box(cam, 600, 268, 50, 50, 'abs', {}, '<svg width="50" height="50" viewBox="0 0 24 24"><path d="M19 12 a7 7 0 1 1 -2.05 -4.95 M19 4 V8 H15" fill="none" stroke="#FF9900" stroke-width="2" stroke-linecap="round"/></svg>');
+  const retry = box(cam, 600, 277, 50, 50, 'abs', {}, '<svg width="50" height="50" viewBox="0 0 24 24"><path d="M19 12 a7 7 0 1 1 -2.05 -4.95 M19 4 V8 H15" fill="none" stroke="#FF9900" stroke-width="2" stroke-linecap="round"/></svg>');
   inn(retry, w35(9), { y: 0, scale: 0.5, d: 0.35, ease: 'back.out(1.8)' });
   tl.to(retry, { rotation: 360, duration: 1.0, ease: 'power2.inOut' }, w35(11));
   packet(sv, pA2B, w35(10), 0.45, '#F4F1EA');
@@ -111,7 +113,7 @@ const Wt = (txt, id) => i => wordTime(txt, i, T[id], E[id] - T[id]);
   tl.to(gRows[2], { borderColor: 'rgba(255,181,71,.9)', background: 'rgba(255,181,71,.16)', duration: 0.3 }, w36(2));
   const key = box(G, 30, 486, 240, 26, 'abs mono', { fontSize: '15px', color: 'var(--amber)', letterSpacing: '.08em', textAlign: 'center' }, 'KMS-ENCRYPTED KEYS');
   inn(key, w36(6) - 0.1, { y: 8, d: 0.4 });
-  const nic = box(cam, 1360, 640, 'auto', 'auto', 'chip', { fontSize: '22px' }, `<svg width="26" height="26" viewBox="0 0 24 24"><circle cx="8" cy="12" r="4" fill="none" stroke="#F4F1EA" stroke-width="2"/><path d="M12 12 H21 M18 12 V15" stroke="#F4F1EA" stroke-width="2"/><path d="M3 3 L21 21" stroke="#FF5A4E" stroke-width="2.2"/></svg> never in our code`);
+  const nic = box(cam, 1360, 668, 'auto', 'auto', 'chip', { fontSize: '22px' }, `<svg width="26" height="26" viewBox="0 0 24 24"><circle cx="8" cy="12" r="4" fill="none" stroke="#F4F1EA" stroke-width="2"/><path d="M12 12 H21 M18 12 V15" stroke="#F4F1EA" stroke-width="2"/><path d="M3 3 L21 21" stroke="#FF5A4E" stroke-width="2.2"/></svg> never in our code`);
   inn(nic, w36(7) - 0.1, { x: 30, y: 0, d: 0.45, ease: 'power4.out' });
 
   // L37 — Supabase RLS + Realtime
@@ -198,25 +200,6 @@ const Wt = (txt, id) => i => wordTime(txt, i, T[id], E[id] - T[id]);
   const credit = box(cam, 480, 810, 1300, 30, 'abs mono', { fontSize: '17px', color: 'var(--dim)', letterSpacing: '.12em' }, 'BUILT ON THE OPEN-SOURCE REVERSE-API-ENGINEER · ONE SPEC PER COLLEGE');
   inn(credit, w40(16), { y: 8, d: 0.4 });
 
-  // the live counter
-  const L41 = 'And on stage, a live counter shows how much ran on rules, how much needed A I, and what it cost per student. Measured, never estimated.';
-  const w41 = Wt(L41, 'L41');
-  tl.to([ttl, c1, c2, c3, credit, ...mocks], { x: '-=380', opacity: 0, filter: 'blur(14px)', duration: 0.42, ease: 'power4.in' }, T.L41 - 0.4);
-  const dash = box(cam, 360, 200, 1200, 560, 'card', { background: 'rgba(12,13,17,.95)', padding: '36px 44px' });
-  tl.fromTo(dash, { x: 420, opacity: 0, filter: 'blur(14px)' }, { x: 0, opacity: 1, filter: 'blur(0px)', duration: 0.56, ease: 'power4.out' }, T.L41);
-  dash.innerHTML = `<div style="display:flex;align-items:center;gap:16px"><span style="width:14px;height:14px;border-radius:50%;background:var(--red);box-shadow:0 0 14px var(--red)"></span><span class="mono" style="font-size:20px;letter-spacing:.16em">LIVE COUNTER</span><span class="mono" style="margin-left:auto;font-size:16px;color:var(--dim);letter-spacing:.12em">PREVIEW · REAL NUMBERS ARE MEASURED ON STAGE</span></div>`;
-  const bars = [['Handled by rules', 0.78, 'var(--green)', 11], ['Needed AI', 0.17, 'var(--aws)', 16], ['Asked you', 0.05, 'var(--amber)', 16]];
-  bars.forEach(([n, f, c, wi], i) => {
-    const r = box(dash, 44, 110 + i * 100, 1110, 80, 'abs');
-    r.innerHTML = `<div style="font-size:28px;font-weight:600;margin-bottom:14px">${n}</div><div style="height:14px;border-radius:7px;background:rgba(255,255,255,.07);position:relative"><b class="bf" style="position:absolute;left:0;top:0;height:14px;border-radius:7px;width:100%;background:${c};transform-origin:0 50%;transform:scaleX(0)"></b></div>`;
-    inn(r, w41(wi) - 0.3, { y: 14, d: 0.4 });
-    tl.to(r.querySelector('.bf'), { scaleX: f, duration: 1.0, ease: 'power3.out' }, w41(wi));
-  });
-  const cost = box(dash, 44, 420, 1110, 80, 'abs', { display: 'flex', alignItems: 'center', gap: '20px' }, '<span style="font-size:28px;font-weight:600">Cost per student</span><span class="mono" style="font-size:40px;color:var(--amber)">₹ · · ·</span><span class="mono" style="font-size:16px;color:var(--mute);letter-spacing:.12em">FROM REAL TOKEN + VOICE USAGE</span>');
-  inn(cost, w41(20) - 0.2, { y: 14, d: 0.4 });
-  const mne = words(cam, 'Measured, never estimated.', 'abs serif', { left: '960px', top: '860px', fontSize: '84px', whiteSpace: 'nowrap' });
-  center(mne);
-  spoken(mne, w41(23), E.L41 - w41(23), { y: 24, d: 0.5 });
 })();
 
 // =============================== 9. BUSINESS =============================

@@ -11,7 +11,7 @@ DISPLAY = [
     (r'\bD B M S\b', 'DBMS'), (r'\bA I\b', 'AI'), (r'\bM C P\b', 'MCP'), (r'\bA W S\b', 'AWS'),
     (r'\bS Q S\b', 'SQS'), (r'Open A P I', 'OpenAPI'), (r'\bA P I\b', 'API'), (r'Eleven Labs', 'ElevenLabs'),
     (r'Agent Core', 'AgentCore'), (r'Event Bridge', 'EventBridge'), (r'Supa base', 'Supabase'),
-    (r'Seven Five', '7even5ive'), (r'\bP M\b', 'PM'), (r'assignment three', 'Assignment 3'),
+    (r'Seven Five', '7even5ive'), (r'\bP M\b', 'PM'), (r'\bP D F\b', 'PDF'), (r'\bP Y Qs\b', 'PYQs'), (r'assignment three', 'Assignment 3'),
     (r'eleven fifty-nine', '11:59'), (r'seventy-three percent', '73%'), (r'Seventy-five percent', '75%'),
 ]
 

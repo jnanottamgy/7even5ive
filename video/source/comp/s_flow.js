@@ -142,6 +142,109 @@ function layer(parent) { return box(parent, 0, 0, '100%', '100%', 'abs'); }
   inn(calrow, T.L18 + 1.2, { y: -30, d: 0.55, ease: 'power4.out' });
   const toast = box(ph.scr, 60, 760, 280, 54, 'abs mono', { borderRadius: '999px', background: 'rgba(244,241,234,.92)', color: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '18px', fontSize: '18px' }, 'LOGGED <b style="color:#C2410C">UNDO</b>');
   inn(toast, T.L18 + 2.0, { y: 30, d: 0.5, ease: 'power4.out' });
+
+  // ---------- the library: every file filed by subject (L18a, L18b) ----------
+  const L18a = 'Files work the same way. Every P D F you forward is filed by subject: notes, question papers, circulars.';
+  const L18b = 'Ask for the unit three notes, and you get the file. Not two hundred results.';
+  const L18c = 'It reads your college email too, and keeps only what a student needs: placements, internships, and exam notices.';
+  const wa = i => wordTime(L18a, i, T.L18a, E.L18a - T.L18a);
+  const wbb = i => wordTime(L18b, i, T.L18b, E.L18b - T.L18b);
+  const wcc = i => wordTime(L18c, i, T.L18c, E.L18c - T.L18c);
+  tl.to([ph.p, left, rt], { x: '-=420', opacity: 0, filter: 'blur(14px)', duration: 0.42, ease: 'power4.in' }, T.L18a - 0.45);
+  const LB = box(cam, 0, 0, 1920, 1080, 'abs');
+  tl.set(LB, { opacity: 0 }, 0);
+  tl.fromTo(LB, { x: 420, opacity: 1, filter: 'blur(14px)' }, { x: 0, filter: 'blur(0px)', duration: 0.56, ease: 'power4.out', immediateRender: false }, T.L18a - 0.03);
+  // left: the 7even5ive chat on WhatsApp
+  const wc = box(LB, 120, 96, 780, 868, 'card', { overflow: 'hidden', background: 'rgba(12,14,18,.94)' });
+  const wcH = box(wc, 0, 0, 780, 96, 'abs', { display: 'flex', alignItems: 'center', gap: '18px', padding: '0 28px', borderBottom: '1px solid rgba(255,255,255,.07)', background: 'rgba(255,255,255,.03)' });
+  wcH.innerHTML = '<div class="av" style="position:relative;flex:none;width:54px;height:54px;border-radius:50%;background:#0d0e12;border:1.5px solid rgba(255,181,71,.6)"></div><div><div style="font-size:28px;font-weight:600">7even5ive</div><div class="mono" style="font-size:16px;color:#7BE3A0;margin-top:2px">YOUR LIBRARY, ON WHATSAPP</div></div>';
+  const avr = ring(wcH.querySelector('.av'), 27, 27, 34, 6, { glow: 2, trackOp: 0 }); avr.arcs.forEach(a => a.setAttribute('stroke-dashoffset', avr.C * 0.25));
+  const wbody = box(wc, 0, 96, 780, 772, 'abs', { overflow: 'hidden' });
+  const pdfB = (name, meta) => `<div style="display:flex;align-items:center;gap:14px"><i style="display:flex;align-items:center;justify-content:center;flex:none;width:46px;height:56px;border-radius:8px;background:rgba(255,90,78,.16);color:#FF8B7E;font:600 13px JB;font-style:normal">PDF</i><div><div style="font-size:23px;font-weight:500">${name}</div><div class="mono" style="font-size:14px;color:var(--mute);margin-top:3px">${meta}</div></div></div>`;
+  const cb = (y, mine, html) => box(wbody, mine ? 'auto' : 28, y, 'auto', 'auto', 'abs', { right: mine ? '28px' : 'auto', maxWidth: '560px', padding: '10px 16px 12px', borderRadius: '18px', background: mine ? 'rgba(37,211,102,.16)' : 'rgba(255,255,255,.07)', fontSize: '23px', lineHeight: 1.35, whiteSpace: 'nowrap' }, html);
+  const fwd = '<div class="mono" style="font-size:13px;color:var(--mute);letter-spacing:.08em;margin-bottom:6px">↪ FORWARDED</div>';
+  const o1 = cb(18, true, fwd + pdfB('DBMS_U3_notes.pdf', '3.2 MB · PDF'));
+  const o2 = cb(140, true, fwd + pdfB('OS_PYQ_2025.pdf', '1.4 MB · PDF'));
+  const o3 = cb(262, true, fwd + pdfB('Lab_circular.pdf', '220 KB · PDF'));
+  const r1 = cb(384, false, '<div class="mono" style="font-size:14px;color:var(--amber);letter-spacing:.1em;margin-bottom:6px">FILED 3 FILES</div>DBMS · Notes<br>OS · Question papers<br>Circulars');
+  const o4 = cb(552, true, '<span class="q4"></span>');
+  const r2 = cb(626, false, pdfB('DBMS_U3_notes.pdf', '24 PAGES · FROM RAHUL · 12 NOV'));
+  [[o1, wa(5)], [o2, wa(8)], [o3, wa(10)], [r1, wa(12) + 0.15]].forEach(([b, t]) => inn(b, t - 0.1, { y: 24, d: 0.4 }));
+  inn(o4, T.L18b + 0.05, { y: 20, d: 0.3 });
+  typeText(o4.querySelector('.q4'), 'dbms unit 3 notes', T.L18b + 0.2, 16);
+  inn(r2, wbb(8) - 0.1, { y: 24, d: 0.4, ease: 'back.out(1.4)' });
+  const oneF = box(LB, 520, 900, 380, 40, 'abs mono', { fontSize: '17px', color: 'var(--green)', letterSpacing: '.1em', textAlign: 'right' }, '1 FILE · NOT 200 RESULTS');
+  inn(oneF, wbb(11), { y: 10, d: 0.4 });
+  // right: the library itself
+  const lib = box(LB, 980, 96, 820, 868, 'card', { background: 'rgba(255,255,255,.035)' });
+  box(lib, 36, 30, 400, 50, 'abs', { fontSize: '40px', fontWeight: 650, letterSpacing: '-0.02em' }, 'Library');
+  box(lib, 40, 84, 600, 30, 'abs mono', { fontSize: '17px', color: 'var(--mute)', letterSpacing: '.14em' }, 'STORAGE · BY SUBJECT · S3');
+  const SH = [['DBMS', [['Notes', 12], ['Question papers', 6], ['Circulars', 3]]], ['Operating Systems', [['Notes', 9], ['Question papers', 4]]], ['Computer Networks', [['Notes', 7], ['Question papers', 3]]], ['General', [['Circulars', 14], ['Timetables', 2]]], ['Opportunities', [['Placement drives', 2], ['Internships', 1], ['Exam cell', 5]]]];
+  const chipEl = {};
+  SH.forEach(([sub, chips], i) => {
+    const y = 140 + i * 134;
+    box(lib, 40, y, 740, 34, 'abs', { fontSize: '25px', fontWeight: 600, color: sub === 'Opportunities' ? 'var(--amber)' : 'var(--ink)' }, sub);
+    let x = 40;
+    chips.forEach(([n, c]) => {
+      const w = 34 + n.length * 12.5 + 40;
+      const ch = box(lib, x, y + 46, w, 50, 'abs', { display: 'flex', alignItems: 'center', gap: '10px', padding: '0 16px', borderRadius: '12px', background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.1)', fontSize: '19px', whiteSpace: 'nowrap' }, `<span>${n}</span><b class="mono cnt" style="font-weight:500;color:var(--mute)">${c}</b>`);
+      chipEl[sub + '/' + n] = { el: ch, c, x: 980 + x + w / 2, y: 96 + y + 46 + 25 };
+      x += w + 12;
+    });
+  });
+  tl.fromTo(lib, { x: 60, opacity: 0 }, { x: 0, opacity: 1, duration: 0.6, ease: 'power4.out' }, T.L18a + 0.2);
+  // files fly from the chat into their shelves; each count ticks on arrival
+  const land = (key, t) => {
+    const k = chipEl[key], cnt = k.el.querySelector('.cnt');
+    tl.to(k.el, { borderColor: 'rgba(255,181,71,.9)', background: 'rgba(255,181,71,.14)', duration: 0.15 }, t);
+    tl.to(k.el, { borderColor: 'rgba(255,255,255,.1)', background: 'rgba(255,255,255,.05)', duration: 0.8 }, t + 0.6);
+    tl.set(cnt, { textContent: String(k.c + 1), color: '#FFB547' }, t);
+  };
+  const fly = (fromX, fromY, key, t0, label) => {
+    const k = chipEl[key];
+    const f = box(LB, fromX - 23, fromY - 28, 46, 56, 'abs', { display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px', background: label ? 'rgba(255,181,71,.25)' : 'rgba(255,90,78,.3)', color: label ? '#FFD08A' : '#FFB3AB', font: '600 13px JB', zIndex: 9, boxShadow: '0 8px 24px rgba(0,0,0,.5)' }, label || 'PDF');
+    tl.set(f, { opacity: 0 }, 0);
+    tl.set(f, { opacity: 1 }, t0);
+    tl.to(f, { x: k.x - fromX, y: k.y - fromY, scale: 0.7, duration: 0.7, ease: 'power3.inOut' }, t0);
+    tl.set(f, { opacity: 0 }, t0 + 0.7);
+    land(key, t0 + 0.7);
+  };
+  fly(690, 96 + 96 + 18 + 62, 'DBMS/Notes', wa(15) - 0.7);
+  fly(690, 96 + 96 + 140 + 62, 'Operating Systems/Question papers', wa(16) - 0.6);
+  fly(690, 96 + 96 + 262 + 62, 'General/Circulars', wa(18) - 0.6);
+  tl.to(chipEl['DBMS/Notes'].el, { borderColor: 'rgba(91,228,155,.9)', background: 'rgba(91,228,155,.14)', duration: 0.2 }, wbb(8) - 0.3);
+  tl.to(chipEl['DBMS/Notes'].el, { borderColor: 'rgba(255,255,255,.1)', background: 'rgba(255,255,255,.05)', duration: 0.8 }, wbb(8) + 1.2);
+
+  // ---------- college mail, read-only, filtered to what a student needs (L18c) ----------
+  tl.to(wc, { x: -300, opacity: 0, filter: 'blur(16px)', duration: 0.4, ease: 'power4.in' }, T.L18c - 0.45);
+  tl.to(oneF, { opacity: 0, duration: 0.2 }, T.L18c - 0.45);
+  const ib = box(LB, 120, 96, 780, 868, 'card', { overflow: 'hidden', background: 'rgba(12,14,18,.94)' });
+  tl.set(ib, { opacity: 0 }, 0);
+  tl.fromTo(ib, { x: 380, opacity: 1, filter: 'blur(16px)' }, { x: 0, filter: 'blur(0px)', duration: 0.56, ease: 'power4.out', immediateRender: false }, T.L18c - 0.05);
+  const ibH = box(ib, 0, 0, 780, 96, 'abs', { display: 'flex', alignItems: 'center', gap: '16px', padding: '0 28px', borderBottom: '1px solid rgba(255,255,255,.07)', background: 'rgba(255,255,255,.03)' });
+  ibH.innerHTML = '<svg width="38" height="38" viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2.5" fill="none" stroke="#F4F1EA" stroke-width="1.6"/><path d="M3.5 6.5 L12 13 L20.5 6.5" fill="none" stroke="#F4F1EA" stroke-width="1.6"/></svg><div><div style="font-size:28px;font-weight:600">College mail</div><div class="mono" style="font-size:15px;color:var(--mute);margin-top:2px">GMAIL API · READ-ONLY · RULES FIRST</div></div>';
+  const MR = [['Newsletter', 'Campus digest · Week 48'], ['T&amp;P Cell', 'Campus drive · register by 6 PM', 'Opportunities/Placement drives', 13], ['Webinar', 'Free crypto trading webinar'], ['Internship Cell', 'Summer internship · apply by Fri', 'Opportunities/Internships', 14], ['Library', 'New arrivals this week'], ['Exam Cell', 'Hall tickets released', 'Opportunities/Exam cell', 16], ['Fest Committee', 'Volunteers needed'], ['Promotions', '50% off on laptops'], ['IT Services', 'Password expiry notice']];
+  const mrows = MR.map(([who, subj, key, wi], i) => {
+    const r = box(ib, 20, 112 + i * 82, 740, 72, 'abs', { display: 'flex', alignItems: 'center', gap: '16px', padding: '0 16px', borderRadius: '12px', border: '1px solid transparent', fontSize: '21px' });
+    r.innerHTML = `<b style="flex:none;width:180px;font-weight:600">${who}</b><span class="sj" style="color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${subj}</span>`;
+    return { r, key, wi };
+  });
+  const scan = box(ib, 0, 100, 780, 3, 'abs', { background: 'linear-gradient(90deg,rgba(255,181,71,0),#FFB547,rgba(255,181,71,0))', boxShadow: '0 0 18px #FFB547' });
+  tl.set(scan, { opacity: 0 }, 0);
+  tl.set(scan, { opacity: 1 }, wcc(6));
+  tl.to(scan, { y: 740, duration: 1.0, ease: 'power1.inOut' }, wcc(6));
+  tl.set(scan, { opacity: 0 }, wcc(6) + 1.0);
+  mrows.forEach(({ r, key, wi }, i) => {
+    if (!key) {
+      tl.to(r, { opacity: 0.22, duration: 0.3 }, wcc(7) + i * 0.06);
+      tl.to(r.querySelector('.sj'), { textDecoration: 'line-through', duration: 0.01 }, wcc(7) + i * 0.06);
+    } else {
+      tl.to(r, { borderColor: 'rgba(255,181,71,.8)', background: 'rgba(255,181,71,.10)', duration: 0.25 }, wcc(wi) - 0.15);
+      fly(700, 96 + 112 + i * 82 + 36, key, wcc(wi) + 0.1, 'MAIL');
+    }
+  });
+  const newOp = box(lib, 40, 140 + 4 * 134 + 112, 740, 60, 'abs', { display: 'flex', alignItems: 'center', gap: '14px', padding: '0 18px', borderRadius: '12px', background: 'rgba(255,181,71,.10)', border: '1px solid rgba(255,181,71,.55)', fontSize: '21px' }, '<span class="mono" style="font-size:14px;color:var(--amber);letter-spacing:.12em">NEW</span><b style="font-weight:600">Campus drive</b><span style="color:var(--mute)">· form closes today 6 PM</span>');
+  inn(newOp, wcc(13) + 0.9, { y: 14, d: 0.45, ease: 'back.out(1.4)' });
 })();
 
 // =============================== 5. VOICE ================================
@@ -197,7 +300,7 @@ function layer(parent) { return box(parent, 0, 0, '100%', '100%', 'abs'); }
   const tr = box(cam, 860, 250, 960, 600, 'abs');
   const lineA = box(tr, 0, -30, 960, 'auto', 'abs', { fontSize: '40px', lineHeight: 1.3, fontWeight: 500 }, '<div class="mono" style="font-size:19px;color:var(--amber);letter-spacing:.14em;margin-bottom:10px">7EVEN5IVE · VOICE AGENT</div>"DBMS is at 73%. Attend the next three classes, and you\'re back at 75. Want a reminder before each one?"');
   const lineB = box(tr, 0, 240, 960, 'auto', 'abs', { fontSize: '46px', lineHeight: 1.3, fontWeight: 500, textAlign: 'right' }, '<div class="mono" style="font-size:19px;color:var(--mute);letter-spacing:.14em;margin-bottom:10px">YOU</div>"Yes."');
-  const lineC = box(tr, 0, 410, 960, 'auto', 'abs', { fontSize: '40px', lineHeight: 1.3, fontWeight: 500 }, '<div class="mono" style="font-size:19px;color:var(--amber);letter-spacing:.14em;margin-bottom:10px">7EVEN5IVE · VOICE AGENT</div>"Done. I\'ll remind you before every DBMS class."');
+  const lineC = box(tr, 0, 410, 960, 'auto', 'abs', { fontSize: '40px', lineHeight: 1.3, fontWeight: 500 }, '<div class="mono" style="font-size:19px;color:var(--amber);letter-spacing:.14em;margin-bottom:10px">7EVEN5IVE · VOICE AGENT</div>"Done. And the campus drive form closes at six. The link is in your library."');
   inn(lineA, T.D01, { y: 30, d: 0.5 });
   inn(lineB, T.D02 - 0.05, { y: 30, d: 0.4 });
   inn(lineC, T.D03 - 0.05, { y: 30, d: 0.45 });
@@ -231,6 +334,8 @@ function layer(parent) { return box(parent, 0, 0, '100%', '100%', 'abs'); }
   tl.to(warn, { opacity: 0, duration: 0.3 }, E.D03 + 1.0);
   const cal2 = box(sA, 22, 170, 354, 92, 'abs', { borderRadius: '20px', background: 'rgba(91,228,155,.1)', border: '1px solid rgba(91,228,155,.4)', display: 'flex', alignItems: 'center', gap: '16px', padding: '0 20px' }, `<div style="text-align:center"><div class="mono" style="font-size:15px;color:var(--green)">NEXT</div><div style="font-size:30px;font-weight:650">3</div></div><div><div style="font-size:22px;font-weight:600">DBMS class reminders</div><div class="mono" style="font-size:16px;color:var(--mute)">15 min before · by voice</div></div>`);
   inn(cal2, E.D03 + 1.1, { y: -20, d: 0.5 });
+  const opp = box(sA, 22, 276, 354, 92, 'abs', { borderRadius: '20px', background: 'rgba(255,181,71,.1)', border: '1px solid rgba(255,181,71,.45)', display: 'flex', alignItems: 'center', gap: '16px', padding: '0 20px' }, `<div style="text-align:center"><div class="mono" style="font-size:15px;color:var(--amber)">TODAY</div><div style="font-size:24px;font-weight:650">6 PM</div></div><div><div style="font-size:22px;font-weight:600">Campus drive form</div><div class="mono" style="font-size:16px;color:var(--mute)">link in your library</div></div>`);
+  inn(opp, E.D03 + 1.3, { y: -20, d: 0.5 });
 
   // --- Scribe: voice notes become text ---
   const L22 = 'Voice notes from your class group? Eleven Labs Scribe turns them into text, in Kannada, Hindi or English.';
@@ -266,9 +371,9 @@ function layer(parent) { return box(parent, 0, 0, '100%', '100%', 'abs'); }
   box(sC, 0, 0, '100%', '100%', 'abs', { background: 'linear-gradient(180deg,#1b1408,#0b0c10 70%)' });
   box(sC, 0, 120, 398, 40, 'abs', { textAlign: 'center', fontSize: '22px', color: 'var(--mute)' }, 'Friday, 28 November');
   box(sC, 0, 150, 398, 130, 'abs', { textAlign: 'center', fontSize: '120px', fontWeight: 600, letterSpacing: '-0.04em' }, '7:00');
-  const brief = box(sC, 22, 330, 354, 230, 'abs', { borderRadius: '26px', background: 'rgba(255,255,255,.09)', padding: '22px' });
+  const brief = box(sC, 22, 330, 354, 262, 'abs', { borderRadius: '26px', background: 'rgba(255,255,255,.09)', padding: '22px' });
   brief.innerHTML = `<div style="display:flex;align-items:center;gap:12px"><div style="width:30px;height:30px;position:relative" class="bi"></div><b style="font-size:22px">Morning briefing</b><span class="mono" style="margin-left:auto;font-size:15px;color:var(--mute)">now</span></div>
-   <div style="font-size:21px;color:rgba(244,241,234,.8);margin-top:12px;line-height:1.4">2 classes · 1 deadline · DBMS at 73%</div>
+   <div style="font-size:21px;color:rgba(244,241,234,.8);margin-top:12px;line-height:1.4">2 classes · DBMS at 73%<br><span style="color:var(--amber)">Campus drive form closes 6 PM</span></div>
    <div style="display:flex;align-items:center;gap:14px;margin-top:18px"><span style="width:52px;height:52px;border-radius:50%;background:var(--amber);display:flex;align-items:center;justify-content:center"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M7 4 L20 12 L7 20 Z" fill="#1a1205"/></svg></span><i style="flex:1;height:6px;border-radius:3px;background:rgba(255,255,255,.12);position:relative;display:block"><b class="prog" style="position:absolute;left:0;top:0;height:6px;border-radius:3px;background:var(--amber);width:100%;transform-origin:0 50%;transform:scaleX(0)"></b></i><span class="mono" style="font-size:16px;color:var(--mute)">0:42</span></div>`;
   const bi = ring(brief.querySelector('.bi'), 15, 15, 30, 5, { glow: 2, trackOp: 0 }); bi.arcs.forEach(a => a.setAttribute('stroke-dashoffset', bi.C * 0.25));
   inn(brief, T.L23 + 0.35, { y: -30, d: 0.55, ease: 'back.out(1.4)' });

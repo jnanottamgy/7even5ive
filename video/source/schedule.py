@@ -11,14 +11,14 @@ scene_of = {l['id']: l['scene'] for l in lines}
 GAP = 0.42                       # default pause between lines inside a scene
 CUSTOM = {                       # pause BEFORE this line (overrides GAP)
     'L02': 0.95, 'L03': 0.85, 'L04': 1.35,
-    'L06': 0.3, 'L07': 0.3, 'L08': 0.4,
+    'L06': 0.3, 'L07': 0.3, 'L07a': 0.45, 'L07b': 0.45, 'L07c': 0.5, 'L07d': 0.75, 'L08': 0.75,
     'L10': 0.55,
-    'L12': 0.45, 'L14': 0.6, 'L15': 0.35, 'L16': 0.45, 'L17': 0.6, 'L18': 0.45,
+    'L12': 0.45, 'L14': 0.6, 'L15': 0.35, 'L16': 0.45, 'L17': 0.6, 'L18': 0.45, 'L18a': 1.0, 'L18b': 0.45, 'L18c': 0.9,
     'L20': 0.5, 'D01': 1.9, 'D02': 0.45, 'D03': 0.35, 'L21': 1.0, 'L22': 0.6, 'L23': 0.55,
     'L25': 0.7, 'L26': 0.7, 'L27': 0.9, 'L28': 0.85, 'L29': 0.55, 'L30': 0.55, 'L31': 0.6,
     'L32': 0.5, 'L33': 0.55,
     'L35': 0.5, 'L36': 0.45, 'L37': 0.45, 'L38': 0.5,
-    'L40': 0.45, 'L41': 0.5,
+    'L40': 0.45,
     'L43': 0.5, 'L45': 0.45,
 }
 
@@ -68,6 +68,27 @@ def wt(lid, idx):                # same estimate as wordTime() in comp/core.js
     return T[lid] + (E[lid] - T[lid]) * 0.92 * sum(lens[:idx]) / sum(lens)
 
 # hook
+def extra():
+    # the notes hunt
+    cue(T['L07a'] - 0.45, 'whoosh_long', -9)
+    for k, wi in enumerate((1, 5, 8, 10, 12, 13, 17, 19)):
+        cue(wt('L07b', wi), 'notif_ping_1' if k % 2 == 0 else 'notif_ping_2', -14)
+    cue(wt('L07b', 15), 'error_buzz', -14); cue(wt('L07b', 22), 'whoosh_short', -11)
+    cue(wt('L07c', 1), 'typing_ticks', -13); cue(wt('L07c', 4), 'scan_sweep', -14); cue(wt('L07c', 9), 'error_buzz', -10)
+    # the placement mail nobody read
+    cue(T['L07d'] - 0.5, 'whoosh_short', -9); cue(wt('L07d', 13), 'tick_clock', -8); cue(wt('L07d', 13) + 0.25, 'lock_clunk', -8)
+    cue(T['L08'] - 0.45, 'whoosh_long', -10)
+    # the library
+    cue(T['L18a'] - 0.5, 'whoosh_short', -9)
+    for wi in (5, 8, 10):
+        cue(wt('L18a', wi), 'swipe_up', -13)
+    for wi in (15, 16, 18):
+        cue(wt('L18a', wi), 'pop_blip', -11)
+    cue(T['L18b'] + 0.1, 'typing_ticks', -13); cue(wt('L18b', 8), 'success_chime', -12)
+    # college mail, filtered
+    cue(T['L18c'] - 0.5, 'whoosh_short', -9); cue(wt('L18c', 6), 'scan_sweep', -13)
+    for wi in (13, 14, 16):
+        cue(wt('L18c', wi), 'pop_blip', -11)
 cue(T['L01'] - 0.15, 'heartbeat', -4); cue(T['L01'] + 1.6, 'heartbeat', -6); cue(T['L02'] + 1.4, 'heartbeat', -7)
 for k in range(3):                                # the 75 -> 74 -> 73 roll
     cue(T['L03'] + 0.6 + k * 0.55, 'tick_clock', -6)
@@ -131,7 +152,6 @@ cue(T['L38'] + 0.4, 'sub_drop', -10)
 # forge
 cue(cuts['forge'], 'whoosh_short', -8)
 cue(T['L40'] + 0.6, 'typing_ticks', -12); cue(T['L40'] + 3.6, 'pop_blip', -10); cue(T['L40'] + 4.1, 'pop_blip', -10)
-cue(T['L41'] + 0.5, 'scan_sweep', -12)
 # business
 cue(cuts['business'], 'whoosh_short', -8)
 for wi in (0, 3, 8, 17):
@@ -141,6 +161,7 @@ cue(T['L43'] + 0.1, 'lock_clunk', -8)
 cue(cuts['close'] - 2.0, 'soft_riser_2s', -8)
 cue(cuts['close'], 'impact_boom', -7); cue(cuts['close'] + 0.1, 'shimmer', -9)
 
+extra()
 json.dump({'T': T, 'E': E, 'cuts': cuts, 'total': total, 'sfx': sorted(c)}, open('timeline.json', 'w'), indent=1)
 print('cuts', {k: round(v, 2) for k, v in cuts.items()})
 print('total', total)
