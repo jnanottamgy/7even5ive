@@ -11,16 +11,17 @@ function layer(parent) { return box(parent, 0, 0, '100%', '100%', 'abs'); }
 
   // --- the message ---
   const L12 = 'D B M S assignment three. Due Friday, eleven fifty-nine P M.';
-  const L13 = 'Forward it to Seven Five on WhatsApp, in one tap. Or let your class rep forward it once, for the whole section.';
-  const L15 = "It finds the subject, the due date and the task, and checks it isn't a duplicate.";
-  const L16 = "Only when the rules aren't sure does Claude step in, on Amazon Bedrock, and its answer is checked against your real subjects.";
+  const L13 = 'Forward it to Seven Five on WhatsApp, in one tap.';
+  const L14 = 'Claude, on Amazon Bedrock, reads it first. It picks out the subject, the deadline and the task, and code checks each one against your real data.';
+  const L15 = "For the simplest messages, we're testing Jev, a faster intent classifier.";
   const w12 = i => wordTime(L12, i, T.L12, E.L12 - T.L12);
   const w13 = i => wordTime(L13, i, T.L13, E.L13 - T.L13);
-  const w16 = i => wordTime(L16, i, T.L16, E.L16 - T.L16);
+  const w14 = i => wordTime(L14, i, T.L14, E.L14 - T.L14);
+  const w15 = i => wordTime(L15, i, T.L15, E.L15 - T.L15);
 
   const msgWrap = box(cam, 250, 300, 940, 260, 'abs');
   const bub = box(msgWrap, 0, 0, 940, 'auto', 'abs', { padding: '30px 40px 34px', borderRadius: '30px', background: 'rgba(255,255,255,.065)', border: '1px solid rgba(255,255,255,.1)' });
-  bub.innerHTML = `<div style="display:flex;align-items:center;gap:14px;margin-bottom:14px"><i style="display:block;width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#3E8E6A,#1F4F3A)"></i><b style="font-size:26px;color:var(--green);font-weight:600">Ramesh (CR)</b><span style="font-size:24px;color:var(--mute)">· CSE 3B class group</span><span class="mono" style="margin-left:auto;font-size:20px;color:var(--dim)">9:14 PM</span></div>
+  bub.innerHTML = `<div style="display:flex;align-items:center;gap:14px;margin-bottom:14px"><i style="display:block;width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#3E8E6A,#1F4F3A)"></i><b style="font-size:26px;color:var(--green);font-weight:600">Ramesh</b><span style="font-size:24px;color:var(--mute)">· CSE 3B class group</span><span class="mono" style="margin-left:auto;font-size:20px;color:var(--dim)">9:14 PM</span></div>
   <div style="font-size:48px;line-height:1.3;font-weight:500;letter-spacing:-0.01em">${hl(0, 'DBMS')} ${hl(0, 'Assignment 3')} due ${hl(0, 'Friday 11:59 PM.')} Submit on Classroom.</div>`;
   inn(bub, T.L11 - 0.2, { y: 40, d: 0.7 });
   // tracking brackets lock on
@@ -39,7 +40,7 @@ function layer(parent) { return box(parent, 0, 0, '100%', '100%', 'abs'); }
     tl.to(hls[k], { color: 'var(--amber)', duration: 0.3 }, t);
   });
 
-  // --- forward it on WhatsApp, or the class rep forwards once for everyone ---
+  // --- forward it on WhatsApp, in one tap ---
   tl.to(msgWrap, { x: -40, y: -120, scale: 0.84, duration: 0.8, ease: 'power3.inOut' }, T.L13 - 0.2);
   tl.to(cam, { scale: 1, duration: 0.8, ease: 'power3.inOut' }, T.L13 - 0.2);
   const sheet = box(cam, 250, 600, 860, 250, 'abs', { borderRadius: '30px', background: 'rgba(22,24,30,.92)', border: '1px solid rgba(255,255,255,.1)' });
@@ -58,53 +59,32 @@ function layer(parent) { return box(parent, 0, 0, '100%', '100%', 'abs'); }
   tl.to(app75, { scale: 0.9, duration: 0.08 }, w13(8));
   tl.to(app75, { scale: 1, duration: 0.3, ease: 'back.out(1.7)' }, w13(8) + 0.08);
   tl.to(cur, { left: 1500 + 'px', top: 1200 + 'px', duration: 0.6, ease: 'power3.in' }, w13(8) + 0.5);
-  // the email path
-  const mail = box(cam, 1310, 330, 470, 'auto', 'abs', { padding: '26px 30px', borderRadius: '26px', background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.1)' });
-  mail.innerHTML = `<div style="display:flex;align-items:center;gap:16px"><svg width="44" height="44" viewBox="0 0 24 24" style="flex:none"><path d="M3 10 V14 H6.5 L13.5 18.5 V5.5 L6.5 10 Z" fill="none" stroke="#F4F1EA" stroke-width="1.6" stroke-linejoin="round"/><path d="M16.5 9.5 Q18.3 12 16.5 14.5 M19 7.5 Q22.2 12 19 16.5" fill="none" stroke="#F4F1EA" stroke-width="1.6" stroke-linecap="round"/></svg><div><div style="font-size:28px;font-weight:600">or your class rep, once</div><div class="mono" style="font-size:18px;color:var(--mute);margin-top:4px">ONE FORWARD → WHOLE SECTION</div></div></div>`;
-  inn(mail, w13(10) - 0.1, { x: 60, y: 0, d: 0.6, ease: 'power4.out' });
-  const bolt = box(mail, 400, 20, 48, 48, 'abs', {}, '<svg width="48" height="48" viewBox="0 0 24 24"><path d="M13 2 L5 13.5 H11 L10 22 L19 9.5 H13 Z" fill="#FFB547"/></svg>');
-  tl.fromTo(bolt, { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.4, ease: 'back.out(2)' }, w13(17));
-  const sv = svgLayer(cam);
-  const p1 = pathEl(sv, 'M 1545 470 C 1545 620, 1450 700, 1300 730', { stroke: 'rgba(255,181,71,.45)', w: 2.5, dash: '6 8' });
-  drawPath(p1, w13(17), 0.6);
-  packet(sv, p1, w13(19), 0.7);
 
-  // --- the rules engine ---
+  // --- understood by Claude on Bedrock, checked by code against your real data ---
   const t14 = T.L14 - 0.35;
-  tl.to([msgWrap, sheet, mail, sv], { x: '-=520', opacity: 0, filter: 'blur(12px)', duration: 0.42, ease: 'power4.in' }, t14);
+  tl.to([msgWrap, sheet], { x: '-=520', opacity: 0, filter: 'blur(12px)', duration: 0.42, ease: 'power4.in' }, t14);
   const eng = box(cam, 220, 96, 1480, 800, 'card', { background: 'rgba(255,255,255,.03)' });
   tl.fromTo(eng, { x: 620, opacity: 0, filter: 'blur(16px)' }, { x: 0, opacity: 1, filter: 'blur(0px)', duration: 0.62, ease: 'power4.out' }, t14 + 0.42);
-  box(eng, 50, 40, 600, 34, 'abs mono', { fontSize: '20px', color: 'var(--mute)', letterSpacing: '.16em' }, 'STEP 1 · RULES ENGINE');
-  const noai = box(eng, 1120, 28, 310, 52, 'abs mono', { display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '999px', border: '1px solid rgba(91,228,155,.55)', color: 'var(--green)', fontSize: '20px', letterSpacing: '.12em' }, 'NO AI USED');
-  const pc = words(eng, 'Plain code. No AI.', 'abs serif', { left: '50px', top: '84px', fontSize: '84px', whiteSpace: 'nowrap' });
-  spoken(pc, T.L14, E.L14 - T.L14, { y: 30, d: 0.5 });
-  inn(noai, E.L14 - 0.3, { y: 0, scale: 0.8, d: 0.5, ease: 'back.out(1.7)' });
+  box(eng, 50, 40, 600, 34, 'abs mono', { fontSize: '20px', color: 'var(--mute)', letterSpacing: '.16em' }, 'STEP 1 · UNDERSTAND');
+  const llm = box(eng, 1010, 26, 420, 56, 'abs', { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', borderRadius: '999px', border: '1px solid rgba(255,153,0,.6)', background: 'rgba(255,153,0,.1)', fontSize: '22px', fontWeight: 600 }, '<span class="mono" style="font-size:15px;color:var(--aws);letter-spacing:.12em">AWS</span>Claude · Amazon Bedrock');
+  inn(llm, w14(2) - 0.15, { y: 0, scale: 0.85, d: 0.45, ease: 'back.out(1.6)' });
+  const hA = words(eng, 'Read by AI.', 'abs serif', { left: '50px', top: '84px', fontSize: '84px', whiteSpace: 'nowrap' });
+  spoken(hA, w14(4) - 0.1, 0.7, { y: 30, d: 0.5 });
+  const hB = words(eng, 'Checked by code.', 'abs serif', { left: '520px', top: '84px', fontSize: '84px', whiteSpace: 'nowrap', color: 'var(--amber)' });
+  spoken(hB, w14(18) - 0.1, 0.8, { y: 30, d: 0.5 });
   const src = box(eng, 50, 212, 1380, 60, 'abs mono', { fontSize: '27px', color: 'rgba(244,241,234,.7)', padding: '10px 18px', borderRadius: '12px', background: 'rgba(0,0,0,.3)' }, '"DBMS Assignment 3 due Friday 11:59 PM. Submit on Classroom."');
-  inn(src, T.L14 + 0.5, { y: 14, d: 0.5 });
-  const fields = [['SUBJECT', 'DBMS', 'matched to your subject list'], ['DUE', 'Fri · 11:59 PM', 'date parser, anchored to the sent time'], ['TASK', 'Assignment 3', 'pattern rules'], ['DUPLICATE?', 'None', 'content hash + subject, title, date']];
-  fields.forEach(([k, v, how], i) => {
+  inn(src, T.L14 + 0.3, { y: 14, d: 0.5 });
+  const fields = [['SUBJECT', 'DBMS', 'exists in your subject list', 11], ['DUE', 'Fri · 11:59 PM', 'a real date, from the sent time', 13], ['TASK', 'Assignment 3', 'intent: deadline', 16], ['DUPLICATE?', 'None', 'not in your saved deadlines', 21]];
+  fields.forEach(([k, v, how, wi], i) => {
     const r = box(eng, 50, 296 + i * 80, 1380, 68, 'abs', { display: 'flex', alignItems: 'center', gap: '26px', padding: '0 24px', borderRadius: '14px', background: 'rgba(255,255,255,.035)', border: '1px solid rgba(255,255,255,.07)' });
-    r.innerHTML = `<span class="mono" style="width:210px;font-size:20px;color:var(--mute);letter-spacing:.12em">${k}</span><b style="font-size:36px;font-weight:600;width:360px">${v}</b>${check(32)}<span class="mono" style="margin-left:auto;font-size:19px;color:var(--dim)">${how}</span>`;
-    inn(r, T.L15 + 0.3 + i * 0.95, { x: -40, y: 0, d: 0.5, ease: 'power4.out' });
+    r.innerHTML = `<span class="mono" style="width:210px;font-size:20px;color:var(--mute);letter-spacing:.12em">${k}</span><b style="font-size:36px;font-weight:600;width:360px">${v}</b><span class="ck" style="opacity:0">${check(32)}</span><span class="mono hw" style="margin-left:auto;font-size:19px;color:var(--dim);opacity:0">${how}</span>`;
+    inn(r, w14(wi) - 0.25, { x: -40, y: 0, d: 0.5, ease: 'power4.out' });
+    tl.to(r.querySelectorAll('.ck,.hw'), { opacity: 1, duration: 0.3 }, Math.max(w14(19), w14(wi) + 0.3) + i * 0.15);
   });
-  // confidence → model only if unsure
-  const gx = 50, gy = 630, gw = 900;
-  const clab = box(eng, gx, gy, 300, 30, 'abs mono', { fontSize: '19px', color: 'var(--mute)', letterSpacing: '.14em' }, 'CONFIDENCE');
-  const track = box(eng, gx, gy + 40, gw, 14, 'abs', { borderRadius: '7px', background: 'rgba(255,255,255,.07)' });
-  const zone = box(eng, gx + gw * 0.6, gy + 40, gw * 0.3, 14, 'abs', { background: 'rgba(255,153,0,.22)', borderRadius: '2px' });
-  const fill = box(track, 0, 0, gw, 14, 'abs', { borderRadius: '7px', background: 'linear-gradient(90deg,#3d8f6a,#5BE49B)', transformOrigin: '0 50%' });
-  const ticks = [[0.6, '0.6'], [0.9, '0.9']].map(([f, l]) => box(eng, gx + gw * f - 20, gy + 64, 40, 26, 'abs mono', { fontSize: '17px', color: 'var(--mute)', textAlign: 'center' }, l));
-  const cval = box(eng, gx + gw + 30, gy + 22, 300, 50, 'abs mono', { fontSize: '40px', color: 'var(--green)', fontWeight: 500 }, '0.00');
-  tl.fromTo([clab, track, zone, ...ticks], { opacity: 0 }, { opacity: 1, duration: 0.4, immediateRender: true }, T.L16 - 0.1);
-  tl.fromTo(fill, { scaleX: 0 }, { scaleX: 0.94, duration: 1.1, ease: 'power3.out' }, T.L16 + 0.1);
-  count(cval, 0, 0.94, T.L16 + 0.1, 1.1, v => v.toFixed(2));
-  tl.fromTo(cval, { opacity: 0 }, { opacity: 1, duration: 0.3 }, T.L16 + 0.1);
-  const keep = box(eng, gx + gw + 30, gy + 80, 480, 30, 'abs mono', { fontSize: '19px', color: 'var(--green)', letterSpacing: '.08em' }, '≥ 0.9 → SAVED, NO AI NEEDED');
-  inn(keep, T.L16 + 1.2, { y: 8, d: 0.4 });
-  const branch = box(eng, gx, gy + 100, 1380, 46, 'abs', { display: 'flex', alignItems: 'center', gap: '16px', fontSize: '24px', color: 'var(--mute)' });
-  branch.innerHTML = `<span class="mono" style="font-size:19px;color:var(--aws);letter-spacing:.08em">IF 0.6 – 0.9 →</span><span style="color:var(--ink);font-weight:600">Claude Haiku</span><span>on</span><span style="padding:4px 14px;border-radius:10px;border:1px solid rgba(255,153,0,.6);background:rgba(255,153,0,.1);color:var(--ink);font-weight:500"><span class="mono" style="font-size:15px;color:var(--aws);letter-spacing:.12em;margin-right:8px">AWS</span>Amazon Bedrock</span><span class="chk2" style="margin-left:18px">→ checked against your real subjects ${check(26)}</span>`;
-  inn(branch, w16(7) - 0.15, { x: 30, y: 0, d: 0.55, ease: 'power4.out' });
-  tl.fromTo(branch.querySelector('.chk2'), { opacity: 0 }, { opacity: 1, duration: 0.4 }, w16(15));
+  // Jev: an intent classifier we're still testing
+  const jev = box(eng, 50, 640, 1380, 96, 'abs', { display: 'flex', alignItems: 'center', gap: '22px', padding: '0 26px', borderRadius: '16px', border: '1.5px dashed rgba(244,241,234,.35)', background: 'rgba(255,255,255,.02)' });
+  jev.innerHTML = '<span style="font-size:34px;font-weight:650">Jev</span><span style="font-size:24px;color:rgba(244,241,234,.75)">a faster intent classifier, for the simplest messages</span><span class="mono" style="margin-left:auto;font-size:17px;color:var(--amber);letter-spacing:.14em">IN TESTING</span>';
+  inn(jev, w15(6) - 0.2, { y: 20, d: 0.5, ease: 'power4.out' });
 
   // --- the phone ---
   const t17 = T.L17 - 0.35;
@@ -144,10 +124,11 @@ function layer(parent) { return box(parent, 0, 0, '100%', '100%', 'abs'); }
   inn(toast, T.L18 + 2.0, { y: 30, d: 0.5, ease: 'power4.out' });
 
   // ---------- the library: every file filed by subject (L18a, L18b) ----------
-  const L18a = 'Files work the same way. Every P D F you forward is filed by subject: notes, question papers, circulars.';
-  const L18b = 'Ask for the unit three notes, and you get the file. Not two hundred results.';
+  const L18a = 'Files go to SHELF, the WhatsApp library we built for ourselves, after too many midnights chasing friends for notes.';
+  const L18a2 = 'Every P D F you forward is filed by subject: notes, question papers, circulars.';
+  const L18b = 'Ask for the unit three notes, and you get the file in seconds. No waiting on anyone.';
   const L18c = 'It reads your college email too, and keeps only what a student needs: placements, internships, and exam notices.';
-  const wa = i => wordTime(L18a, i, T.L18a, E.L18a - T.L18a);
+  const wa = i => wordTime(L18a2, i, T.L18a2, E.L18a2 - T.L18a2);
   const wbb = i => wordTime(L18b, i, T.L18b, E.L18b - T.L18b);
   const wcc = i => wordTime(L18c, i, T.L18c, E.L18c - T.L18c);
   tl.to([ph.p, left, rt], { x: '-=420', opacity: 0, filter: 'blur(14px)', duration: 0.42, ease: 'power4.in' }, T.L18a - 0.45);
@@ -157,9 +138,12 @@ function layer(parent) { return box(parent, 0, 0, '100%', '100%', 'abs'); }
   // left: the 7even5ive chat on WhatsApp
   const wc = box(LB, 120, 96, 780, 868, 'card', { overflow: 'hidden', background: 'rgba(12,14,18,.94)' });
   const wcH = box(wc, 0, 0, 780, 96, 'abs', { display: 'flex', alignItems: 'center', gap: '18px', padding: '0 28px', borderBottom: '1px solid rgba(255,255,255,.07)', background: 'rgba(255,255,255,.03)' });
-  wcH.innerHTML = '<div class="av" style="position:relative;flex:none;width:54px;height:54px;border-radius:50%;background:#0d0e12;border:1.5px solid rgba(255,181,71,.6)"></div><div><div style="font-size:28px;font-weight:600">7even5ive</div><div class="mono" style="font-size:16px;color:#7BE3A0;margin-top:2px">YOUR LIBRARY, ON WHATSAPP</div></div>';
+  wcH.innerHTML = '<div class="av" style="position:relative;flex:none;width:54px;height:54px;border-radius:50%;background:#0d0e12;border:1.5px solid rgba(255,181,71,.6)"></div><div><div style="font-size:28px;font-weight:600">SHELF <span style="font-size:20px;color:var(--mute);font-weight:500">by 7even5ive</span></div><div class="mono" style="font-size:16px;color:#7BE3A0;margin-top:2px">YOUR LIBRARY, ON WHATSAPP</div></div>';
   const avr = ring(wcH.querySelector('.av'), 27, 27, 34, 6, { glow: 2, trackOp: 0 }); avr.arcs.forEach(a => a.setAttribute('stroke-dashoffset', avr.C * 0.25));
   const wbody = box(wc, 0, 96, 780, 772, 'abs', { overflow: 'hidden' });
+  const ours = box(wc, 60, 300, 660, 300, 'abs', { textAlign: 'center' }, '<div class="serif" style="font-size:46px;line-height:1.25">Built for ourselves, after too many midnights chasing friends for notes.</div><div class="mono" style="font-size:17px;color:var(--amber);letter-spacing:.14em;margin-top:26px">BY STUDENTS · USED IN OUR OWN CLASS</div>');
+  inn(ours, T.L18a + 1.2, { y: 24, d: 0.6 });
+  tl.to(ours, { opacity: 0, y: -30, filter: 'blur(10px)', duration: 0.4, ease: 'power3.in' }, T.L18a2 - 0.35);
   const pdfB = (name, meta) => `<div style="display:flex;align-items:center;gap:14px"><i style="display:flex;align-items:center;justify-content:center;flex:none;width:46px;height:56px;border-radius:8px;background:rgba(255,90,78,.16);color:#FF8B7E;font:600 13px JB;font-style:normal">PDF</i><div><div style="font-size:23px;font-weight:500">${name}</div><div class="mono" style="font-size:14px;color:var(--mute);margin-top:3px">${meta}</div></div></div>`;
   const cb = (y, mine, html) => box(wbody, mine ? 'auto' : 28, y, 'auto', 'auto', 'abs', { right: mine ? '28px' : 'auto', maxWidth: '560px', padding: '10px 16px 12px', borderRadius: '18px', background: mine ? 'rgba(37,211,102,.16)' : 'rgba(255,255,255,.07)', fontSize: '23px', lineHeight: 1.35, whiteSpace: 'nowrap' }, html);
   const fwd = '<div class="mono" style="font-size:13px;color:var(--mute);letter-spacing:.08em;margin-bottom:6px">↪ FORWARDED</div>';
@@ -169,15 +153,15 @@ function layer(parent) { return box(parent, 0, 0, '100%', '100%', 'abs'); }
   const r1 = cb(384, false, '<div class="mono" style="font-size:14px;color:var(--amber);letter-spacing:.1em;margin-bottom:6px">FILED 3 FILES</div>DBMS · Notes<br>OS · Question papers<br>Circulars');
   const o4 = cb(552, true, '<span class="q4"></span>');
   const r2 = cb(626, false, pdfB('DBMS_U3_notes.pdf', '24 PAGES · FROM RAHUL · 12 NOV'));
-  [[o1, wa(5)], [o2, wa(8)], [o3, wa(10)], [r1, wa(12) + 0.15]].forEach(([b, t]) => inn(b, t - 0.1, { y: 24, d: 0.4 }));
+  [[o1, wa(0) + 0.1], [o2, wa(3)], [o3, wa(5)], [r1, wa(7) + 0.15]].forEach(([b, t]) => inn(b, t - 0.1, { y: 24, d: 0.4 }));
   inn(o4, T.L18b + 0.05, { y: 20, d: 0.3 });
   typeText(o4.querySelector('.q4'), 'dbms unit 3 notes', T.L18b + 0.2, 16);
   inn(r2, wbb(8) - 0.1, { y: 24, d: 0.4, ease: 'back.out(1.4)' });
-  const oneF = box(LB, 520, 900, 380, 40, 'abs mono', { fontSize: '17px', color: 'var(--green)', letterSpacing: '.1em', textAlign: 'right' }, '1 FILE · NOT 200 RESULTS');
-  inn(oneF, wbb(11), { y: 10, d: 0.4 });
+  const oneF = box(LB, 520, 900, 380, 40, 'abs mono', { fontSize: '17px', color: 'var(--green)', letterSpacing: '.1em', textAlign: 'right' }, '1 FILE · NO WAITING ON ANYONE');
+  inn(oneF, wbb(13), { y: 10, d: 0.4 });
   // right: the library itself
   const lib = box(LB, 980, 96, 820, 868, 'card', { background: 'rgba(255,255,255,.035)' });
-  box(lib, 36, 30, 400, 50, 'abs', { fontSize: '40px', fontWeight: 650, letterSpacing: '-0.02em' }, 'Library');
+  box(lib, 36, 30, 400, 50, 'abs', { fontSize: '40px', fontWeight: 650, letterSpacing: '-0.02em' }, 'SHELF');
   box(lib, 40, 84, 600, 30, 'abs mono', { fontSize: '17px', color: 'var(--mute)', letterSpacing: '.14em' }, 'STORAGE · BY SUBJECT · S3');
   const SH = [['DBMS', [['Notes', 12], ['Question papers', 6], ['Circulars', 3]]], ['Operating Systems', [['Notes', 9], ['Question papers', 4]]], ['Computer Networks', [['Notes', 7], ['Question papers', 3]]], ['General', [['Circulars', 14], ['Timetables', 2]]], ['Opportunities', [['Placement drives', 2], ['Internships', 1], ['Exam cell', 5]]]];
   const chipEl = {};
@@ -209,9 +193,9 @@ function layer(parent) { return box(parent, 0, 0, '100%', '100%', 'abs'); }
     tl.set(f, { opacity: 0 }, t0 + 0.7);
     land(key, t0 + 0.7);
   };
-  fly(690, 96 + 96 + 18 + 62, 'DBMS/Notes', wa(15) - 0.7);
-  fly(690, 96 + 96 + 140 + 62, 'Operating Systems/Question papers', wa(16) - 0.6);
-  fly(690, 96 + 96 + 262 + 62, 'General/Circulars', wa(18) - 0.6);
+  fly(690, 96 + 96 + 18 + 62, 'DBMS/Notes', wa(10) - 0.7);
+  fly(690, 96 + 96 + 140 + 62, 'Operating Systems/Question papers', wa(11) - 0.6);
+  fly(690, 96 + 96 + 262 + 62, 'General/Circulars', wa(13) - 0.6);
   tl.to(chipEl['DBMS/Notes'].el, { borderColor: 'rgba(91,228,155,.9)', background: 'rgba(91,228,155,.14)', duration: 0.2 }, wbb(8) - 0.3);
   tl.to(chipEl['DBMS/Notes'].el, { borderColor: 'rgba(255,255,255,.1)', background: 'rgba(255,255,255,.05)', duration: 0.8 }, wbb(8) + 1.2);
 

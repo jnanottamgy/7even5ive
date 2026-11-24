@@ -7,12 +7,12 @@
 
 **Description** (paste as is)
 
-7even5ive is a proactive campus agent for Indian college students. Forward it what lands in your WhatsApp class group (or your class rep forwards it once, for the whole section) and it turns messages into deadlines, files every PDF into a library by subject so the unit 3 notes are one question away, and reads your college email (read-only) to keep only placements, internships and exam notices. It watches your attendance against the 75% line, tells you exactly how many classes to attend, and calls you when something is urgent. It always asks before it touches anyone else, so a fake "exam cancelled" forward can never be posted to your class.
+7even5ive is an MCP server that centralises a student's college life (WhatsApp, college mail, Google Classroom and the college portal) and organises the chaos into academic data: deadlines, notes, attendance and placement mail. Forward a message on WhatsApp and Claude on Amazon Bedrock reads it first, while code checks every answer against your real data. SHELF, the WhatsApp library we built for ourselves, files every PDF you forward by subject and hands back the one you ask for in seconds. And because it's an MCP server, you can plug it into Claude Code, Codex, Cursor or any MCP client and ask about your semester.
 
 How it is built
-• Amazon Bedrock AgentCore Gateway is the only door for every MCP tool call. Cedar policies deny by default, a Lambda interceptor checks where every value came from, and each approval mints a one-time token signed over the exact action.
-• Serverless on AWS: WhatsApp Cloud API webhooks into SQS (with a dead-letter queue), Lambda workers, EventBridge for the 7 AM briefing, and Claude Haiku on Amazon Bedrock (India), used only when the rules engine is unsure.
-• ElevenLabs: Agents for the outbound voice call (connected to the gateway as an MCP client), Scribe for voice notes in Kannada, Hindi and English, and text-to-speech for the morning briefing.
+• Amazon Bedrock AgentCore Gateway is the one door for every MCP tool call, from our workers, the voice agent or your own AI. Cedar policies deny by default, a Lambda interceptor checks where every value came from, and anything someone else would see needs your tap, which mints a one-time token signed over the exact action.
+• Serverless on AWS: WhatsApp Cloud API webhooks into SQS (with a dead-letter queue), Lambda workers, EventBridge for the 7 AM briefing, and Claude on Amazon Bedrock (India). Gmail is read-only.
+• ElevenLabs: Agents for the urgent voice call, Scribe for voice notes in Kannada, Hindi and English, and text-to-speech for the morning briefing.
 • Supabase (Postgres with row-level security, Realtime and Auth, Mumbai region).
 • Portal Forge learns a college portal once, writes an OpenAPI spec, and the gateway turns it into tools. Built on the open-source reverse-api-engineer.
 
@@ -20,16 +20,15 @@ Team: Jnanottam GY · Kartik · Mohammed Zaid
 Code: https://github.com/jnanottamgy/campus-copilot
 
 0:00 75%: the line that decides your exams
-0:18 Five apps, zero connection
-0:30 The night-before-exam hunt for notes, and the placement mail nobody opens
-0:59 Meet 7even5ive
-1:13 A WhatsApp forward becomes a deadline (rules first, AI only when unsure)
-1:49 Your library: every file filed by subject, plus college mail filtered
-2:10 When it's urgent, it calls you (ElevenLabs)
-2:51 Control: fake forwards can't reach your class (AgentCore Gateway)
-3:43 Serverless on AWS
-4:13 Portal Forge
-4:24 How it sustains itself
+0:18 Four apps, zero connection
+0:31 The night before an exam, and the placement mail nobody opens
+0:53 Track 1: Make MCP Matter. Meet 7even5ive, the MCP server
+1:22 A WhatsApp forward becomes a deadline (Claude on Bedrock, checked by code)
+1:55 SHELF, our notes library, and college mail filtered
+2:22 When it's urgent, it calls you (ElevenLabs)
+3:03 Control: one door for every MCP call (AgentCore Gateway)
+3:54 Serverless on AWS
+4:24 Portal Forge
 
 **Settings:** Visibility **Unlisted** or Public (whatever Devnovate asks for), "No, it's not made for kids", category Science & Technology.
 

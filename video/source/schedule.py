@@ -12,8 +12,8 @@ GAP = 0.42                       # default pause between lines inside a scene
 CUSTOM = {                       # pause BEFORE this line (overrides GAP)
     'L02': 0.95, 'L03': 0.85, 'L04': 1.35,
     'L06': 0.3, 'L07': 0.3, 'L07a': 0.45, 'L07b': 0.45, 'L07c': 0.5, 'L07d': 0.75, 'L08': 0.75,
-    'L10': 0.55,
-    'L12': 0.45, 'L14': 0.6, 'L15': 0.35, 'L16': 0.45, 'L17': 0.6, 'L18': 0.45, 'L18a': 1.0, 'L18b': 0.45, 'L18c': 0.9,
+    'L10': 0.55, 'L10b': 0.6,
+    'L12': 0.45, 'L14': 0.6, 'L15': 0.5, 'L17': 0.6, 'L18': 0.45, 'L18a': 1.0, 'L18a2': 0.45, 'L18b': 0.45, 'L18c': 0.9,
     'L20': 0.5, 'D01': 1.9, 'D02': 0.45, 'D03': 0.35, 'L21': 1.0, 'L22': 0.6, 'L23': 0.55,
     'L25': 0.7, 'L26': 0.7, 'L27': 0.9, 'L28': 0.85, 'L29': 0.55, 'L30': 0.55, 'L31': 0.6,
     'L32': 0.5, 'L33': 0.55,
@@ -71,19 +71,24 @@ def wt(lid, idx):                # same estimate as wordTime() in comp/core.js
 def extra():
     # the notes hunt
     cue(T['L07a'] - 0.45, 'whoosh_long', -9)
-    for k, wi in enumerate((1, 5, 8, 10, 12, 13, 17, 19)):
-        cue(wt('L07b', wi), 'notif_ping_1' if k % 2 == 0 else 'notif_ping_2', -14)
-    cue(wt('L07b', 15), 'error_buzz', -14); cue(wt('L07b', 22), 'whoosh_short', -11)
-    cue(wt('L07c', 1), 'typing_ticks', -13); cue(wt('L07c', 4), 'scan_sweep', -14); cue(wt('L07c', 9), 'error_buzz', -10)
+    for k, wi in enumerate((3, 6, 8, 10, 12)):
+        cue(wt('L07b', wi), 'swipe_up', -15)
+    cue(wt('L07b', 21), 'error_buzz', -11)
+    # the track card, then the idea
+    cue(cuts['track'] - 0.1, 'whoosh_short', -9); cue(wt('L08b', 3), 'shimmer', -12)
+    # the MCP connector
+    for wi in (11, 13, 14, 16):
+        cue(wt('L10b', wi), 'pop_blip', -12)
+    cue(wt('L10b', 22), 'typing_ticks', -14); cue(wt('L10b', 26) + 0.3, 'data_blip', -10)
     # the placement mail nobody read
     cue(T['L07d'] - 0.5, 'whoosh_short', -9); cue(wt('L07d', 13), 'tick_clock', -8); cue(wt('L07d', 13) + 0.25, 'lock_clunk', -8)
     cue(T['L08'] - 0.45, 'whoosh_long', -10)
     # the library
     cue(T['L18a'] - 0.5, 'whoosh_short', -9)
-    for wi in (5, 8, 10):
-        cue(wt('L18a', wi), 'swipe_up', -13)
-    for wi in (15, 16, 18):
-        cue(wt('L18a', wi), 'pop_blip', -11)
+    for wi in (0, 3, 5):
+        cue(wt('L18a2', wi), 'swipe_up', -13)
+    for wi in (10, 11, 13):
+        cue(wt('L18a2', wi), 'pop_blip', -11)
     cue(T['L18b'] + 0.1, 'typing_ticks', -13); cue(wt('L18b', 8), 'success_chime', -12)
     # college mail, filtered
     cue(T['L18c'] - 0.5, 'whoosh_short', -9); cue(wt('L18c', 6), 'scan_sweep', -13)
@@ -111,11 +116,11 @@ cue(cuts['reveal_impact'], 'impact_boom', -4); cue(cuts['reveal_impact'] + 0.05,
 cue(cuts['flow'], 'whoosh_short', -8)
 cue(T['L11'] + 0.3, 'pop_blip', -10)
 cue(T['L12'] + 0.3, 'scan_sweep', -12)
-cue(T['L13'] + 0.35, 'swipe_up', -9); cue(wt('L13', 8), 'tap_soft', -6); cue(wt('L13', 10) - 0.1, 'swipe_up', -12); cue(wt('L13', 17), 'data_blip', -8)
+cue(T['L13'] + 0.35, 'swipe_up', -9); cue(wt('L13', 8), 'tap_soft', -6)
 cue(T['L14'] + 0.2, 'click_ui', -6)
 for k in range(4):
-    cue(T['L15'] + 0.3 + k * 0.95, 'data_blip', -9)
-cue(T['L16'] + 0.2, 'scan_sweep', -12)
+    cue(wt('L14', (11, 13, 16, 21)[k]), 'data_blip', -9)
+cue(wt('L14', 18), 'scan_sweep', -12); cue(wt('L15', 6), 'pop_blip', -12)
 cue(T['L17'] + 0.35, 'swipe_up', -8); cue(T['L17'] + 0.55, 'phone_buzz', -13)
 cue(T['L18'] + 0.75, 'tap_soft', -4); cue(T['L18'] + 1.05, 'success_chime', -9)
 # voice
@@ -129,7 +134,7 @@ cue(T['L22'] + 0.4, 'scan_sweep', -12); cue(T['L22'] + 3.6, 'pop_blip', -11)
 cue(T['L23'] + 0.3, 'swipe_up', -10)
 # safety
 cue(cuts['safety'], 'sub_drop', -6)
-cue(T['L25'] + 0.1, 'notif_ping_2', -10); cue(wt('L25', 7) + 0.8, 'glitch_short', -10)
+cue(T['L25'] + 0.1, 'notif_ping_2', -10); cue(wt('L25', 6) + 0.8, 'glitch_short', -10)
 cue(T['L26'] + 0.5, 'error_buzz', -9)
 cue(T['L27'] + 0.25, 'lock_clunk', -4)
 cue(T['L28'] - 0.3, 'whoosh_long', -8)
@@ -139,9 +144,9 @@ cue(T['L29'] + 0.2, 'typing_ticks', -12); cue(T['L29'] + 2.0, 'typing_ticks', -1
 cue(wt('L30', 15) - 0.08, 'glitch_short', -9); cue(wt('L30', 15) + 0.05, 'lock_clunk', -6)
 cue(wt('L31', 7), 'tap_soft', -4); cue(wt('L31', 9), 'data_blip', -10); cue(wt('L31', 11) + 0.1, 'scan_sweep', -12); cue(wt('L31', 13), 'success_chime', -11)
 cue(wt('L32', 2), 'click_ui', -6); cue(wt('L32', 5), 'glitch_short', -13); cue(wt('L32', 10) - 0.1, 'error_buzz', -8)
-for k in range(4):
+for k in range(3):
     cue(wt('L33', k) + 0.08, 'lock_clunk', -8)
-cue(wt('L33', 4), 'whoosh_short', -12)
+cue(wt('L33', 3), 'whoosh_short', -12)
 # aws
 cue(cuts['aws'] - 0.2, 'whoosh_long', -8); cue(cuts['aws'] + 0.3, 'impact_boom', -10)
 for k in range(8):
@@ -152,11 +157,6 @@ cue(T['L38'] + 0.4, 'sub_drop', -10)
 # forge
 cue(cuts['forge'], 'whoosh_short', -8)
 cue(T['L40'] + 0.6, 'typing_ticks', -12); cue(T['L40'] + 3.6, 'pop_blip', -10); cue(T['L40'] + 4.1, 'pop_blip', -10)
-# business
-cue(cuts['business'], 'whoosh_short', -8)
-for wi in (0, 3, 8, 17):
-    cue(wt('L42', wi) - 0.2, 'swipe_up', -11)
-cue(T['L43'] + 0.1, 'lock_clunk', -8)
 # close
 cue(cuts['close'] - 2.0, 'soft_riser_2s', -8)
 cue(cuts['close'], 'impact_boom', -7); cue(cuts['close'] + 0.1, 'shimmer', -9)

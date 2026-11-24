@@ -25,7 +25,7 @@ const Wt = (txt, id) => i => wordTime(txt, i, T[id], E[id] - T[id]);
   const B1 = node(cam, 440, 329, 200, 84, 'SQS', '+ dead-letter queue', 'aws');
   const EL = node(cam, 720, 196, 260, 80, 'ElevenLabs Agents', 'voice · MCP client', 'el');
   const LY = [334, 414, 494, 574, 654];
-  const lam = ['cascade', 'planner', 'approve', 'briefing', 'notify'].map((n, i) => node(cam, 720, LY[i] - 34, 260, 68, `λ ${n}`, null, 'aws'));
+  const lam = ['understand', 'library', 'approve', 'briefing', 'notify'].map((n, i) => node(cam, 720, LY[i] - 34, 260, 68, `λ ${n}`, null, 'aws'));
   const G = node(cam, 1040, 190, 300, 520, '', '', 'gw');
   G.innerHTML = `<div class="mono" style="font-size:16px;color:var(--aws);letter-spacing:.14em;text-align:center">AMAZON BEDROCK</div><div style="font-size:34px;font-weight:650;text-align:center;line-height:1.1;margin-top:6px">AgentCore<br>Gateway</div>`;
   G.style.justifyContent = 'flex-start';
@@ -75,11 +75,10 @@ const Wt = (txt, id) => i => wordTime(txt, i, T[id], E[id] - T[id]);
   const pTbus = P([[1375, TY[0]], [1375, TY[4]]]);
   const pTst = TY.map(y => P([[1375, y], [1410, y]]));
   const pCS = P([[850, 688], [850, 770]]);
-  const pCB = P([[850, 730], [275, 730], [275, 790]], { dash: '5 8' });
+  const pCB = P([[850, 730], [275, 730], [275, 790]]);
   const pSP = P([[1140, 870], [1500, 870]]);
   const pWP = P([[1810, TY[0]], [1855, TY[0]], [1855, 870], [1810, 870]], { stroke: 'rgba(37,211,102,.35)' });
-  [pA1B, pA5B, pA2B, pA4B, pBbus, pLin, ...pLst, pA3C, ...pLout, pGin, pGin2, pGt, pTbus, ...pTst, pCS, pSP, pWP].forEach((p, i) => drawPath(p, t0 + 1.0 + i * 0.025, 0.7));
-  tl.fromTo(pCB.p, { opacity: 0 }, { opacity: 1, duration: 0.6 }, t0 + 1.6);   // dashed: Bedrock is called only when the rules are unsure
+  [pA1B, pA5B, pA2B, pA4B, pBbus, pLin, ...pLst, pA3C, ...pLout, pGin, pGin2, pGt, pTbus, ...pTst, pCS, pCB, pSP, pWP].forEach((p, i) => drawPath(p, t0 + 1.0 + i * 0.025, 0.7));
   const mBC = M([[640, 371], [690, 371], [690, LY[0]], [720, LY[0]]]);
   const mA3C = M([[380, 620], [690, 620], [690, LY[3]], [720, LY[3]]]);
 
@@ -202,34 +201,10 @@ const Wt = (txt, id) => i => wordTime(txt, i, T[id], E[id] - T[id]);
 
 })();
 
-// =============================== 9. BUSINESS =============================
-(function business() {
-  const S = scene('business'), cam = S.cam;
-  seamLeft('forge', 'business', C.business);
-  lights(C.business, [960, 420, 0.5], [300, 900, 0.3], [1700, 200, 0.3], 1);
-  tl.to(GRID, { opacity: 0.12, duration: 0.8 }, C.business);
-  const L42 = 'Free for students. Plus, for voice and planning. Pro, to bring your own A I, safely. And colleges get an official feed.';
-  const w42 = Wt(L42, 'L42');
-  const hd = box(cam, 110, 170, 900, 40, 'abs mono', { fontSize: '21px', color: 'var(--mute)', letterSpacing: '.16em' }, 'HOW IT SUSTAINS ITSELF');
-  inn(hd, T.L42 - 0.2, { y: 8, d: 0.4 });
-  const tiers = [['Free', 'FOR STUDENTS', 'Deadlines, warnings, approvals', 0], ['Plus', '₹79–99 / MONTH', 'Voice calls, briefings, week planner', 3], ['Pro', 'BRING YOUR OWN AI', 'Use Claude or ChatGPT, safely, through our gateway', 8], ['Colleges', 'OFFICIAL FEED', 'Read-only data, anonymised attendance risk', 17]];
-  const cards = tiers.map(([n, p, d, wi], i) => {
-    const c = box(cam, 110 + i * 430, 250, 410, 420, 'card', { padding: '40px 36px', background: i === 1 ? 'rgba(255,181,71,.06)' : 'rgba(255,255,255,.035)', borderColor: i === 1 ? 'rgba(255,181,71,.45)' : 'rgba(255,255,255,.09)' });
-    c.innerHTML = `<div style="font-size:64px;font-weight:650;letter-spacing:-0.03em">${n}</div><div class="mono" style="font-size:19px;color:var(--amber);letter-spacing:.12em;margin-top:10px">${p}</div><div style="font-size:28px;color:rgba(244,241,234,.78);margin-top:28px;line-height:1.35">${d}</div>`;
-    tl.fromTo(c, { x: 260, opacity: 0, filter: 'blur(12px)' }, { x: 0, opacity: 1, filter: 'blur(0px)', duration: 0.6, ease: 'power4.out' }, w42(wi) - 0.15);
-    return c;
-  });
-  const L43 = 'We never sell your data.';
-  tl.to(cards.concat(hd), { opacity: 0.13, duration: 0.45 }, T.L43 - 0.25);
-  const never = box(cam, 960, 470, 'auto', 'auto', 'abs', { display: 'flex', alignItems: 'center', gap: '30px', fontSize: '110px', fontWeight: 700, letterSpacing: '-0.04em', whiteSpace: 'nowrap', textShadow: '0 20px 60px rgba(0,0,0,.8)' }, `${lockIcon(100, '#FFB547')}<span>We never sell your data.</span>`);
-  center(never);
-  tl.fromTo(never, { opacity: 0, scale: 1.15, filter: 'blur(18px)' }, { opacity: 1, scale: 1, filter: 'blur(0px)', duration: 0.55, ease: 'power4.out' }, T.L43 - 0.08);
-})();
-
 // =============================== 10. CLOSE ===============================
 (function close() {
   const S = scene('close'), cam = S.cam;
-  seamUp('business', 'close', C.close);
+  seamUp('forge', 'close', C.close);
   lights(C.close, [960, 470, 1], [1650, 950, 0.4], [250, 150, 0.35], 1.2);
   tl.to(GRID, { opacity: 0, duration: 0.6 }, C.close);
   const rg = ring(cam, 612, 450, 210, 30, { glow: 14, glowOp: 0.65, trackOp: 0 });

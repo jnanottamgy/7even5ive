@@ -1,7 +1,7 @@
 // Captions, beat-synced light flashes, grain, voice-reactive orb, and the render API.
 (function finalize() {
   // captions (skipped where the same words are already on screen)
-  const SKIP = new Set(['L01', 'L04', 'L08', 'L09', 'L10', 'L14', 'L19', 'L20', 'L23', 'L24', 'L33', 'L43', 'L44', 'L45']);
+  const SKIP = new Set(['L01', 'L04', 'L08', 'L08b', 'L09', 'L19', 'L20', 'L23', 'L24', 'L33', 'L44', 'L45']);
   const CAP = document.getElementById('cap');
   D.captions.forEach(c => {
     if (SKIP.has(c.id)) return;

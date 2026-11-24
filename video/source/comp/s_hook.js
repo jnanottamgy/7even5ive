@@ -83,22 +83,13 @@ function D_(t) { for (const k in T) if (Math.abs(T[k] - t) < 1e-6) return E[k] -
     const r = box(portal, 26, 88 + i * 60, 448, 46, 'abs', { display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '24px' });
     r.innerHTML = `<span style="color:${bad ? 'var(--ink)' : 'var(--mute)'}">${s}</span><span style="display:flex;align-items:center;gap:14px"><i style="display:block;width:120px;height:6px;border-radius:3px;background:rgba(255,255,255,.08);position:relative"><b style="position:absolute;left:0;top:0;height:6px;border-radius:3px;width:${v * 1.2}px;background:${bad ? 'var(--red)' : 'rgba(244,241,234,.45)'}"></b></i><span class="mono" style="color:${bad ? 'var(--red)' : 'var(--mute)'}">${v}%</span></span>`;
   });
-  // department notices: every circular arrives as a forwarded PDF
-  const gm = box(cam, 670, 92, 560, 400, 'card');
-  head(gm, 'CSE Dept · Notices', '<span class="mono gmc" style="font-size:18px;padding:6px 14px;border-radius:999px;background:rgba(37,211,102,.14);color:#7BE3A0">212 unread</span>');
-  const gcount = gm.querySelector('.gmc');
-  const clip = box(gm, 0, 64, 560, 336, 'abs', { overflow: 'hidden' });
-  const list = box(clip, 0, -280, 560, 900, 'abs');
-  const pdf = '<i style="display:flex;align-items:center;justify-content:center;flex:none;width:34px;height:40px;border-radius:6px;background:rgba(255,90,78,.16);color:#FF8B7E;font:600 11px JB;font-style:normal">PDF</i>';
-  const rows = ['IA-2_timetable.pdf', 'Fee_payment_notice.pdf', 'Lab_record_format.pdf', 'Holiday_list.pdf', 'Hackathon_registration.pdf', 'Bus_route_change.pdf', 'Exam_form_last_date.pdf', 'DBMS_Assignment_3.pdf', 'Seminar_attendance.pdf', 'Sports_day_circular.pdf'];
-  rows.forEach((f, i) => {
-    const hot = i === 7;
-    const r = box(list, 18, i * 56 + 8, 524, 48, 'abs', { display: 'flex', gap: '14px', alignItems: 'center', fontSize: '21px', padding: '0 12px', borderRadius: '10px', background: hot ? 'rgba(255,181,71,.10)' : 'none', border: hot ? '1px solid rgba(255,181,71,.45)' : '1px solid transparent' });
-    r.innerHTML = `<span class="mono" style="flex:none;width:70px;font-size:14px;letter-spacing:.06em;color:var(--dim)">↪ FWD</span>${pdf}<span style="color:${hot ? 'var(--amber)' : 'var(--mute)'};font-weight:${hot ? 600 : 400};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${f}</span>${hot ? '<span class="mono" style="margin-left:auto;flex:none;font-size:15px;color:var(--amber)">due Fri</span>' : ''}`;
-  });
+  // classroom: assignments in one more app to check
+  const gm = box(cam, 670, 110, 560, 330, 'card');
+  head(gm, 'Classroom', '<span class="mono" style="font-size:17px;color:var(--mute)">1 due</span>');
+  box(gm, 26, 96, 500, 200, 'abs', { fontSize: '26px', lineHeight: 1.6 }, '<div style="font-weight:600">DBMS · Assignment 3</div><div style="color:var(--mute)">Due Fri, 11:59 PM</div><div class="mono" style="font-size:17px;color:var(--dim);margin-top:8px">NOT ON YOUR CALENDAR</div>');
   // class group chat
   const ch = box(cam, 1290, 150, 520, 650, 'card', { overflow: 'hidden' });
-  head(ch, 'CSE 3B · Class group', '<span class="mono memec" style="font-size:18px;color:var(--mute)">0 memes</span>');
+  head(ch, 'CSE 3B · Class group', '<span class="mono memec" style="font-size:18px;color:var(--mute)">12 unread</span>');
   const memec = ch.querySelector('.memec');
   const chClip = box(ch, 0, 64, 520, 586, 'abs', { overflow: 'hidden' });
   const feed = box(chClip, 0, 0, 520, 2400, 'abs');
@@ -114,28 +105,16 @@ function D_(t) { for (const k in T) if (Math.abs(T[k] - t) < 1e-6) return E[k] -
       y += 66;
     }
   });
-  // the buried voice note at the bottom of the feed
-  const vn = box(feed, 26, y + 4, 360, 74, 'abs', { borderRadius: '18px', background: 'rgba(255,255,255,.07)', display: 'flex', alignItems: 'center', gap: '14px', padding: '0 18px' });
-  vn.innerHTML = '<svg width="26" height="26" viewBox="0 0 24 24"><path d="M7 4 L20 12 L7 20 Z" fill="#8D919B"/></svg>' +
-    Array.from({ length: 18 }, (_, i) => `<i style="display:block;width:5px;border-radius:3px;background:#8D919B;height:${8 + ((i * 37) % 26)}px"></i>`).join('') +
-    '<span class="mono" style="font-size:18px;color:var(--mute);margin-left:6px">0:14</span>';
-  const vnl = box(feed, 400, y + 26, 120, 30, 'abs mono', { fontSize: '16px', color: '#FF8B7E', letterSpacing: '.08em' }, 'UNPLAYED');
-  const feedEnd = y + 80;
+  // the teacher's notes, three weeks ago, never downloaded
+  const vn = box(feed, 26, y + 4, 420, 'auto', 'abs', { borderRadius: '18px', background: 'rgba(255,255,255,.07)', padding: '10px 16px 12px' });
+  vn.innerHTML = '<div style="font-size:16px;font-weight:600;color:#9FE6C0;margin-bottom:6px">Prof. Rao · DBMS</div><div style="display:flex;align-items:center;gap:12px"><i style="display:flex;align-items:center;justify-content:center;flex:none;width:44px;height:52px;border-radius:8px;background:rgba(255,90,78,.16);color:#FF8B7E;font:600 12px JB;font-style:normal">PDF</i><div><div class="vnn" style="font-size:21px;font-weight:500">DBMS_Unit3_notes.pdf</div><div class="mono" style="font-size:13px;color:var(--mute);margin-top:3px">2.4 MB · 3 WEEKS AGO</div></div><svg class="dl" width="34" height="34" viewBox="0 0 24 24" style="margin-left:auto;flex:none"><circle cx="12" cy="12" r="10" fill="none" stroke="#8D919B" stroke-width="1.6"/><path d="M12 7 V15 M8.5 11.5 L12 15 L15.5 11.5" fill="none" stroke="#8D919B" stroke-width="1.6" stroke-linecap="round"/></svg></div>';
+  const vnl = box(feed, 30, y + 116, 460, 30, 'abs mono', { fontSize: '16px', color: '#FF8B7E', letterSpacing: '.08em' }, 'NOT DOWNLOADED');
+  const feedEnd = y + 160;
   // college mail: placement drives land where nobody looks
-  const cr = box(cam, 230, 570, 470, 250, 'card');
+  const cr = box(cam, 330, 560, 620, 300, 'card');
   head(cr, 'College mail', '<span class="mono" style="font-size:17px;color:#FF8B7E">1,284 unread</span>');
-  box(cr, 26, 90, 420, 140, 'abs', { fontSize: '24px', lineHeight: 1.6 }, '<div style="font-weight:600">T&amp;P Cell · Campus drive</div><div style="color:var(--mute)">Registration closes 6 PM</div><div class="mono" style="font-size:17px;color:var(--dim);margin-top:6px">UNREAD · YESTERDAY</div>');
-  // instagram: club deadlines live in stories that disappear
-  const ig = box(cam, 780, 560, 450, 330, 'card');
-  head(ig, 'Instagram', '<span class="mono" style="font-size:17px;color:var(--mute)">story · 3h left</span>');
-  const story = box(ig, 26, 82, 150, 228, 'abs', { borderRadius: '16px', overflow: 'hidden', background: 'linear-gradient(160deg,#4b2a86,#a83279 55%,#e2683c)' });
-  story.innerHTML = `<i style="position:absolute;left:10px;right:10px;top:8px;height:3px;border-radius:2px;background:rgba(255,255,255,.35)"><b style="display:block;width:78%;height:3px;border-radius:2px;background:#fff"></b></i>
-    <div style="position:absolute;left:10px;top:20px;display:flex;align-items:center;gap:6px"><i style="display:block;width:22px;height:22px;border-radius:50%;border:2px solid #fff;background:#151515"></i><span style="font-size:13px;font-weight:600">techclub</span></div>
-    <div style="position:absolute;left:12px;right:10px;top:76px;font-weight:700;font-size:21px;line-height:1.08;letter-spacing:-0.01em">HACKATHON<br>REG CLOSES<br>TONIGHT</div>
-    <div class="mono" style="position:absolute;left:12px;bottom:14px;font-size:13px">11:59 PM</div>`;
-  box(ig, 198, 92, 230, 210, 'abs', { fontSize: '22px', lineHeight: 1.45 }, '<div style="font-weight:600">@techclub</div><div style="color:var(--mute)">Hackathon registrations close tonight</div><div class="mono" style="font-size:16px;color:#FF8B7E;margin-top:12px;letter-spacing:.06em">GONE IN 3 HOURS</div>');
-
-  const cards = [portal, gm, ch, cr, ig];
+  box(cr, 26, 96, 560, 170, 'abs', { fontSize: '26px', lineHeight: 1.6 }, '<div style="font-weight:600">T&amp;P Cell · Campus drive</div><div style="color:var(--mute)">Registration closes 6 PM</div><div class="mono" style="font-size:17px;color:var(--dim);margin-top:6px">UNREAD · YESTERDAY</div>');
+  const cards = [portal, gm, ch, cr];
   tl.fromTo(cards, { x: 420, opacity: 0, filter: 'blur(16px)' }, { x: 0, opacity: 1, filter: 'blur(0px)', duration: 0.75, stagger: 0.07, ease: 'power4.out' }, C.problem);
 
   // camera visits each problem, the rest falls back
@@ -145,105 +124,58 @@ function D_(t) { for (const k in T) if (Math.abs(T[k] - t) < 1e-6) return E[k] -
   };
   focus(T.L05 - 0.25, 360, 320, 1.5, [portal]);
   tl.fromTo(portal.querySelectorAll('.mono')[0], { opacity: 0.2 }, { opacity: 1, duration: 0.3, repeat: 3, yoyo: true, ease: 'none' }, T.L05 + 1.6);
-  focus(T.L06 - 0.25, 950, 300, 1.45, [gm]);
-  tl.to(list, { y: 280, duration: 1.4, ease: 'power2.inOut' }, T.L06 + 0.3);
-  count(gcount, 212, 219, T.L06 + 0.3, 1.4, v => Math.round(v) + ' unread');
-  focus(T.L07 - 0.2, 1550, 475, 1.32, [ch]);
-  tl.to(feed, { y: -(feedEnd - 560), duration: 4.0, ease: 'power2.in' }, T.L07 + 0.2);
-  count(memec, 0, 40, T.L07 + 0.2, 4.0, v => Math.round(v) + ' memes');
-  tl.fromTo(vnl, { opacity: 0 }, { opacity: 1, duration: 0.3 }, T.L07 + 4.0);
-  // ---------- zoom through the class group: the night-before-exam hunt (L07a-c) ----------
-  const L07b = 'Someone asks for the unit three notes. Someone sends unit two. The drive link needs access, and the file you need is buried under six hundred messages.';
-  const L07c = 'Search for notes, and you get two hundred results. Not one of them is the file.';
+  focus(T.L06 - 0.25, 1550, 475, 1.32, [ch]);
+  const scrollD = T.L07 + 0.4 - (T.L06 + 0.1);
+  tl.to(feed, { y: -(feedEnd - 586), duration: scrollD, ease: 'power2.inOut' }, T.L06 + 0.1);
+  count(memec, 12, 642, T.L06 + 0.1, scrollD, v => Math.round(v) + ' unread');
+  const L07t = "Teachers send notes there too. You forget to download them, and they're lost.";
+  const w07 = i => wordTime(L07t, i, T.L07, E.L07 - T.L07);
+  focus(T.L07 + 0.1, 1550, 640, 1.6, [ch]);
+  tl.fromTo(vnl, { opacity: 0 }, { opacity: 1, duration: 0.3 }, w07(6));
+  tl.to(vn, { opacity: 0.45, duration: 0.4 }, w07(11));
+  tl.set(vnl, { innerHTML: 'THIS MEDIA IS NO LONGER AVAILABLE' }, w07(11));
+  tl.to(vn.querySelector('.vnn'), { textDecoration: 'line-through', duration: 0.01 }, w07(11));
+  // ---------- the night before an exam: you message friends, nobody replies (L07a, L07b) ----------
+  const L07b = 'You message your friends for the notes, the syllabus, the timetable, the circulars. The ones who have them are busy studying. Nobody replies.';
   const L07d = 'And placement mails go to a college inbox nobody checks. The drive registration closed at six.';
   const wb = i => wordTime(L07b, i, T.L07b, E.L07b - T.L07b);
-  const wc = i => wordTime(L07c, i, T.L07c, E.L07c - T.L07c);
   const wd = i => wordTime(L07d, i, T.L07d, E.L07d - T.L07d);
   const zt = T.L07a - 0.45;
-  tl.to(cam, { scale: 3.2, x: -3.2 * (1550 - 960), y: -3.2 * (475 - 540), opacity: 0, filter: 'blur(16px)', duration: 0.45, ease: 'power4.in' }, zt);
+  tl.to(cam, { scale: 3.2, x: -3.2 * (1550 - 960), y: -3.2 * (640 - 540), opacity: 0, filter: 'blur(16px)', duration: 0.45, ease: 'power4.in' }, zt);
   const hunt = box(S.seam, 0, 0, 1920, 1080, 'abs');
   tl.set(hunt, { opacity: 0 }, 0);
   tl.fromTo(hunt, { opacity: 0, scale: 0.72, filter: 'blur(14px)' }, { opacity: 1, scale: 1, filter: 'blur(0px)', duration: 0.6, ease: 'power4.out', immediateRender: false }, zt + 0.45);
   const h1 = words(hunt, 'The night before', 'abs serif', { left: '120px', top: '300px', fontSize: '100px', whiteSpace: 'nowrap' });
   const h2 = words(hunt, 'an exam.', 'abs serif', { left: '120px', top: '416px', fontSize: '100px', whiteSpace: 'nowrap', color: 'var(--amber)' });
-  spoken(h1, T.L07a + 0.15, 1.3, { y: 30, d: 0.5 });
-  spoken(h2, T.L07a + 0.95, 0.8, { y: 30, d: 0.5 });
+  spoken(h1, T.L07a + 0.1, 1.0, { y: 30, d: 0.5 });
+  spoken(h2, T.L07a + 0.7, 0.7, { y: 30, d: 0.5 });
   const clock = box(hunt, 126, 560, 640, 40, 'abs mono', { fontSize: '22px', color: 'var(--mute)', letterSpacing: '.14em' }, '11:48 PM · EXAM AT 9:30 AM');
-  inn(clock, T.L07a + 1.7, { y: 10, d: 0.5 });
+  inn(clock, T.L07a + 1.3, { y: 10, d: 0.5 });
   tl.to([h1, h2, clock], { y: -60, opacity: 0, filter: 'blur(10px)', duration: 0.4, ease: 'power3.in' }, T.L07b - 0.3);
-  // the chat
+  // the chat list: everyone you asked
   const chat = box(hunt, 880, 70, 920, 890, 'card', { overflow: 'hidden', background: 'rgba(12,14,18,.94)' });
   const chH = box(chat, 0, 0, 920, 96, 'abs', { display: 'flex', alignItems: 'center', gap: '18px', padding: '0 28px', borderBottom: '1px solid rgba(255,255,255,.07)', background: 'rgba(255,255,255,.03)' });
-  chH.innerHTML = `<i style="display:block;flex:none;width:54px;height:54px;border-radius:50%;background:linear-gradient(135deg,#2F6B52,#1C3B2E)"></i><div><div style="font-size:28px;font-weight:600">CSE 3B · Class group</div><div class="mono sub" style="font-size:16px;color:var(--mute);margin-top:2px">64 PARTICIPANTS</div></div><span class="mono unr" style="margin-left:auto;font-size:18px;padding:7px 14px;border-radius:999px;background:rgba(37,211,102,.16);color:#7BE3A0">42 unread</span>`;
-  const unr = chH.querySelector('.unr');
-  const sub = chH.querySelector('.sub');
-  tl.set(sub, { innerHTML: 'RAHUL IS TYPING…', color: '#7BE3A0' }, T.L07a + 1.2);
-  tl.set(sub, { innerHTML: '64 PARTICIPANTS', color: '#8D919B' }, wb(1) - 0.1);
-  const body = box(chat, 0, 96, 920, 794, 'abs', { overflow: 'hidden' });
-  const feedH = box(body, 0, 0, 920, 5200, 'abs');
-  const NC = { Rahul: '#7FB8FF', Priya: '#F7A8D0', Arjun: '#FFC46B', Sneha: '#9FE6C0', Kiran: '#C9A7FF', Meera: '#FF9F8A' };
-  const msg = (y, who, html, o) => {
-    const mine = who === 'you';
-    const b = box(feedH, mine ? 'auto' : 28, y, 'auto', 'auto', 'abs', Object.assign({ right: mine ? '28px' : 'auto', maxWidth: '640px', padding: '10px 18px 12px', borderRadius: '18px', background: mine ? 'rgba(37,211,102,.16)' : 'rgba(255,255,255,.07)', fontSize: '26px', lineHeight: 1.3, whiteSpace: 'nowrap' }, o || {}));
-    b.innerHTML = (mine ? '' : `<div style="font-size:18px;font-weight:600;color:${NC[who] || 'var(--mute)'};margin-bottom:3px">${who}</div>`) + html;
-    return b;
-  };
-  const pdfB = (name, meta) => `<div style="display:flex;align-items:center;gap:14px;padding:4px 2px"><i style="display:flex;align-items:center;justify-content:center;flex:none;width:50px;height:60px;border-radius:8px;background:rgba(255,90,78,.16);color:#FF8B7E;font:600 14px JB;font-style:normal">PDF</i><div><div style="font-size:24px;font-weight:500">${name}</div><div class="mono" style="font-size:15px;color:var(--mute);margin-top:4px">${meta}</div></div></div>`;
-  const slash = '<svg width="22" height="22" viewBox="0 0 24 24" style="vertical-align:-4px;margin-right:8px"><circle cx="12" cy="12" r="9" fill="none" stroke="#8D919B" stroke-width="2"/><path d="M5.5 18.5 L18.5 5.5" stroke="#8D919B" stroke-width="2"/></svg>';
-  const M = [
-    [24, 'Rahul', 'anyone has DBMS unit 3 notes??', 1],
-    [122, 'Priya', '+1, send PYQs also', 5],
-    [220, 'Arjun', pdfB('Unit2_notes.pdf', '2.1 MB · PDF'), 8],
-    [348, 'Priya', "bro that's unit 2", 10],
-    [446, 'Sneha', 'check the drive link from last week', 12],
-    [544, 'Sneha', '<div style="border-radius:12px;background:rgba(0,0,0,.28);padding:10px 16px"><div class="mono" style="font-size:18px;color:#8FB8FF">drive.google.com/drive/folders/1xQ…</div><div style="font-size:20px;color:var(--mute);margin-top:4px">DBMS notes folder</div><div class="mono acc" style="margin-top:10px;font-size:17px;color:#FF8B7E;letter-spacing:.06em;opacity:0">YOU NEED ACCESS · REQUEST SENT</div></div>', 13],
-    [714, 'Rahul', `<span style="font-style:italic;color:var(--mute)">${slash}This message was deleted</span>`, 17],
-    [812, 'you', 'can someone resend pls', 19],
-  ];
-  const mels = M.map(([y, who, html, wi]) => { const b = msg(y, who, html); inn(b, wb(wi) - 0.1, { y: 26, d: 0.4, ease: 'power3.out' }); return b; });
-  tl.to(mels[5].querySelector('.acc'), { opacity: 1, duration: 0.3 }, wb(15));
-  tl.to(feedH, { y: -120, duration: 0.5, ease: 'power3.out' }, wb(19) - 0.1);
-  // ...then six hundred more bury it
-  const filler = ['lol', 'ok', 'STICKER', 'same', 'anyone??', 'bro', 'who has the lab manual', 'ok ok', 'STICKER', 'notes??', 'haha', 'see you tmrw', 'STICKER', 'lol', 'is it open book?', 'ok', 'bruh', 'STICKER', 'canteen?', 'notes pls', 'lmao', 'ok', 'STICKER', 'same here', 'who took my charger', 'lol', 'STICKER', 'ok'];
-  let fy = 930;
-  filler.forEach((m, i) => {
-    const who = ['Kiran', 'Meera', 'Arjun', 'Rahul', 'Sneha', 'Priya'][i % 6];
-    if (m === 'STICKER') { box(feedH, i % 2 ? 560 : 28, fy, 150, 120, 'abs', { borderRadius: '24px', background: ['#3A2F5B', '#2F4A3A', '#5B3A2F'][i % 3], display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '38px', fontWeight: 700, color: 'rgba(255,255,255,.75)' }, ['LOL', 'XD', 'bruh'][i % 3]); fy += 136; }
-    else { msg(fy, who, m); fy += 98; }
-  });
-  const buryA = wb(21), buryZ = E.L07b + 0.2;
-  tl.to(feedH, { y: -(fy - 760), duration: buryZ - buryA, ease: 'power2.in' }, buryA);
-  tl.to(body, { filter: 'blur(1.5px)', duration: 0.3 }, buryA + 0.6);
-  tl.to(body, { filter: 'blur(0px)', duration: 0.3 }, buryZ - 0.2);
-  count(unr, 42, 642, buryA, buryZ - buryA, v => Math.round(v) + ' unread');
-  const upChip = box(chat, 220, 112, 480, 46, 'abs mono', { display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '999px', background: 'rgb(42,32,14)', border: '1px solid rgba(255,181,71,.6)', boxShadow: '0 8px 24px rgba(0,0,0,.5)', color: 'var(--amber)', fontSize: '17px', letterSpacing: '.06em', zIndex: 5 }, '↑ DBMS_U3_notes.pdf · 600 MESSAGES UP');
-  inn(upChip, wb(18), { y: -14, d: 0.45 });
-  // the failures, tallied on the left
-  const fails = [['Wrong unit', 10], ['Link needs access', 15], ['Buried, 600 messages up', 22]];
-  const failEls = fails.map(([t, wi], i) => {
-    const f = box(hunt, 120, 300 + i * 96, 700, 80, 'abs', { display: 'flex', alignItems: 'center', gap: '22px', fontSize: '42px', fontWeight: 600, letterSpacing: '-0.02em' }, `<span style="display:flex;flex:none;width:52px;height:52px;border-radius:50%;border:2px solid var(--red);align-items:center;justify-content:center">${cross(26)}</span>${t}`);
-    inn(f, wb(wi), { x: -30, y: 0, d: 0.45, ease: 'power4.out' });
-    return f;
-  });
-  // search: two hundred results, no file (L07c)
-  const sb = box(chat, 0, 0, 920, 96, 'abs', { display: 'flex', alignItems: 'center', gap: '16px', padding: '0 28px', background: 'rgb(16,18,23)', borderBottom: '2px solid rgba(255,181,71,.6)', zIndex: 6 });
-  sb.innerHTML = '<svg width="30" height="30" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="#F4F1EA" stroke-width="2"/><path d="M15.5 15.5 L21 21" stroke="#F4F1EA" stroke-width="2" stroke-linecap="round"/></svg><span class="q" style="font-size:30px;font-weight:500"></span><span style="color:var(--amber);font-size:30px">▍</span><span class="mono rc" style="margin-left:auto;font-size:18px;color:var(--mute)"></span>';
-  inn(sb, T.L07c - 0.25, { y: -20, d: 0.4 });
-  typeText(sb.querySelector('.q'), 'notes', wc(1), 9);
-  const res = box(chat, 0, 96, 920, 794, 'abs', { background: 'rgb(12,14,18)', zIndex: 5, padding: '10px 0' });
-  tl.set(res, { opacity: 0 }, 0); tl.to(res, { opacity: 1, duration: 0.3 }, wc(3));
-  tl.to(upChip, { opacity: 0, duration: 0.2 }, wc(3));
-  const R = [['Rahul', 'anyone has DBMS unit 3 <b>notes</b>??', '12 Nov'], ['Priya', '<b>notes</b> pls', '12 Nov'], ['Kiran', 'whose <b>notes</b> are these', '9 Nov'], ['Sneha', 'the <b>notes</b> are in the drive', '5 Nov'], ['Meera', 'send <b>notes</b> also', '3 Nov'], ['Arjun', '<b>NOTES</b>??', '1 Nov'], ['Rahul', 'did anyone get the <b>notes</b>', '28 Oct']];
-  const rows2 = R.map(([who, t, d], i) => {
-    const r = box(res, 28, 14 + i * 104, 864, 92, 'abs', { borderRadius: '14px', background: 'rgba(255,255,255,.035)', padding: '12px 20px', fontSize: '24px' });
-    r.innerHTML = `<div style="display:flex;justify-content:space-between"><span style="font-size:18px;font-weight:600;color:${NC[who]}">${who}</span><span class="mono" style="font-size:15px;color:var(--dim)">${d}</span></div><div style="margin-top:4px;color:rgba(244,241,234,.8)">${t.replace(/<b>/g, '<b style="color:var(--amber)">')}</div>`;
-    inn(r, wc(4) + i * 0.09, { y: 18, d: 0.35 });
+  chH.innerHTML = '<div style="font-size:30px;font-weight:650">Chats</div><span class="mono rep" style="margin-left:auto;font-size:18px;padding:7px 14px;border-radius:999px;background:rgba(255,255,255,.06);color:var(--mute)">0 replies</span>';
+  const NC = { Rahul: '#3B4A63', Priya: '#4A3B63', Arjun: '#5B4A2F', Sneha: '#2F4F3F', Kiran: '#4F2F3A' };
+  const ticks = '<svg width="24" height="16" viewBox="0 0 24 16" style="flex:none"><path d="M1 8.5 L5 12.5 L12 3.5 M9 11 L10.5 12.5 L17.5 3.5" fill="none" stroke="#6FB7FF" stroke-width="1.8" stroke-linecap="round"/></svg>';
+  const DM = [['Rahul', 'bro send the DBMS unit 3 notes pls', '11:41 PM', 3], ['Priya', 'do you have the syllabus?', '11:42 PM', 6], ['Arjun', 'IA-2 timetable??', '11:44 PM', 8], ['Sneha', 'the lab circular pls', '11:45 PM', 10], ['Kiran', 'anyone has the notes?', '11:47 PM', 12]];
+  const dmEls = DM.map(([who, txt, tm, wi], i) => {
+    const r = box(chat, 0, 96 + i * 132, 920, 132, 'abs', { display: 'flex', alignItems: 'center', gap: '22px', padding: '0 28px', borderBottom: '1px solid rgba(255,255,255,.05)' });
+    r.innerHTML = `<i style="display:flex;align-items:center;justify-content:center;flex:none;width:72px;height:72px;border-radius:50%;background:${NC[who]};font-style:normal;font-size:30px;font-weight:600;color:rgba(244,241,234,.8)">${who[0]}</i><div style="flex:1;min-width:0"><div style="display:flex;justify-content:space-between"><b style="font-size:27px;font-weight:600">${who}</b><span class="mono" style="font-size:16px;color:var(--dim)">${tm}</span></div><div style="display:flex;align-items:center;gap:10px;margin-top:6px;font-size:23px;color:var(--mute)">${ticks}<span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${txt}</span></div><div class="mono st" style="font-size:15px;color:var(--dim);margin-top:6px;letter-spacing:.06em">DELIVERED</div></div>`;
+    inn(r, wb(wi) - 0.1, { x: 40, y: 0, d: 0.4, ease: 'power4.out' });
+    tl.set(r.querySelector('.st'), { innerHTML: 'SEEN · ONLINE · STUDYING', color: '#7BE3A0' }, wb(17) + i * 0.12);
+    tl.set(r.querySelector('.st'), { innerHTML: 'SEEN · NO REPLY', color: '#FF8B7E' }, wb(21) + i * 0.08);
     return r;
   });
-  count(sb.querySelector('.rc'), 0, 214, wc(4), wc(8) - wc(4), v => Math.round(v) + ' results');
-  const zero = box(hunt, 120, 300 + 3 * 96, 700, 80, 'abs', { display: 'flex', alignItems: 'center', gap: '22px', fontSize: '42px', fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--red)' }, `<span style="display:flex;flex:none;width:52px;height:52px;border-radius:50%;border:2px solid var(--red);align-items:center;justify-content:center">${cross(26)}</span>214 results, 0 files`);
-  inn(zero, wc(9), { x: -30, y: 0, d: 0.45, ease: 'power4.out' });
-  tl.to(rows2, { opacity: 0.3, duration: 0.4 }, wc(9) + 0.1);
+  // what you actually needed, tallied on the left
+  const NEED = [['Notes', 6], ['Syllabus', 8], ['Timetable', 10], ['Circulars', 12]];
+  const needEls = NEED.map(([t, wi], i) => {
+    const f = box(hunt, 120, 280 + i * 100, 700, 80, 'abs', { display: 'flex', alignItems: 'center', gap: '22px', fontSize: '46px', fontWeight: 600, letterSpacing: '-0.02em' }, `<span class="ic" style="display:flex;flex:none;width:54px;height:54px;border-radius:50%;border:2px solid rgba(255,255,255,.25);align-items:center;justify-content:center"></span>${t}<span class="mono nr" style="margin-left:6px;font-size:18px;letter-spacing:.1em;color:var(--dim)">WAITING…</span>`);
+    inn(f, wb(wi), { x: -30, y: 0, d: 0.45, ease: 'power4.out' });
+    tl.set(f.querySelector('.ic'), { innerHTML: cross(26), borderColor: '#FF5A4E' }, wb(21) + i * 0.1);
+    tl.set(f.querySelector('.nr'), { innerHTML: 'NO REPLY', color: '#FF8B7E' }, wb(21) + i * 0.1);
+    return f;
+  });
 
   // ---------- the placement mail nobody opened (L07d) ----------
   tl.to(hunt, { x: -300, filter: 'blur(18px)', opacity: 0, duration: 0.36, ease: 'power4.in' }, T.L07d - 0.45);
@@ -279,16 +211,16 @@ function D_(t) { for (const k in T) if (Math.abs(T[k] - t) < 1e-6) return E[k] -
   closed.innerHTML = '<div style="height:10px;background:var(--red)"></div><div style="padding:30px 36px"><div style="font-size:32px;font-weight:650">Campus Drive 2026 · Registration</div><div style="font-size:26px;color:rgba(244,241,234,.8);margin-top:18px;line-height:1.4">This form is no longer accepting responses.</div><div class="mono" style="font-size:17px;color:#FF8B7E;letter-spacing:.12em;margin-top:22px">CLOSED AT 6:00 PM</div></div>';
   inn(closed, wd(13) + 0.1, { y: 0, scale: 1.12, d: 0.4, ease: 'power4.out' });
   // pull back: the mail shrinks into its card in the montage (arrival)
-  tl.to(ml, { scale: 0.24, x: 465 - 960, y: 695 - 540, opacity: 0, filter: 'blur(6px)', duration: 0.6, ease: 'power3.inOut' }, T.L08 - 0.5);
+  tl.to(ml, { scale: 0.32, x: 640 - 960, y: 710 - 540, opacity: 0, filter: 'blur(6px)', duration: 0.6, ease: 'power3.inOut' }, T.L08 - 0.5);
   tl.to(cam, { opacity: 1, filter: 'blur(0px)', duration: 0.35 }, T.L08 - 0.45);
 
   // pull back: try to connect them, every link breaks
   focus(T.L08 - 0.45, 960, 520, 0.96, cards);
   const sv = svgLayer(cam);
-  const centers = [[360, 320], [950, 292], [1550, 475], [1005, 725], [465, 695]];
+  const centers = [[360, 320], [950, 275], [1550, 475], [640, 710]];
   const links = [];
-  for (let i = 0; i < 5; i++) {
-    const a = centers[i], b = centers[(i + 1) % 5];
+  for (let i = 0; i < 4; i++) {
+    const a = centers[i], b = centers[(i + 1) % 4];
     const pp = pathEl(sv, `M${a[0]} ${a[1]} L${b[0]} ${b[1]}`, { stroke: 'rgba(255,181,71,.7)', w: 3 });
     links.push(pp);
     drawPath(pp, T.L08 + 0.05 + i * 0.07, 0.45);
@@ -297,15 +229,36 @@ function D_(t) { for (const k in T) if (Math.abs(T[k] - t) < 1e-6) return E[k] -
     inn(x, T.L08 + 0.85 + i * 0.05, { y: 0, scale: 0.4, d: 0.35, ease: 'back.out(1.7)' });
     tl.to(pp.p, { attr: { stroke: 'rgba(255,90,78,.6)' }, duration: 0.2 }, T.L08 + 0.85 + i * 0.05);
   }
-  const big = box(cam, 960, 540, 'auto', 'auto', 'abs', { textAlign: 'center', fontWeight: 650, fontSize: '128px', letterSpacing: '-0.045em', lineHeight: 1.02, textShadow: '0 20px 60px rgba(0,0,0,.8)' }, '<div class="w">5 apps.</div><div class="w"><span style="color:var(--red)">0</span> connection.</div>');
+  const big = box(cam, 960, 540, 'auto', 'auto', 'abs', { textAlign: 'center', fontWeight: 650, fontSize: '128px', letterSpacing: '-0.045em', lineHeight: 1.02, textShadow: '0 20px 60px rgba(0,0,0,.8)' }, '<div class="w">4 apps.</div><div class="w"><span style="color:var(--red)">0</span> connection.</div>');
   center(big);
   cards.forEach(c => tl.to(c, { opacity: 0.16, duration: 0.5 }, T.L08 + 0.25));
   tl.to(sv, { opacity: 0.35, duration: 0.5 }, T.L08 + 0.25);
   tl.fromTo(big.children, { yPercent: 60, opacity: 0, filter: 'blur(14px)' }, { yPercent: 0, opacity: 1, filter: 'blur(0px)', duration: 0.6, stagger: 0.55, ease: 'power3.out' }, T.L08 + 0.1);
+})();
+
+// =============================== 2b. THE TRACK ===========================
+(function track() {
+  const S = scene('track'), cam = S.cam;
+  seamLeft('problem', 'track', C.track);
+  lights(C.track, [960, 500, 0.55], [1600, 900, 0.25], [300, 180, 0.25], 0.8);
+  const L08b = 'Track one. Make M C P Matter. Less magic, more utility.';
+  const w = i => wordTime(L08b, i, T.L08b, E.L08b - T.L08b);
+  const k1 = box(cam, 960, 330, 'auto', 'auto', 'abs mono', { fontSize: '24px', letterSpacing: '.22em', color: 'var(--mute)', whiteSpace: 'nowrap' }, 'WHACKIEST 2026 · TRACK 1');
+  center(k1);
+  inn(k1, T.L08b - 0.1, { y: 14, d: 0.45 });
+  const k2 = words(cam, 'Make MCP Matter', 'abs', { left: '960px', top: '470px', fontSize: '150px', fontWeight: 700, letterSpacing: '-0.045em', whiteSpace: 'nowrap' });
+  center(k2);
+  spoken(k2, w(2) - 0.05, 0.9, { y: 30, d: 0.5 });
+  const k3 = words(cam, 'Less magic, more utility.', 'abs serif', { left: '960px', top: '612px', fontSize: '86px', whiteSpace: 'nowrap', color: 'var(--amber)' });
+  center(k3);
+  spoken(k3, w(6) - 0.05, E.L08b - w(6), { y: 24, d: 0.5 });
+  const k4 = box(cam, 960, 724, 'auto', 'auto', 'abs', { fontSize: '27px', color: 'rgba(244,241,234,.72)', whiteSpace: 'nowrap' }, 'MCP-powered agents a regular person uses every day: useful, reliable, controlled.');
+  center(k4);
+  inn(k4, w(6) + 0.4, { y: 12, d: 0.5 });
   // everything collapses into one point (arrival of the brand)
   tl.to(S.seam, { scale: 0.02, filter: 'blur(6px)', duration: 0.5, ease: 'power4.in' }, C.reveal - 0.5);
   tl.to(GRID, { opacity: 0, duration: 0.5 }, C.reveal - 0.5);
-  off('problem', C.reveal);
+  off('track', C.reveal);
 })();
 
 // =============================== 3. REVEAL ===============================
@@ -349,22 +302,55 @@ function D_(t) { for (const k in T) if (Math.abs(T[k] - t) < 1e-6) return E[k] -
   const sweep = box(cam, 745, LY - 80, 900, 180, 'abs', { fontWeight: 650, fontSize: '168px', letterSpacing: '-0.045em', lineHeight: 1, whiteSpace: 'nowrap', color: 'transparent', backgroundImage: 'linear-gradient(100deg,rgba(255,255,255,0) 40%,rgba(255,255,255,.95) 50%,rgba(255,255,255,0) 60%)', backgroundSize: '300% 100%', WebkitBackgroundClip: 'text', backgroundClip: 'text', backgroundPosition: '100% 0' }, '7even5ive');
   tl.fromTo(sweep, { backgroundPosition: '100% 0' }, { backgroundPosition: '0% 0', duration: 1.1, ease: 'power2.inOut' }, T.L09 + 0.1);
 
-  // what it does, as it is said
-  const L10 = 'An agent that watches your college life, turns it into deadlines, warnings and plans, and asks before it ever touches anyone else.';
+  // what it is, as it is said
+  const L10 = 'An M C P server that centralises your college life, and organises the chaos into academic data you can actually use.';
   const wt = i => wordTime(L10, i, T.L10, E.L10 - T.L10);
-  const l1 = words(cam, 'Watches your college life.', 'abs serif', { left: '960px', top: '668px', fontSize: '58px', whiteSpace: 'nowrap', color: 'rgba(244,241,234,.92)' });
+  const l1 = words(cam, 'Centralises your college life.', 'abs serif', { left: '960px', top: '668px', fontSize: '58px', whiteSpace: 'nowrap', color: 'rgba(244,241,234,.92)' });
   center(l1);
-  waterfall(l1, wt(3) - 0.1, { d: 0.6, s: 0.05 });
-  const pills = ['deadlines', 'warnings', 'plans'];
-  const pw = [250, 250, 190];
-  let px0 = 960 - (pw.reduce((a, b) => a + b, 0) + 40) / 2;
+  waterfall(l1, wt(6) - 0.1, { d: 0.6, s: 0.05 });
+  const l2 = words(cam, 'Organises the chaos into academic data.', 'abs serif', { left: '960px', top: '758px', fontSize: '58px', whiteSpace: 'nowrap', color: 'rgba(244,241,234,.92)' });
+  center(l2);
+  waterfall(l2, wt(11) - 0.1, { d: 0.6, s: 0.05 });
+  const pills = ['deadlines', 'notes', 'attendance', 'mail'];
+  const pw = [230, 160, 240, 140];
+  let px0 = 960 - (pw.reduce((a, b) => a + b, 0) + 60) / 2;
   const pillEls = pills.map((p, i) => {
-    const e = box(cam, px0, 742, pw[i], 66, 'abs', { borderRadius: '999px', border: '1px solid rgba(255,181,71,.5)', background: 'rgba(255,181,71,.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '30px', fontWeight: 600, color: 'var(--amber)' }, p);
+    const e = box(cam, px0, 838, pw[i], 62, 'abs', { borderRadius: '999px', border: '1px solid rgba(255,181,71,.5)', background: 'rgba(255,181,71,.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', fontWeight: 500 }, p);
     px0 += pw[i] + 20;
     return e;
   });
-  [10, 11, 13].forEach((wi, i) => inn(pillEls[i], wt(wi) - 0.05, { y: 20, scale: 0.85, d: 0.5, ease: 'back.out(1.6)' }));
-  const l2 = words(cam, 'Asks before it touches anyone else.', 'abs serif', { left: '960px', top: '880px', fontSize: '58px', whiteSpace: 'nowrap', color: 'rgba(244,241,234,.92)' });
-  center(l2);
-  waterfall(l2, wt(15) - 0.1, { d: 0.6, s: 0.05 });
+  pillEls.forEach((e, i) => inn(e, wt(15) + i * 0.14, { y: 20, scale: 0.85, d: 0.5, ease: 'back.out(1.6)' }));
+
+  // ---------- the MCP connector: your college life inside any AI you use (L10b) ----------
+  const L10b = "And because it's an M C P server, plug it into Claude Code, Codex, Cursor, or any A I you already use, and ask about your semester.";
+  const wk = i => wordTime(L10b, i, T.L10b, E.L10b - T.L10b);
+  tl.to([rg.w, wm, sweep, l1, l2, ...pillEls], { y: '-=70', opacity: 0, filter: 'blur(12px)', duration: 0.4, ease: 'power4.in' }, T.L10b - 0.45);
+  const mc = box(cam, 0, 0, 1920, 1080, 'abs');
+  tl.set(mc, { opacity: 0 }, 0);
+  tl.fromTo(mc, { opacity: 1, y: 90, filter: 'blur(14px)' }, { y: 0, filter: 'blur(0px)', duration: 0.6, ease: 'power4.out', immediateRender: false }, T.L10b - 0.05);
+  const node = box(mc, 960 - 230, 150, 460, 120, 'abs', { display: 'flex', alignItems: 'center', gap: '22px', padding: '0 30px', borderRadius: '24px', border: '2px solid rgba(255,181,71,.85)', background: 'rgba(255,181,71,.08)', boxShadow: '0 0 60px rgba(255,160,60,.25)' });
+  node.innerHTML = '<div class="nm" style="position:relative;flex:none;width:64px;height:64px"></div><div><div style="font-size:40px;font-weight:650;letter-spacing:-0.02em">7even5ive</div><div class="mono" style="font-size:17px;color:var(--amber);letter-spacing:.14em;margin-top:2px">MCP SERVER</div></div>';
+  const nr = ring(node.querySelector('.nm'), 32, 32, 64, 9, { glow: 3, trackOp: 0 }); nr.arcs.forEach(a => a.setAttribute('stroke-dashoffset', nr.C * 0.25));
+  const CL = [['Claude Code', 11], ['Codex', 13], ['Cursor', 14], ['Claude', 16], ['ChatGPT', 16], ['Any MCP client', 17]];
+  const cw = [250, 160, 160, 160, 180, 260], gap = 26;
+  let cx = 960 - (cw.reduce((a, b) => a + b, 0) + gap * (cw.length - 1)) / 2;
+  const msv = svgLayer(mc);
+  const bus = pathEl(msv, 'M 960 270 L 960 360', { stroke: 'rgba(244,241,234,.3)', w: 2 });
+  drawPath(bus, wk(10), 0.3);
+  const xs = [];
+  CL.forEach(([n, wi], i) => {
+    const c = box(mc, cx, 420, cw[i], 70, 'abs', { display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '16px', border: '1px solid rgba(244,241,234,.28)', background: 'rgba(255,255,255,.05)', fontSize: '25px', fontWeight: 600, whiteSpace: 'nowrap' }, n);
+    xs.push(cx + cw[i] / 2);
+    inn(c, wk(wi) - 0.1 + (i === 4 ? 0.12 : 0), { y: 24, d: 0.45, ease: 'back.out(1.5)' });
+    cx += cw[i] + gap;
+  });
+  const hb = pathEl(msv, `M ${xs[0]} 360 L ${xs[xs.length - 1]} 360`, { stroke: 'rgba(244,241,234,.3)', w: 2 });
+  drawPath(hb, wk(10) + 0.2, 0.5);
+  xs.forEach((x, i) => drawPath(pathEl(msv, `M ${x} 360 L ${x} 420`, { stroke: 'rgba(244,241,234,.3)', w: 2 }), wk(CL[i][1]) - 0.15, 0.25));
+  // ask about your semester, from your own AI
+  const q = box(mc, 960 - 470, 560, 940, 'auto', 'card', { padding: '26px 32px', background: 'rgba(10,11,15,.96)' });
+  q.innerHTML = '<div class="mono" style="font-size:16px;color:var(--mute);letter-spacing:.14em">IN YOUR AI · VIA THE 7EVEN5IVE MCP SERVER</div><div style="font-size:30px;margin-top:14px"><span style="color:var(--amber)">›</span> <span class="qq"></span></div><div class="ans" style="margin-top:16px;font-size:26px;line-height:1.55;color:rgba(244,241,234,.88);opacity:0">DBMS Assignment 3 · <b>Fri 11:59 PM</b><br>Campus drive form · <b>today 6 PM</b><br>DBMS attendance · <b style="color:#FF8B7E">73%</b>, attend the next 3</div>';
+  inn(q, wk(21), { y: 24, d: 0.45 });
+  typeText(q.querySelector('.qq'), "what's due this week?", wk(22), 22);
+  tl.to(q.querySelector('.ans'), { opacity: 1, duration: 0.4 }, wk(26) + 0.25);
 })();
