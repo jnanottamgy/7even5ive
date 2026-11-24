@@ -1,0 +1,36 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+@font-face{font-family:'IT';src:url(node_modules/@fontsource/inter-tight/files/inter-tight-latin-700-normal.woff2) format('woff2');font-weight:700}
+html,body{margin:0;background:transparent}
+.stage{position:relative;width:1400px;height:420px;font-family:'IT'}
+.stage.dark{background:#07080B}.stage.light{background:#F7F5F0}
+.wm{position:absolute;left:390px;top:122px;font-weight:700;font-size:168px;letter-spacing:-0.045em;line-height:1;white-space:nowrap;color:#F4F1EA}
+.light .wm{color:#0B0C10}
+.wm .a{color:#FFB547}.light .wm .a{color:#F08C00}
+.base{display:inline-block;width:0;height:0;vertical-align:baseline}
+.icon{position:relative;width:1024px;height:1024px;border-radius:230px;background:radial-gradient(circle at 50% 40%,#2a1d0b,#0c0d11 62%,#07080B)}
+</style></head><body>
+<div id="s1" class="stage"><svg id="r1" class="ring" width="1400" height="420"></svg><div class="wm" id="wm1"></div></div>
+<div id="s2" class="stage dark"><svg class="ring" width="1400" height="420"></svg><div class="wm"></div></div>
+<div id="s3" class="stage light"><svg class="ring" width="1400" height="420"></svg><div class="wm"></div></div>
+<div id="s4" class="icon"><svg class="ring" width="1024" height="1024"></svg></div>
+<script>
+function ringSVG(svg, cx, cy, size, uid) {
+  const st = size * 0.13, r = (size - st) / 2, C = 2 * Math.PI * r, g = size * 0.06;
+  svg.innerHTML = `<defs><linearGradient id="g${uid}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFD08A"/><stop offset="1" stop-color="#FF8A1F"/></linearGradient>
+  <filter id="f${uid}" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="${g}"/></filter></defs>
+  <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="url(#g${uid})" stroke-width="${st}" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * 0.25}" transform="rotate(-90 ${cx} ${cy})" filter="url(#f${uid})" opacity="0.6"/>
+  <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="url(#g${uid})" stroke-width="${st}" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * 0.25}" transform="rotate(-90 ${cx} ${cy})"/>`;
+}
+document.querySelectorAll('.stage').forEach((s, i) => {
+  ringSVG(s.querySelector('svg'), 252, 210, 210, i);
+  const wm = s.querySelector('.wm');
+  wm.innerHTML = '7even5ive'.split('').map(c => `<span class="${c === '7' || c === '5' ? 'a' : ''}">${c}</span>`).join('') + '<i class="base"></i>';
+});
+ringSVG(document.querySelector('#s4 svg'), 512, 512, 560, 9);
+document.fonts.load('700 168px IT', '7even5ive').then(() => document.fonts.ready).then(() => {
+  const wm = document.getElementById('wm1'), o = document.getElementById('s1').getBoundingClientRect();
+  window.__m = { chars: [...wm.querySelectorAll('span')].map(s => ({ c: s.textContent, x: s.getBoundingClientRect().left - o.left, w: s.getBoundingClientRect().width })),
+    baseline: wm.querySelector('.base').getBoundingClientRect().top - o.top, right: wm.getBoundingClientRect().right - o.left };
+  window.__ready = true;
+});
+</script></body></html>

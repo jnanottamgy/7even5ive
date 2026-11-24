@@ -1,0 +1,74 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>7even5ive</title>
+<style>
+@font-face{font-family:'IT';src:url(node_modules/@fontsource/inter-tight/files/inter-tight-latin-400-normal.woff2) format('woff2');font-weight:400}
+@font-face{font-family:'IT';src:url(node_modules/@fontsource/inter-tight/files/inter-tight-latin-500-normal.woff2) format('woff2');font-weight:500}
+@font-face{font-family:'IT';src:url(node_modules/@fontsource/inter-tight/files/inter-tight-latin-600-normal.woff2) format('woff2');font-weight:600}
+@font-face{font-family:'IT';src:url(node_modules/@fontsource/inter-tight/files/inter-tight-latin-700-normal.woff2) format('woff2');font-weight:700}
+@font-face{font-family:'IS';src:url(node_modules/@fontsource/instrument-serif/files/instrument-serif-latin-400-italic.woff2) format('woff2');font-style:italic}
+@font-face{font-family:'IS';src:url(node_modules/@fontsource/instrument-serif/files/instrument-serif-latin-400-normal.woff2) format('woff2');font-style:normal}
+@font-face{font-family:'JB';src:url(node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-400-normal.woff2) format('woff2');font-weight:400}
+@font-face{font-family:'JB';src:url(node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-500-normal.woff2) format('woff2');font-weight:500}
+@font-face{font-family:'NK';src:url(node_modules/@fontsource/noto-sans-kannada/files/noto-sans-kannada-kannada-500-normal.woff2) format('woff2')}
+@font-face{font-family:'ND';src:url(node_modules/@fontsource/noto-sans-devanagari/files/noto-sans-devanagari-devanagari-500-normal.woff2) format('woff2')}
+:root{
+  --bg:#07080B; --ink:#F4F1EA; --mute:#8D919B; --dim:#4C5059; --line:rgba(244,241,234,.08);
+  --amber:#FFB547; --amber2:#FF8A1F; --aws:#FF9900; --red:#FF5A4E; --green:#5BE49B; --supa:#3ECF8E;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg)}
+#stage{position:relative;width:1920px;height:1080px;overflow:hidden;background:var(--bg);font-family:'IT',sans-serif;color:var(--ink);-webkit-font-smoothing:antialiased}
+#bg,#world,#fx{position:absolute;inset:0}
+.glow{position:absolute;width:1400px;height:1400px;border-radius:50%;left:0;top:0;margin:-700px 0 0 -700px}
+#grid{position:absolute;inset:-200px;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:80px 80px;opacity:0}
+.scene{position:absolute;inset:0;visibility:hidden}
+.seam,.cam{position:absolute;inset:0;transform-origin:50% 50%}
+.abs{position:absolute}
+.mono{font-family:'JB',monospace}
+.serif{font-family:'IS',serif;font-style:italic;font-weight:400}
+.w{display:inline-block;will-change:transform}
+.card{position:absolute;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.09);border-radius:22px;box-shadow:0 30px 80px rgba(0,0,0,.45)}
+.chip{position:absolute;display:flex;align-items:center;gap:12px;padding:14px 22px;border-radius:16px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);font-size:26px;font-weight:500;white-space:nowrap}
+.label{font-family:'JB',monospace;font-size:20px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute)}
+.phone{position:absolute;border-radius:62px;background:#0c0d11;border:2px solid #2b2e36;box-shadow:0 50px 140px rgba(0,0,0,.65),inset 0 0 0 9px #040506}
+.scr{position:absolute;inset:11px;border-radius:52px;overflow:hidden;background:linear-gradient(180deg,#15171d,#0b0c10)}
+.notch{position:absolute;left:50%;top:14px;width:120px;height:34px;margin-left:-60px;border-radius:20px;background:#000;z-index:5}
+.btn{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;font-weight:600}
+#cap{position:absolute;left:0;right:0;bottom:46px;text-align:center;font-size:30px;font-weight:500;color:rgba(244,241,234,.86);text-shadow:0 2px 14px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,.9);letter-spacing:.005em;padding:0 260px}
+#grain{position:absolute;inset:-128px;background-image:url(grain.png);opacity:.055;pointer-events:none}
+#vig{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 50%,rgba(0,0,0,0) 55%,rgba(0,0,0,.55) 100%);pointer-events:none}
+#flash{position:absolute;inset:0;background:radial-gradient(circle at 50% 50%,rgba(255,225,170,.95),rgba(255,181,71,.35) 35%,rgba(0,0,0,0) 70%);opacity:0;pointer-events:none}
+#black{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none}
+.code{font-family:'JB',monospace;font-size:26px;line-height:1.55;white-space:pre}
+.tok-k{color:#FFB547}.tok-s{color:#9FE6C0}.tok-c{color:#6E7380}.tok-f{color:#8FB8FF}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="bg">
+    <div class="glow" id="g1" style="background:radial-gradient(circle,rgba(255,170,60,.16),rgba(255,170,60,0) 62%)"></div>
+    <div class="glow" id="g2" style="background:radial-gradient(circle,rgba(90,120,255,.12),rgba(90,120,255,0) 62%)"></div>
+    <div class="glow" id="g3" style="background:radial-gradient(circle,rgba(255,120,60,.10),rgba(255,120,60,0) 62%)"></div>
+    <div id="grid"></div>
+  </div>
+  <div id="world"></div>
+  <div id="fx"><div id="flash"></div></div>
+  <div id="cap"></div>
+  <div id="grain"></div>
+  <div id="vig"></div>
+  <div id="black"></div>
+</div>
+<script src="node_modules/gsap/dist/gsap.min.js"></script>
+<script src="node_modules/gsap/dist/MotionPathPlugin.min.js"></script>
+<script src="data.js"></script>
+<script src="core.js"></script>
+<script src="s_hook.js"></script>
+<script src="s_flow.js"></script>
+<script src="s_safety.js"></script>
+<script src="s_aws.js"></script>
+<script src="final.js"></script>
+</body>
+</html>

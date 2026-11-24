@@ -1,0 +1,35 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+@font-face{font-family:'IT';src:url(node_modules/@fontsource/inter-tight/files/inter-tight-latin-700-normal.woff2) format('woff2');font-weight:700}
+@font-face{font-family:'IT';src:url(node_modules/@fontsource/inter-tight/files/inter-tight-latin-500-normal.woff2) format('woff2');font-weight:500}
+@font-face{font-family:'IS';src:url(node_modules/@fontsource/instrument-serif/files/instrument-serif-latin-400-italic.woff2) format('woff2');font-style:italic}
+@font-face{font-family:'JB';src:url(node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-500-normal.woff2) format('woff2');font-weight:500}
+html,body{margin:0}
+#t{position:relative;width:1280px;height:720px;overflow:hidden;font-family:'IT';color:#F4F1EA;
+ background:radial-gradient(ellipse at 26% 50%,rgba(255,170,70,.20),rgba(0,0,0,0) 46%),radial-gradient(ellipse at 90% 100%,rgba(60,80,160,.16),rgba(0,0,0,0) 50%),#07080B}
+#t::after{content:'';position:absolute;inset:0;background-image:url(grain.png);opacity:.05;mix-blend-mode:screen}
+.pct{position:absolute;left:150px;top:282px;width:360px;text-align:center;font-weight:700;font-size:128px;letter-spacing:-0.05em;line-height:1}
+.pct small{font-size:64px;letter-spacing:-0.02em}
+.cap{position:absolute;left:150px;top:418px;width:360px;text-align:center;font-family:'JB';font-weight:500;font-size:19px;letter-spacing:.18em;color:#8D919B}
+.wm{position:absolute;left:600px;top:200px;font-weight:700;font-size:112px;letter-spacing:-0.045em;line-height:1;white-space:nowrap}
+.wm b{color:#FFB547;font-weight:700}
+.tag{position:absolute;left:604px;top:332px;font-family:'IS';font-style:italic;font-size:60px;line-height:1.05;white-space:nowrap}
+.tag span{color:#FFB547}
+.chips{position:absolute;left:604px;top:470px;display:flex;gap:14px}
+.chip{display:flex;align-items:center;gap:10px;height:54px;padding:0 20px;border-radius:14px;font-weight:500;font-size:24px;border:1.5px solid rgba(255,153,0,.6);background:rgba(255,153,0,.08)}
+.chip i{font-family:'JB';font-style:normal;font-size:16px;letter-spacing:.14em;color:#FF9900}
+.chip.el{border-color:rgba(244,241,234,.55);background:rgba(244,241,234,.06)}
+.foot{position:absolute;left:604px;top:566px;font-family:'JB';font-weight:500;font-size:17px;letter-spacing:.18em;color:#8D919B}
+</style></head><body><div id="t">
+<svg width="1280" height="720" style="position:absolute;left:0;top:0">
+ <defs><linearGradient id="g" gradientUnits="userSpaceOnUse" x1="170" y1="530" x2="490" y2="210"><stop offset="0" stop-color="#FFD08A"/><stop offset="1" stop-color="#FF8A1F"/></linearGradient>
+ <filter id="f" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="16"/></filter></defs>
+ <circle cx="330" cy="360" r="168" fill="none" stroke="rgba(244,241,234,.07)" stroke-width="38"/>
+ <path d="M 330 192 A 168 168 0 1 1 162 360" fill="none" stroke="url(#g)" stroke-width="38" stroke-linecap="round" filter="url(#f)" opacity=".7"/>
+ <path d="M 330 192 A 168 168 0 1 1 162 360" fill="none" stroke="url(#g)" stroke-width="38" stroke-linecap="round"/>
+</svg>
+<div class="pct">75<small>%</small></div><div class="cap">THE LINE</div>
+<div class="wm"><b>7</b>even<b>5</b>ive</div>
+<div class="tag">Your semester,<br><span>on autopilot.</span></div>
+<div class="chips"><div class="chip"><i>AWS</i>Bedrock AgentCore</div><div class="chip el">ElevenLabs</div></div>
+<div class="foot">WHACKIEST 2026 · TRACK 1 · MAKE MCP MATTER</div>
+</div></body></html>
