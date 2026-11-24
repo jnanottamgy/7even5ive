@@ -83,18 +83,18 @@ function D_(t) { for (const k in T) if (Math.abs(T[k] - t) < 1e-6) return E[k] -
     const r = box(portal, 26, 88 + i * 60, 448, 46, 'abs', { display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '24px' });
     r.innerHTML = `<span style="color:${bad ? 'var(--ink)' : 'var(--mute)'}">${s}</span><span style="display:flex;align-items:center;gap:14px"><i style="display:block;width:120px;height:6px;border-radius:3px;background:rgba(255,255,255,.08);position:relative"><b style="position:absolute;left:0;top:0;height:6px;border-radius:3px;width:${v * 1.2}px;background:${bad ? 'var(--red)' : 'rgba(244,241,234,.45)'}"></b></i><span class="mono" style="color:${bad ? 'var(--red)' : 'var(--mute)'}">${v}%</span></span>`;
   });
-  // gmail
+  // department notices: every circular arrives as a forwarded PDF
   const gm = box(cam, 670, 92, 560, 400, 'card');
-  head(gm, 'Inbox', '<span class="mono gmc" style="font-size:18px;padding:6px 14px;border-radius:999px;background:rgba(255,255,255,.08)">212 unread</span>');
+  head(gm, 'CSE Dept · Notices', '<span class="mono gmc" style="font-size:18px;padding:6px 14px;border-radius:999px;background:rgba(37,211,102,.14);color:#7BE3A0">212 unread</span>');
   const gcount = gm.querySelector('.gmc');
   const clip = box(gm, 0, 64, 560, 336, 'abs', { overflow: 'hidden' });
   const list = box(clip, 0, -280, 560, 900, 'abs');
-  const rows = [['Club', 'Hackathon meetup, Friday'], ['Hostel office', 'Water supply notice'], ['Library', 'Your book is overdue'], ['Placement cell', 'TCS drive: register by 6 PM'], ['Campus news', 'Weekly digest · Week 12'],
-    ['TCS', 'Placement drive registration'], ['Library', 'Overdue reminder'], ['Prof. Rao', 'DBMS Assignment 3 · due Fri 11:59 PM'], ['Campus news', 'Weekly digest · Week 11'], ['Club', 'Photos from the fest']];
-  rows.forEach(([a, b], i) => {
+  const pdf = '<i style="display:flex;align-items:center;justify-content:center;flex:none;width:34px;height:40px;border-radius:6px;background:rgba(255,90,78,.16);color:#FF8B7E;font:600 11px JB;font-style:normal">PDF</i>';
+  const rows = ['IA-2_timetable.pdf', 'Fee_payment_notice.pdf', 'Lab_record_format.pdf', 'Holiday_list.pdf', 'Hackathon_registration.pdf', 'Bus_route_change.pdf', 'Exam_form_last_date.pdf', 'DBMS_Assignment_3.pdf', 'Seminar_attendance.pdf', 'Sports_day_circular.pdf'];
+  rows.forEach((f, i) => {
     const hot = i === 7;
-    const r = box(list, 18, i * 56 + 8, 524, 48, 'abs', { display: 'flex', gap: '16px', alignItems: 'center', fontSize: '22px', padding: '0 12px', borderRadius: '10px', background: hot ? 'rgba(255,181,71,.10)' : 'none', border: hot ? '1px solid rgba(255,181,71,.45)' : '1px solid transparent' });
-    r.innerHTML = `<b style="width:150px;flex:none;font-weight:600;color:${hot ? 'var(--amber)' : 'var(--ink)'}">${a}</b><span style="color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${b}</span>`;
+    const r = box(list, 18, i * 56 + 8, 524, 48, 'abs', { display: 'flex', gap: '14px', alignItems: 'center', fontSize: '21px', padding: '0 12px', borderRadius: '10px', background: hot ? 'rgba(255,181,71,.10)' : 'none', border: hot ? '1px solid rgba(255,181,71,.45)' : '1px solid transparent' });
+    r.innerHTML = `<span class="mono" style="flex:none;width:70px;font-size:14px;letter-spacing:.06em;color:var(--dim)">↪ FWD</span>${pdf}<span style="color:${hot ? 'var(--amber)' : 'var(--mute)'};font-weight:${hot ? 600 : 400};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${f}</span>${hot ? '<span class="mono" style="margin-left:auto;flex:none;font-size:15px;color:var(--amber)">due Fri</span>' : ''}`;
   });
   // class group chat
   const ch = box(cam, 1290, 150, 520, 650, 'card', { overflow: 'hidden' });
@@ -125,17 +125,17 @@ function D_(t) { for (const k in T) if (Math.abs(T[k] - t) < 1e-6) return E[k] -
   const cr = box(cam, 230, 570, 470, 250, 'card');
   head(cr, 'Classroom', '<span class="mono" style="font-size:17px;color:var(--mute)">1 due</span>');
   box(cr, 26, 90, 420, 140, 'abs', { fontSize: '24px', lineHeight: 1.6 }, '<div style="font-weight:600">DBMS · Assignment 3</div><div style="color:var(--mute)">Due Fri, 11:59 PM</div><div class="mono" style="font-size:17px;color:var(--dim);margin-top:6px">NOT ON YOUR CALENDAR</div>');
-  // calendar
-  const cal = box(cam, 780, 560, 450, 330, 'card');
-  head(cal, 'Calendar', '<span class="mono" style="font-size:17px;color:var(--mute)">this week</span>');
-  const days = 'MTWTFSS'.split('');
-  days.forEach((d, i) => {
-    box(cal, 26 + i * 57, 84, 50, 30, 'abs mono', { fontSize: '17px', color: 'var(--mute)', textAlign: 'center' }, d);
-    box(cal, 26 + i * 57, 118, 50, 180, 'abs', { borderRadius: '10px', background: 'rgba(255,255,255,.03)', border: '1px dashed rgba(255,255,255,.07)' });
-  });
-  box(cal, 0, 188, 450, 40, 'abs mono', { fontSize: '18px', color: 'var(--dim)', textAlign: 'center', letterSpacing: '.1em' }, 'NO EVENTS');
+  // instagram: club deadlines live in stories that disappear
+  const ig = box(cam, 780, 560, 450, 330, 'card');
+  head(ig, 'Instagram', '<span class="mono" style="font-size:17px;color:var(--mute)">story · 3h left</span>');
+  const story = box(ig, 26, 82, 150, 228, 'abs', { borderRadius: '16px', overflow: 'hidden', background: 'linear-gradient(160deg,#4b2a86,#a83279 55%,#e2683c)' });
+  story.innerHTML = `<i style="position:absolute;left:10px;right:10px;top:8px;height:3px;border-radius:2px;background:rgba(255,255,255,.35)"><b style="display:block;width:78%;height:3px;border-radius:2px;background:#fff"></b></i>
+    <div style="position:absolute;left:10px;top:20px;display:flex;align-items:center;gap:6px"><i style="display:block;width:22px;height:22px;border-radius:50%;border:2px solid #fff;background:#151515"></i><span style="font-size:13px;font-weight:600">techclub</span></div>
+    <div style="position:absolute;left:12px;right:10px;top:76px;font-weight:700;font-size:21px;line-height:1.08;letter-spacing:-0.01em">HACKATHON<br>REG CLOSES<br>TONIGHT</div>
+    <div class="mono" style="position:absolute;left:12px;bottom:14px;font-size:13px">11:59 PM</div>`;
+  box(ig, 198, 92, 230, 210, 'abs', { fontSize: '22px', lineHeight: 1.45 }, '<div style="font-weight:600">@techclub</div><div style="color:var(--mute)">Hackathon registrations close tonight</div><div class="mono" style="font-size:16px;color:#FF8B7E;margin-top:12px;letter-spacing:.06em">GONE IN 3 HOURS</div>');
 
-  const cards = [portal, gm, ch, cr, cal];
+  const cards = [portal, gm, ch, cr, ig];
   tl.fromTo(cards, { x: 420, opacity: 0, filter: 'blur(16px)' }, { x: 0, opacity: 1, filter: 'blur(0px)', duration: 0.75, stagger: 0.07, ease: 'power4.out' }, C.problem);
 
   // camera visits each problem, the rest falls back

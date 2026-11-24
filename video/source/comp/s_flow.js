@@ -11,7 +11,7 @@ function layer(parent) { return box(parent, 0, 0, '100%', '100%', 'abs'); }
 
   // --- the message ---
   const L12 = 'D B M S assignment three. Due Friday, eleven fifty-nine P M.';
-  const L13 = 'Share it in one tap, or let it arrive by email. Gmail pings us the moment it lands.';
+  const L13 = 'Forward it to Seven Five on WhatsApp, in one tap. Or let your class rep forward it once, for the whole section.';
   const L15 = "It finds the subject, the due date and the task, and checks it isn't a duplicate.";
   const L16 = "Only when the rules aren't sure does Claude step in, on Amazon Bedrock, and its answer is checked against your real subjects.";
   const w12 = i => wordTime(L12, i, T.L12, E.L12 - T.L12);
@@ -39,35 +39,35 @@ function layer(parent) { return box(parent, 0, 0, '100%', '100%', 'abs'); }
     tl.to(hls[k], { color: 'var(--amber)', duration: 0.3 }, t);
   });
 
-  // --- share sheet or email ---
+  // --- forward it on WhatsApp, or the class rep forwards once for everyone ---
   tl.to(msgWrap, { x: -40, y: -120, scale: 0.84, duration: 0.8, ease: 'power3.inOut' }, T.L13 - 0.2);
   tl.to(cam, { scale: 1, duration: 0.8, ease: 'power3.inOut' }, T.L13 - 0.2);
   const sheet = box(cam, 250, 600, 860, 250, 'abs', { borderRadius: '30px', background: 'rgba(22,24,30,.92)', border: '1px solid rgba(255,255,255,.1)' });
-  box(sheet, 34, 26, 400, 30, 'abs mono', { fontSize: '19px', color: 'var(--mute)', letterSpacing: '.14em' }, 'SHARE TO');
-  const apps = [['Copy', '#2C2F38'], ['Notes', '#2C2F38'], ['Drive', '#2C2F38'], ['7even5ive', 'ring']];
+  box(sheet, 34, 26, 400, 30, 'abs mono', { fontSize: '19px', color: 'var(--mute)', letterSpacing: '.14em' }, 'FORWARD TO');
+  const apps = [['Amma', '#3B4A63'], ['Rahul', '#4A3B63'], ['Hostel 4B', '#2F4F3F'], ['7even5ive', 'ring']];
   let app75;
   apps.forEach(([n, c], i) => {
     const a = box(sheet, 40 + i * 205, 74, 160, 150, 'abs', { textAlign: 'center' });
-    const ic = box(a, 36, 0, 88, 88, 'abs', { borderRadius: '24px', background: c === 'ring' ? '#0d0e12' : c, border: c === 'ring' ? '2px solid var(--amber)' : '1px solid rgba(255,255,255,.08)' });
+    const ic = box(a, 36, 0, 88, 88, 'abs', { borderRadius: c === 'ring' ? '24px' : '50%', background: c === 'ring' ? '#0d0e12' : c, border: c === 'ring' ? '2px solid var(--amber)' : '1px solid rgba(255,255,255,.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '34px', fontWeight: 600, color: 'rgba(244,241,234,.75)' }, c === 'ring' ? '' : n[0]);
     if (c === 'ring') { const rr = ring(ic, 43, 43, 56, 8, { glow: 3, trackOp: 0 }); rr.arcs.forEach(x => x.setAttribute('stroke-dashoffset', rr.C * 0.25)); app75 = a; }
     box(a, 0, 100, 160, 34, 'abs', { fontSize: '22px', color: c === 'ring' ? 'var(--amber)' : 'var(--mute)', fontWeight: c === 'ring' ? 600 : 400 }, n);
   });
-  tl.fromTo(sheet, { y: 260, opacity: 0, filter: 'blur(10px)' }, { y: 0, opacity: 1, filter: 'blur(0px)', duration: 0.7, ease: 'power4.out' }, T.L13 + 0.45);
+  tl.fromTo(sheet, { y: 260, opacity: 0, filter: 'blur(10px)' }, { y: 0, opacity: 1, filter: 'blur(0px)', duration: 0.7, ease: 'power4.out' }, T.L13 + 0.3);
   const cur = cursor(cam, 1400, 1150, 96);
-  tap(cur, 250 + 40 + 615 + 80, 600 + 74 + 44, T.L13 + 1.6, cam);
-  tl.to(app75, { scale: 0.9, duration: 0.08 }, T.L13 + 1.6);
-  tl.to(app75, { scale: 1, duration: 0.3, ease: 'back.out(1.7)' }, T.L13 + 1.68);
-  tl.to(cur, { left: 1500 + 'px', top: 1200 + 'px', duration: 0.6, ease: 'power3.in' }, T.L13 + 2.1);
+  tap(cur, 250 + 40 + 615 + 80, 600 + 74 + 44, w13(8), cam);
+  tl.to(app75, { scale: 0.9, duration: 0.08 }, w13(8));
+  tl.to(app75, { scale: 1, duration: 0.3, ease: 'back.out(1.7)' }, w13(8) + 0.08);
+  tl.to(cur, { left: 1500 + 'px', top: 1200 + 'px', duration: 0.6, ease: 'power3.in' }, w13(8) + 0.5);
   // the email path
   const mail = box(cam, 1310, 330, 470, 'auto', 'abs', { padding: '26px 30px', borderRadius: '26px', background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.1)' });
-  mail.innerHTML = `<div style="display:flex;align-items:center;gap:16px"><svg width="44" height="44" viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2.5" fill="none" stroke="#F4F1EA" stroke-width="1.6"/><path d="M3.5 6.5 L12 13 L20.5 6.5" fill="none" stroke="#F4F1EA" stroke-width="1.6"/></svg><div><div style="font-size:30px;font-weight:600">or by email</div><div class="mono" style="font-size:19px;color:var(--mute);margin-top:4px">GMAIL PUSH · PUB/SUB</div></div></div>`;
-  inn(mail, w13(9) - 0.1, { x: 60, y: 0, d: 0.6, ease: 'power4.out' });
+  mail.innerHTML = `<div style="display:flex;align-items:center;gap:16px"><svg width="44" height="44" viewBox="0 0 24 24" style="flex:none"><path d="M3 10 V14 H6.5 L13.5 18.5 V5.5 L6.5 10 Z" fill="none" stroke="#F4F1EA" stroke-width="1.6" stroke-linejoin="round"/><path d="M16.5 9.5 Q18.3 12 16.5 14.5 M19 7.5 Q22.2 12 19 16.5" fill="none" stroke="#F4F1EA" stroke-width="1.6" stroke-linecap="round"/></svg><div><div style="font-size:28px;font-weight:600">or your class rep, once</div><div class="mono" style="font-size:18px;color:var(--mute);margin-top:4px">ONE FORWARD → WHOLE SECTION</div></div></div>`;
+  inn(mail, w13(10) - 0.1, { x: 60, y: 0, d: 0.6, ease: 'power4.out' });
   const bolt = box(mail, 400, 20, 48, 48, 'abs', {}, '<svg width="48" height="48" viewBox="0 0 24 24"><path d="M13 2 L5 13.5 H11 L10 22 L19 9.5 H13 Z" fill="#FFB547"/></svg>');
-  tl.fromTo(bolt, { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.4, ease: 'back.out(2)' }, w13(12));
+  tl.fromTo(bolt, { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.4, ease: 'back.out(2)' }, w13(17));
   const sv = svgLayer(cam);
   const p1 = pathEl(sv, 'M 1545 470 C 1545 620, 1450 700, 1300 730', { stroke: 'rgba(255,181,71,.45)', w: 2.5, dash: '6 8' });
-  drawPath(p1, w13(12), 0.6);
-  packet(sv, p1, w13(13), 0.7);
+  drawPath(p1, w13(17), 0.6);
+  packet(sv, p1, w13(19), 0.7);
 
   // --- the rules engine ---
   const t14 = T.L14 - 0.35;
@@ -159,7 +159,7 @@ function layer(parent) { return box(parent, 0, 0, '100%', '100%', 'abs'); }
   wr.arcs.forEach(a => a.setAttribute('stroke-dashoffset', wr.C * 0.27));
   box(warn, 22, 50, 84, 40, 'abs', { textAlign: 'center', fontSize: '22px', fontWeight: 700, color: '#FF8B7E' }, '73%');
   box(warn, 130, 34, 210, 90, 'abs', { fontSize: '26px', fontWeight: 650, lineHeight: 1.2 }, 'DBMS attendance');
-  box(warn, 24, 140, 310, 140, 'abs', { fontSize: '25px', lineHeight: 1.35, color: 'rgba(244,241,234,.85)' }, 'You can\'t miss Thursday\'s lab.<div class="mono" style="font-size:16px;color:#FF8B7E;margin-top:12px;letter-spacing:.1em">2 MORE ABSENCES = BELOW 75%</div>');
+  box(warn, 24, 140, 310, 140, 'abs', { fontSize: '25px', lineHeight: 1.35, color: 'rgba(244,241,234,.85)' }, 'Attend the next 3 classes to get back to 75%.<div class="mono" style="font-size:16px;color:#FF8B7E;margin-top:12px;letter-spacing:.1em">0 BUNKS LEFT</div>');
   tl.fromTo(warn, { y: -140, opacity: 0, scale: 0.94 }, { y: 0, opacity: 1, scale: 1, duration: 0.7, ease: 'back.out(1.4)' }, T.L19 + 0.5);
   // right side headline
   const r1 = words(cam, 'When it\'s urgent,', 'abs serif', { left: '860px', top: '330px', fontSize: '110px', whiteSpace: 'nowrap' });
@@ -195,13 +195,13 @@ function layer(parent) { return box(parent, 0, 0, '100%', '100%', 'abs'); }
   // transcript on the right, big and readable
   tl.to([r1, r2], { opacity: 0, y: -40, filter: 'blur(10px)', duration: 0.4, ease: 'power2.in' }, T.D01 - 0.5);
   const tr = box(cam, 860, 250, 960, 600, 'abs');
-  const lineA = box(tr, 0, 0, 960, 'auto', 'abs', { fontSize: '46px', lineHeight: 1.3, fontWeight: 500 }, '<div class="mono" style="font-size:19px;color:var(--amber);letter-spacing:.14em;margin-bottom:10px">7EVEN5IVE · VOICE AGENT</div>"DBMS is at 73%. Want a study block on Thursday, at six?"');
-  const lineB = box(tr, 0, 230, 960, 'auto', 'abs', { fontSize: '46px', lineHeight: 1.3, fontWeight: 500, textAlign: 'right' }, '<div class="mono" style="font-size:19px;color:var(--mute);letter-spacing:.14em;margin-bottom:10px">YOU</div>"Yes."');
-  const lineC = box(tr, 0, 400, 960, 'auto', 'abs', { fontSize: '46px', lineHeight: 1.3, fontWeight: 500 }, '<div class="mono" style="font-size:19px;color:var(--amber);letter-spacing:.14em;margin-bottom:10px">7EVEN5IVE · VOICE AGENT</div>"Done. It\'s in your calendar."');
+  const lineA = box(tr, 0, -30, 960, 'auto', 'abs', { fontSize: '40px', lineHeight: 1.3, fontWeight: 500 }, '<div class="mono" style="font-size:19px;color:var(--amber);letter-spacing:.14em;margin-bottom:10px">7EVEN5IVE · VOICE AGENT</div>"DBMS is at 73%. Attend the next three classes, and you\'re back at 75. Want a reminder before each one?"');
+  const lineB = box(tr, 0, 240, 960, 'auto', 'abs', { fontSize: '46px', lineHeight: 1.3, fontWeight: 500, textAlign: 'right' }, '<div class="mono" style="font-size:19px;color:var(--mute);letter-spacing:.14em;margin-bottom:10px">YOU</div>"Yes."');
+  const lineC = box(tr, 0, 410, 960, 'auto', 'abs', { fontSize: '40px', lineHeight: 1.3, fontWeight: 500 }, '<div class="mono" style="font-size:19px;color:var(--amber);letter-spacing:.14em;margin-bottom:10px">7EVEN5IVE · VOICE AGENT</div>"Done. I\'ll remind you before every DBMS class."');
   inn(lineA, T.D01, { y: 30, d: 0.5 });
   inn(lineB, T.D02 - 0.05, { y: 30, d: 0.4 });
   inn(lineC, T.D03 - 0.05, { y: 30, d: 0.45 });
-  const blk = box(sB, 40, 560, 318, 70, 'abs', { borderRadius: '18px', background: 'rgba(91,228,155,.12)', border: '1px solid rgba(91,228,155,.45)', display: 'flex', alignItems: 'center', gap: '12px', padding: '0 18px', fontSize: '20px', fontWeight: 600 }, `${check(24)}<span>Thu 6:00 PM · DBMS study</span>`);
+  const blk = box(sB, 40, 560, 318, 70, 'abs', { borderRadius: '18px', background: 'rgba(91,228,155,.12)', border: '1px solid rgba(91,228,155,.45)', display: 'flex', alignItems: 'center', gap: '12px', padding: '0 18px', fontSize: '20px', fontWeight: 600 }, `${check(24)}<span>Reminders on · next 3 DBMS</span>`);
   inn(blk, E.D03 - 0.2, { y: 20, d: 0.5, ease: 'back.out(1.5)' });
   // C: after the call, the morning briefing lock screen (L23)
   tl.set(sC, { opacity: 0 }, 0);
@@ -229,7 +229,7 @@ function layer(parent) { return box(parent, 0, 0, '100%', '100%', 'abs'); }
   tl.to(sB, { opacity: 0.0, duration: 0.4 }, E.D03 + 1.0);
   tl.to(sA, { opacity: 1, duration: 0.4 }, E.D03 + 1.0);
   tl.to(warn, { opacity: 0, duration: 0.3 }, E.D03 + 1.0);
-  const cal2 = box(sA, 22, 170, 354, 92, 'abs', { borderRadius: '20px', background: 'rgba(91,228,155,.1)', border: '1px solid rgba(91,228,155,.4)', display: 'flex', alignItems: 'center', gap: '16px', padding: '0 20px' }, `<div style="text-align:center"><div class="mono" style="font-size:15px;color:var(--green)">THU</div><div style="font-size:30px;font-weight:650">27</div></div><div><div style="font-size:22px;font-weight:600">DBMS study block</div><div class="mono" style="font-size:16px;color:var(--mute)">6:00 PM · added by voice</div></div>`);
+  const cal2 = box(sA, 22, 170, 354, 92, 'abs', { borderRadius: '20px', background: 'rgba(91,228,155,.1)', border: '1px solid rgba(91,228,155,.4)', display: 'flex', alignItems: 'center', gap: '16px', padding: '0 20px' }, `<div style="text-align:center"><div class="mono" style="font-size:15px;color:var(--green)">NEXT</div><div style="font-size:30px;font-weight:650">3</div></div><div><div style="font-size:22px;font-weight:600">DBMS class reminders</div><div class="mono" style="font-size:16px;color:var(--mute)">15 min before · by voice</div></div>`);
   inn(cal2, E.D03 + 1.1, { y: -20, d: 0.5 });
 
   // --- Scribe: voice notes become text ---

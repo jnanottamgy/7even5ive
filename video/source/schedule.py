@@ -11,11 +11,11 @@ scene_of = {l['id']: l['scene'] for l in lines}
 GAP = 0.42                       # default pause between lines inside a scene
 CUSTOM = {                       # pause BEFORE this line (overrides GAP)
     'L02': 0.95, 'L03': 0.85, 'L04': 1.35,
-    'L06': 0.5, 'L07': 0.45, 'L08': 0.55,
+    'L06': 0.3, 'L07': 0.3, 'L08': 0.4,
     'L10': 0.55,
     'L12': 0.45, 'L14': 0.6, 'L15': 0.35, 'L16': 0.45, 'L17': 0.6, 'L18': 0.45,
-    'L20': 0.5, 'D01': 2.2, 'D02': 0.45, 'D03': 0.35, 'L21': 1.0, 'L22': 0.6, 'L23': 0.55,
-    'L25': 0.7, 'L26': 0.7, 'L27': 1.0, 'L28': 1.0, 'L29': 0.55, 'L30': 0.55, 'L31': 0.6,
+    'L20': 0.5, 'D01': 1.9, 'D02': 0.45, 'D03': 0.35, 'L21': 1.0, 'L22': 0.6, 'L23': 0.55,
+    'L25': 0.7, 'L26': 0.7, 'L27': 0.9, 'L28': 0.85, 'L29': 0.55, 'L30': 0.55, 'L31': 0.6,
     'L32': 0.5, 'L33': 0.55,
     'L35': 0.5, 'L36': 0.45, 'L37': 0.45, 'L38': 0.5,
     'L40': 0.45, 'L41': 0.5,
@@ -90,7 +90,7 @@ cue(cuts['reveal_impact'], 'impact_boom', -4); cue(cuts['reveal_impact'] + 0.05,
 cue(cuts['flow'], 'whoosh_short', -8)
 cue(T['L11'] + 0.3, 'pop_blip', -10)
 cue(T['L12'] + 0.3, 'scan_sweep', -12)
-cue(T['L13'] + 0.6, 'swipe_up', -9); cue(T['L13'] + 1.6, 'tap_soft', -6); cue(T['L13'] + 3.4, 'data_blip', -8)
+cue(T['L13'] + 0.35, 'swipe_up', -9); cue(wt('L13', 8), 'tap_soft', -6); cue(wt('L13', 10) - 0.1, 'swipe_up', -12); cue(wt('L13', 17), 'data_blip', -8)
 cue(T['L14'] + 0.2, 'click_ui', -6)
 for k in range(4):
     cue(T['L15'] + 0.3 + k * 0.95, 'data_blip', -9)
@@ -102,13 +102,13 @@ cue(cuts['voice'], 'whoosh_short', -8)
 cue(T['L19'] + 0.6, 'pop_blip', -10)
 cue(T['L20'] + 0.15, 'phone_buzz', -9); cue(T['L20'] + 0.4, 'ringtone', -10, until=T['D01'] - 0.3)
 cue(D['D01'] and T['D01'] - 0.35, 'click_ui', -10)
-cue(T['D03'] + 1.4, 'success_chime', -11)
+cue(E['D03'] - 0.2, 'success_chime', -11)
 cue(T['L21'] + 0.3, 'whoosh_short', -10)
 cue(T['L22'] + 0.4, 'scan_sweep', -12); cue(T['L22'] + 3.6, 'pop_blip', -11)
 cue(T['L23'] + 0.3, 'swipe_up', -10)
 # safety
 cue(cuts['safety'], 'sub_drop', -6)
-cue(T['L25'] + 0.1, 'notif_ping_2', -10); cue(T['L25'] + 1.5, 'glitch_short', -10)
+cue(T['L25'] + 0.1, 'notif_ping_2', -10); cue(wt('L25', 7) + 0.8, 'glitch_short', -10)
 cue(T['L26'] + 0.5, 'error_buzz', -9)
 cue(T['L27'] + 0.25, 'lock_clunk', -4)
 cue(T['L28'] - 0.3, 'whoosh_long', -8)

@@ -1,6 +1,6 @@
 // Scenes 7-10: AWS architecture, PORTAL FORGE + live counter, BUSINESS, CLOSE
 function node(parent, x, y, w, h, title, sub, kind) {
-  const col = { aws: ['rgba(255,153,0,.55)', 'rgba(255,153,0,.07)'], el: ['rgba(244,241,234,.5)', 'rgba(244,241,234,.05)'], supa: ['rgba(62,207,142,.55)', 'rgba(62,207,142,.06)'], gw: ['rgba(255,181,71,.85)', 'rgba(255,181,71,.08)'], plain: ['rgba(255,255,255,.14)', 'rgba(255,255,255,.035)'] }[kind || 'plain'];
+  const col = { aws: ['rgba(255,153,0,.55)', 'rgba(255,153,0,.07)'], el: ['rgba(244,241,234,.5)', 'rgba(244,241,234,.05)'], supa: ['rgba(62,207,142,.55)', 'rgba(62,207,142,.06)'], gw: ['rgba(255,181,71,.85)', 'rgba(255,181,71,.08)'], wa: ['rgba(37,211,102,.6)', 'rgba(37,211,102,.07)'], plain: ['rgba(255,255,255,.14)', 'rgba(255,255,255,.035)'] }[kind || 'plain'];
   const n = box(parent, x, y, w, h, 'abs', { borderRadius: '18px', border: `1.5px solid ${col[0]}`, background: col[1], padding: '14px 20px', display: 'flex', flexDirection: 'column', justifyContent: 'center' });
   n.innerHTML = `<div style="font-size:26px;font-weight:600;letter-spacing:-0.01em;white-space:nowrap">${title}</div>${sub ? `<div class="mono" style="font-size:17px;color:var(--mute);margin-top:4px;white-space:nowrap">${sub}</div>` : ''}`;
   return n;
@@ -16,60 +16,88 @@ const Wt = (txt, id) => i => wordTime(txt, i, T[id], E[id] - T[id]);
   const t0 = C.aws + 0.05;
   const title = box(cam, 110, 70, 1200, 80, 'abs', { fontSize: '64px', fontWeight: 600, letterSpacing: '-0.03em', whiteSpace: 'nowrap' }, 'Serverless, on <span style="color:var(--aws)">AWS</span>');
   inn(title, T.L34 + 0.3, { y: 20, d: 0.6 });
-  const A1 = node(cam, 110, 230, 270, 96, 'Gmail push', 'Google Pub/Sub');
-  const A2 = node(cam, 110, 350, 270, 96, 'Share sheet', 'S3 → Scribe', 'aws');
-  const A3 = node(cam, 110, 470, 270, 96, 'EventBridge', '07:00 · daily', 'aws');
-  const B1 = node(cam, 440, 290, 230, 96, 'SQS', '+ dead-letter queue', 'aws');
-  const lam = ['cascade', 'planner', 'approve', 'briefing', 'notify'].map((n, i) => node(cam, 720, 200 + i * 86, 260, 74, `λ ${n}`, null, 'aws'));
+  // columns: sources | SQS | λ workers | AgentCore Gateway | tools ; bottom row: Bedrock | Supabase | phone
+  const A1 = node(cam, 110, 218, 270, 88, 'WhatsApp', 'forwards · Cloud API', 'wa');
+  const A2 = node(cam, 110, 318, 270, 88, 'Share sheet', 'S3 → Scribe', 'aws');
+  const A4 = node(cam, 110, 418, 270, 88, 'Google Classroom', 'assignments · API');
+  const A3 = node(cam, 110, 534, 270, 80, 'EventBridge', '07:00 · daily', 'aws');
+  const B1 = node(cam, 440, 320, 200, 84, 'SQS', '+ dead-letter queue', 'aws');
+  const EL = node(cam, 720, 196, 260, 80, 'ElevenLabs Agents', 'voice · MCP client', 'el');
+  const LY = [334, 414, 494, 574, 654];
+  const lam = ['cascade', 'planner', 'approve', 'briefing', 'notify'].map((n, i) => node(cam, 720, LY[i] - 34, 260, 68, `λ ${n}`, null, 'aws'));
   const G = node(cam, 1040, 190, 300, 520, '', '', 'gw');
   G.innerHTML = `<div class="mono" style="font-size:16px;color:var(--aws);letter-spacing:.14em;text-align:center">AMAZON BEDROCK</div><div style="font-size:34px;font-weight:650;text-align:center;line-height:1.1;margin-top:6px">AgentCore<br>Gateway</div>`;
   G.style.justifyContent = 'flex-start';
   G.style.paddingTop = '30px';
   const gRows = ['Cedar policy', 'Interceptor λ', 'Identity vault'].map((n, i) => box(G, 24, 170 + i * 104, 250, 84, 'abs', { borderRadius: '16px', background: 'rgba(0,0,0,.35)', border: '1px solid rgba(255,255,255,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', fontWeight: 600 }, n));
-  const tools = ['Gmail API', 'Google Calendar API', 'College portal', 'Agent tools λ'].map((n, i) => node(cam, 1410, 210 + i * 104, 400, 80, n));
-  const EL = node(cam, 110, 620, 330, 96, 'ElevenLabs Agents', 'voice agent · MCP client', 'el');
-  const SB = node(cam, 470, 770, 640, 200, '', '', 'supa');
+  const TY = [250, 354, 458, 562];
+  const tools = ['WhatsApp Cloud API', 'Google Calendar API', 'College portal', 'Agent tools λ'].map((n, i) => node(cam, 1410, TY[i] - 40, 400, 80, n, null, i === 0 ? 'wa' : 'plain'));
+  const SB = node(cam, 500, 770, 640, 200, '', '', 'supa');
   SB.style.justifyContent = 'flex-start';
   SB.innerHTML = `<div style="display:flex;align-items:center;gap:14px"><span style="font-size:28px;font-weight:650">Supabase</span><span class="mono" style="font-size:16px;color:var(--supa);letter-spacing:.12em">POSTGRES · MUMBAI</span></div>`;
-  const sbT = ['Row-level security', 'Realtime', 'Auth'].map((n, i) => box(SB, 20 + i * 205, 80, 190, 96, 'abs', { borderRadius: '14px', background: 'rgba(0,0,0,.3)', border: '1px solid rgba(62,207,142,.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', fontWeight: 600, textAlign: 'center' }, n));
-  const BR = node(cam, 1150, 800, 330, 110, 'Amazon Bedrock', 'Claude Haiku · India', 'aws');
-  const PH = node(cam, 1540, 770, 270, 200, 'Your phone', 'web app · push', 'plain');
-  const all = [A1, A2, A3, B1, ...lam, G, ...tools, EL, SB, BR, PH];
-  tl.fromTo([A1, A2, A3, EL], { x: -60, opacity: 0 }, { x: 0, opacity: 1, duration: 0.6, stagger: 0.06, ease: 'power4.out' }, t0 + 0.2);
+  const sbT = ['Row-level security', 'Realtime', 'Auth'].map((n, i) => box(SB, 20 + i * 205, 80, 190, 96, 'abs', { borderRadius: '14px', background: 'rgba(0,0,0,.3)', border: '1px solid rgba(62,207,142,.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', fontWeight: 600 }, n));
+  const BR = node(cam, 110, 790, 330, 110, 'Amazon Bedrock', 'Claude Haiku · India', 'aws');
+  const PH = node(cam, 1500, 780, 310, 180, 'Your phone', 'WhatsApp + web app', 'plain');
+  PH.style.justifyContent = 'flex-start';
+  const all = [A1, A2, A4, A3, B1, EL, ...lam, G, ...tools, SB, BR, PH];
+  tl.fromTo([A1, A2, A4, A3], { x: -60, opacity: 0 }, { x: 0, opacity: 1, duration: 0.6, stagger: 0.06, ease: 'power4.out' }, t0 + 0.2);
   tl.fromTo([B1, ...lam], { y: 30, opacity: 0 }, { y: 0, opacity: 0.45, duration: 0.6, stagger: 0.06, ease: 'power4.out' }, t0 + 0.45);
+  tl.fromTo(EL, { y: 30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: 'power4.out' }, t0 + 0.45);
   tl.fromTo(G, { scale: 0.9, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.7, ease: 'power4.out' }, t0 + 0.7);
   tl.fromTo([...tools, SB, BR, PH], { x: 60, opacity: 0 }, { x: 0, opacity: 1, duration: 0.6, stagger: 0.06, ease: 'power4.out' }, t0 + 0.9);
+
+  // connectors: right angles with rounded corners; shared buses are drawn once, nothing crosses a box
   const sv = svgLayer(cam);
-  const P = (d, o) => pathEl(sv, d, Object.assign({ stroke: 'rgba(244,241,234,.2)', w: 2 }, o || {}));
-  const pA1B = P('M 380 278 C 410 278, 410 338, 440 338');
-  const pA2B = P('M 380 398 C 410 398, 410 338, 440 338');
-  const pBC = P('M 670 338 C 695 338, 690 237, 720 237');
-  const pA3C = P('M 380 518 C 560 518, 560 495, 720 495');
-  const pCG = lam.map((l, i) => P(`M 980 ${237 + i * 86} C 1010 ${237 + i * 86}, 1010 450, 1040 450`));
-  const pGT = tools.map((t, i) => P(`M 1340 450 C 1375 450, 1375 ${250 + i * 104}, 1410 ${250 + i * 104}`));
-  const pEL = P('M 440 668 C 760 668, 900 640, 1040 640');
-  const pCB = P('M 980 237 C 1100 140, 1560 400, 1315 800', { dash: '5 8' });
-  const pCS = P('M 850 618 L 850 770');
-  const pSP = P('M 1110 880 C 1300 880, 1400 870, 1540 870');
-  [pA1B, pA2B, pBC, pA3C, ...pCG, ...pGT, pEL, pCB, pCS, pSP].forEach((p, i) => drawPath(p, t0 + 1.0 + i * 0.03, 0.7));
+  const rp = (pts, r = 12) => {
+    let d = `M ${pts[0][0]} ${pts[0][1]}`;
+    for (let i = 1; i < pts.length - 1; i++) {
+      const [x0, y0] = pts[i - 1], [x1, y1] = pts[i], [x2, y2] = pts[i + 1];
+      const l1 = Math.hypot(x1 - x0, y1 - y0), l2 = Math.hypot(x2 - x1, y2 - y1), rr = Math.min(r, l1 / 2, l2 / 2);
+      d += ` L ${x1 - (x1 - x0) / l1 * rr} ${y1 - (y1 - y0) / l1 * rr} Q ${x1} ${y1} ${x1 + (x2 - x1) / l2 * rr} ${y1 + (y2 - y1) / l2 * rr}`;
+    }
+    return d + ` L ${pts[pts.length - 1][0]} ${pts[pts.length - 1][1]}`;
+  };
+  const P = (pts, o) => pathEl(sv, rp(pts), Object.assign({ stroke: 'rgba(244,241,234,.24)', w: 2 }, o || {}));
+  const M = pts => pathEl(sv, rp(pts), { stroke: 'none' });        // invisible route a packet can ride
+  const pA1B = P([[380, 262], [410, 262], [410, 362], [440, 362]]);
+  const pA2B = P([[380, 362], [440, 362]]);
+  const pA4B = P([[380, 462], [410, 462], [410, 362], [440, 362]]);
+  const pBbus = P([[640, 362], [690, 362]]);
+  const pLin = P([[690, LY[0]], [690, LY[4]]]);
+  const pLst = LY.map(y => P([[690, y], [720, y]]));
+  const pA3C = P([[380, 574], [690, 574]]);
+  const pLout = [236, ...LY].map(y => P([[980, y], [1010, y]]));
+  const pGin = P([[1010, 236], [1010, LY[4]]]);
+  const pGin2 = P([[1010, 450], [1040, 450]]);
+  const pGt = P([[1340, 450], [1375, 450]]);
+  const pTbus = P([[1375, TY[0]], [1375, TY[3]]]);
+  const pTst = TY.map(y => P([[1375, y], [1410, y]]));
+  const pCS = P([[850, 688], [850, 770]]);
+  const pCB = P([[850, 730], [275, 730], [275, 790]], { dash: '5 8' });
+  const pSP = P([[1140, 870], [1500, 870]]);
+  const pWP = P([[1810, TY[0]], [1855, TY[0]], [1855, 870], [1810, 870]], { stroke: 'rgba(37,211,102,.35)' });
+  [pA1B, pA2B, pA4B, pBbus, pLin, ...pLst, pA3C, ...pLout, pGin, pGin2, pGt, pTbus, ...pTst, pCS, pSP, pWP].forEach((p, i) => drawPath(p, t0 + 1.0 + i * 0.025, 0.7));
+  tl.fromTo(pCB.p, { opacity: 0 }, { opacity: 1, duration: 0.6 }, t0 + 1.6);   // dashed: Bedrock is called only when the rules are unsure
+  const mBC = M([[640, 362], [690, 362], [690, LY[0]], [720, LY[0]]]);
+  const mA3C = M([[380, 574], [720, 574]]);
 
   // L35 — Lambdas wake only when needed; SQS retry-safe; EventBridge at 7
   const L35 = 'Lambda workers wake only when needed. S Q S makes every event retry-safe. Event Bridge wakes us at seven.';
   const w35 = Wt(L35, 'L35');
   const wake = (n, t) => { tl.to(n, { opacity: 1, boxShadow: '0 0 40px rgba(255,153,0,.45)', duration: 0.25 }, t); tl.to(n, { opacity: 0.55, boxShadow: '0 0 0 rgba(0,0,0,0)', duration: 0.8 }, t + 1.2); };
-  packet(sv, pA1B, w35(2) - 0.5, 0.45);
-  packet(sv, pBC, w35(2), 0.45);
+  packet(sv, pA1B, w35(2) - 0.5, 0.45, '#5BE49B');
+  packet(sv, mBC, w35(2), 0.45);
   wake(lam[0], w35(2) + 0.45);
   [1, 2, 3, 4].forEach((k, j) => wake(lam[k], w35(3) + j * 0.3));
   tl.to(B1, { opacity: 1, boxShadow: '0 0 40px rgba(255,153,0,.45)', duration: 0.3 }, w35(6));
-  const retry = box(cam, 610, 250, 50, 50, 'abs', {}, '<svg width="50" height="50" viewBox="0 0 24 24"><path d="M19 12 a7 7 0 1 1 -2.05 -4.95 M19 4 V8 H15" fill="none" stroke="#FF9900" stroke-width="2" stroke-linecap="round"/></svg>');
+  const retry = box(cam, 600, 268, 50, 50, 'abs', {}, '<svg width="50" height="50" viewBox="0 0 24 24"><path d="M19 12 a7 7 0 1 1 -2.05 -4.95 M19 4 V8 H15" fill="none" stroke="#FF9900" stroke-width="2" stroke-linecap="round"/></svg>');
   inn(retry, w35(9), { y: 0, scale: 0.5, d: 0.35, ease: 'back.out(1.8)' });
   tl.to(retry, { rotation: 360, duration: 1.0, ease: 'power2.inOut' }, w35(11));
   packet(sv, pA2B, w35(10), 0.45, '#F4F1EA');
   tl.to(B1, { boxShadow: '0 0 0 rgba(0,0,0,0)', duration: 0.6 }, w35(13));
   tl.to(A3, { boxShadow: '0 0 40px rgba(255,153,0,.5)', duration: 0.3 }, w35(13));
   tl.set(A3.querySelector('.mono'), { innerHTML: '07:00 · wake up' }, w35(17));
-  packet(sv, pA3C, w35(15), 0.7);
+  packet(sv, mA3C, w35(15), 0.7);
   wake(lam[3], w35(15) + 0.7);
   tl.to(A3, { boxShadow: '0 0 0 rgba(0,0,0,0)', duration: 0.6 }, E.L35);
 
@@ -102,7 +130,7 @@ const Wt = (txt, id) => i => wordTime(txt, i, T[id], E[id] - T[id]);
   tl.to(pSP.p, { attr: { stroke: 'rgba(62,207,142,.8)' }, duration: 0.3 }, w37(17));
   packet(sv, pSP, w37(18), 0.7, '#3ECF8E');
   tl.to(PH, { borderColor: 'rgba(62,207,142,.9)', boxShadow: '0 0 50px rgba(62,207,142,.35)', duration: 0.3 }, w37(18) + 0.7);
-  const pc = box(PH, 20, 112, 230, 66, 'abs', { borderRadius: '12px', background: 'rgba(255,181,71,.12)', border: '1px solid rgba(255,181,71,.4)', fontSize: '17px', padding: '8px 12px', lineHeight: 1.3 }, '<b>New deadline</b><br><span style="color:var(--mute)">DBMS · Assignment 3</span>');
+  const pc = box(PH, 20, 96, 270, 66, 'abs', { borderRadius: '12px', background: 'rgba(255,181,71,.12)', border: '1px solid rgba(255,181,71,.4)', fontSize: '17px', padding: '8px 12px', lineHeight: 1.3 }, '<b>New deadline</b><br><span style="color:var(--mute)">DBMS · Assignment 3</span>');
   inn(pc, w37(18) + 0.75, { y: -16, d: 0.45, ease: 'back.out(1.6)' });
 
   // L38 — nothing runs when idle
