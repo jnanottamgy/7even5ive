@@ -17,7 +17,7 @@ How it is built
 • Portal Forge learns a college portal once, writes an OpenAPI spec, and the gateway turns it into tools. Built on the open-source reverse-api-engineer.
 
 Team: Jnanottam GY · Kartik · Mohammed Zaid
-Code: https://github.com/jnanottamgy/campus-copilot
+Code: https://github.com/jnanottamgy/7even5ive
 
 0:00 75%: the line that decides your exams
 0:18 Four apps, zero connection
