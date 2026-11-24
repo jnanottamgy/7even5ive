@@ -1,19 +1,20 @@
 # Business model
 
-**Rules-first is what makes a free tier affordable.** Most deadlines are extracted by plain code,
-so a free student costs very little to serve. Paid students cover free ones.
+Pricing is shown in the deck, not in the film. Numbers are to be validated in the RIT pilot.
 
 ## Tiers
 
 | Tier | What the student or college gets | Price |
 |---|---|---|
-| Basic | Deadlines from Gmail and Classroom, attendance warnings, approvals, activity log | Free |
-| Plus | Unlimited week planner, voice briefings, voice notes → deadlines, SHELF (WhatsApp) included | ₹79–99 a month, or per semester (to validate) |
-| Pro: bring your own agent | A personal MCP endpoint behind our gateway: use Claude, ChatGPT or any MCP client with your college data, safely | Higher tier (to validate) |
-| Colleges (B2B) | Official read-only data feed, anonymised class-level attendance-risk view, announcements that reach students | Per student per year (to validate) |
-| Partners | Opt-in, labelled offers matched to events, never to profiles: placement prep, exam coaching, student banking, laptops | Commission per signup |
+| Basic | Deadlines from WhatsApp forwards, Classroom and college mail; attendance warnings with bunk math; approvals and the activity log | Free |
+| Plus | Urgent voice calls, the 7 AM voice briefing, voice notes to text (ElevenLabs) | ₹79–99 a month, or per semester (to validate) |
+| Pro: bring your own AI | The 7even5ive MCP connector: use Claude Code, Codex, Cursor, Claude, ChatGPT or any MCP client with your college data, safely, through our gateway | Higher tier (to validate; see open items) |
+| Colleges (B2B) | Official read-only data feed instead of portal scraping; anonymised class-level attendance-risk view | Per student per year (to validate) |
+| Partners | Opt-in, labelled offers matched to events, never to profiles: placement prep, exam coaching, laptops | Commission per signup |
 
 **We never sell or share student data. Partners pay for placement, not for profiles.**
+
+Open: which tier SHELF and the MCP connector belong to (see [`decisions.md`](decisions.md)).
 
 ## Market
 
@@ -23,33 +24,30 @@ so a free student costs very little to serve. Paid students cover free ones.
 
 ## Go-to-market
 
-- RIT pilot after the hackathon.
-- Class-rep ambassadors, paid commission on paid referrals.
-- Club events and placement season as the hook.
-- SHELF's existing WhatsApp reach.
-- If several colleges share one portal vendor, one connector covers all of them.
+- RIT pilot after the hackathon, starting with our own class (SHELF's first users).
+- Student ambassadors (people, not a product feature), paid commission on paid referrals.
+- Placement season and exam weeks as the hook: the two moments the pain peaks.
+- If several colleges share one portal vendor, one Portal Forge spec covers all of them.
 
 ## Key costs
 
 | Cost | Note |
 |---|---|
-| LLM (Bedrock) | Kept low by rules-first; measured, not estimated |
+| Model (Bedrock) | Measured per student on stage and in the pilot, never estimated |
 | ElevenLabs | Voice is a paid-tier feature |
-| AWS | Usage-based; apply for student and startup credits |
-| Meta (WhatsApp) | Per-message fees, SHELF features only |
-| Google security assessment | Required yearly for production Gmail access |
+| AWS | Serverless: nothing runs while idle; apply for student and startup credits |
+| Meta (WhatsApp) | Inbound forwards are free; business-initiated alerts cost roughly ₹0.12–0.15 each, so routine alerts go to the app |
+| Google security assessment | Required for production read access to Gmail |
 | Ambassador commissions | Paid only on conversion |
 
 ## Unit economics
 
 ```
-Cost per active student / month = LLM calls × cost per call + voice minutes × rate + infra share
+Cost per active student / month = model calls × cost per call + voice minutes × rate
+                                  + WhatsApp alerts × rate + infra share
 Contribution per paid student   = price − cost per active student − payment fees
 Free students covered per paid  = contribution per paid student ÷ cost per free student
 ```
-
-N, the number of free students each paid student covers, comes from measured costs after the
-benchmark. It is never estimated.
 
 ## Growth
 
@@ -57,4 +55,4 @@ benchmark. It is never estimated.
 |---|---|
 | 0–6 months | RIT pilot, Free + Plus, measured unit economics |
 | 6–18 months | 5–10 Bengaluru colleges, first college deal, partner revenue |
-| 18+ months | Pro tier, developer API for portal connectors, more cities |
+| 18+ months | MCP connector at scale, developer API for portal connectors, more cities |

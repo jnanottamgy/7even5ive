@@ -1,43 +1,55 @@
-# Policy engine
+# Control: enforced at the gateway
 
-The LLM never decides what is allowed. It can only **propose** an action. Code checks every
-proposal against this policy before anything happens.
+The model never decides what is allowed. It can only **propose** a tool call. Every call, from our
+Lambda workers, the ElevenLabs voice agent or the student's own AI through the MCP connector,
+passes through **AgentCore Gateway**, where code decides.
 
-That is what makes the agent safe against prompt injection: an email that says "ignore your rules"
-can change what the model proposes, but not what the policy permits.
+A forwarded message that says "ignore your instructions" can change what the model proposes, but
+not what the gateway permits.
 
-## The three levels
+## Three levels
 
 | Level | Test | Behaviour |
 |---|---|---|
-| `alone` | Only the student will ever see the result, and it can be undone | Runs immediately, logged, Undo available |
-| `ask` | Someone else could see it, or it writes to an outside service | Parked as an approval; runs only after a tap |
-| `never` | It cannot be undone, or it acts on the college's or someone else's behalf | Refused; the refusal is logged |
+| **For you** | Only the student sees the result, and it can be undone | Runs, logged, undo available |
+| **Your tap** | Someone else would see it, or it writes to an outside service | Parked; runs only after a tap that mints a one-time token |
+| **Never** | It can't be undone, or acts on the college's or someone else's behalf | The tool does not exist |
 
-## Actions
+## Tools
 
-| Action | Level | Notes |
+| Tool | Level | Notes |
 |---|---|---|
-| `save_deadline` | alone | Undo deletes it |
-| `attendance_warning` | alone | Notification only |
-| `voice_note_to_deadline` | alone | Same as save_deadline, source = voice note |
-| `morning_briefing` | alone | Read-only summary |
-| `add_calendar_event` | ask | Writes to an outside service |
-| `propose_week_plan` | ask | Approving writes several Calendar events at once |
-| `draft_email` | ask | Drafted only; the student sends it themselves |
-| `reschedule_event` | ask | |
-| `send_email` / `send_message` | never | The student always presses send |
-| `submit_form` / `submit_assignment` | never | |
-| `write_portal` | never | The portal MCP server exposes read-only tools only |
-| `payment` | never | |
-| `delete_*` | never | Deleting is done by the student in the app |
+| Read deadlines, attendance, timetable, marks, SHELF, opportunities | For you | All the MCP connector exposes by default |
+| Save a deadline · file a document · set a reminder | For you | Undo deletes it |
+| `Calendar___insert_event` | Your tap | One tap on the card |
+| `WhatsApp___send_document` to someone else (share a SHELF file) | Your tap | Token bound to that file and that number. *Example action, to confirm.* |
+| Messages to the student themselves (alerts, briefing, the call) | For you | |
+| Submit a form or assignment · pay · delete · write to the portal · send mail | Never | No such tools exist; Gmail is read-only and portal tools are read-only |
 
-## Rules the engine always applies
+## Cedar, deny by default
 
-1. **Unknown action → `never`.** A new action must be added to this table deliberately.
-2. **An approval is re-checked when it is tapped.** A plan approved after its slot has passed is
-   refused, not executed.
-3. **Text from sources is data, never instructions.** Email bodies, WhatsApp messages and portal
-   pages are passed to the model as quoted content.
-4. **Every decision is logged**: action, level, outcome, source, and how it was extracted
-   (rules or LLM). The live counter is computed from this log.
+```cedar
+// nothing runs unless a rule permits it
+permit (
+  principal,
+  action == AgentCore::Action::"WhatsApp___send_document",
+  resource
+) when { context.input has approval_token };
+```
+
+## The interceptor (Lambda)
+
+1. **Provenance:** every value is tagged with where it came from. A recipient, link or amount that
+   came from a forwarded message, mail body or web page is **untrusted** and can't be used as the
+   target of an action.
+2. **One-time tokens:** a tap mints an HMAC token over the SHA-256 of the exact arguments. It is
+   single use and expires. Change one character after approval and the signature breaks.
+3. **Re-check on tap:** an approval is re-validated when used; stale or changed actions are refused.
+
+## Always
+
+- **Unknown tool → denied.** New tools are added to the policy deliberately.
+- **Source text is data, never instructions.** Messages, mail and portal pages reach the model as
+  quoted content.
+- **Every decision is logged:** tool, level, outcome, source.
+- **Row-level security** in Supabase: a student only ever sees their own rows.

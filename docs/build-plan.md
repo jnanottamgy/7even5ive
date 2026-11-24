@@ -1,44 +1,43 @@
-# Build plan
+# Build plan (hack day, 1–2 Dec, RIT)
 
 ## Scope for the 24 hours
 
-| Must work | Stretch | Cut (future scope) |
+| Must work | Stretch | Cut |
 |---|---|---|
-| Flow 1: email → deadline → Calendar | Bunk meter and attendance warning | Native Android app and home-screen widget |
-| Flow 2: week plan → Approve → Calendar | ElevenLabs voice notes and briefing | Placement eligibility |
-| Flow 3: prompt injection blocked | Jev pre-filter | Revision quiz |
-| Policy engine + activity log + live counter | Portal Forge generating the portal tools | Real portal login on stage |
-| portal-mcp (hand-written, mock portal), Gmail, Calendar | WhatsApp forwards via SHELF | |
-| Phone web app: Today, Approvals, Activity, push | Claude Desktop MCP demo | |
+| Forward on WhatsApp → Claude on Bedrock reads it → code checks → card → Add to Calendar | College mail filter (read-only Gmail, demo account) | Week planner (removed) |
+| SHELF: forward PDFs → filed by subject; "dbms unit 3 notes" → the file | ElevenLabs urgent call and 7 AM briefing | Instagram, Telegram |
+| MCP connector: Claude Code or Claude Desktop asks "what's due this week?" through AgentCore Gateway | ElevenLabs Scribe for voice notes | Native Android app |
+| Control: injected forward blocked by the interceptor; approval token breaks when one character changes | Portal Forge generating the portal tools | Class-rep features (not a feature) |
+| Mock portal + read-only portal tools → attendance warning with bunk math | Jev intent classifier, if its picks match Claude's on our evals | Reading deadlines out of PDFs |
+| Web app: Today, cards, approvals, activity log | | |
 
 **Rule:** if a flow isn't working by its end hour, cut it and move on. Two flows that work beat
 three that half-work.
 
-## Owners
+## Owners (proposed, confirm on the day)
 
 | Person | Owns |
 |---|---|
-| Kartik | Brain: extraction cascade, planner, policy engine, Gmail/Calendar wiring |
-| Jnanottam | Phone web app: notifications, Today, Approvals, Activity log |
-| Zaid | Mock portal, portal-mcp, Portal Forge, demo data, ElevenLabs features |
-
-Portal Forge is a stretch goal: the hand-written portal-mcp is built first, and Forge replaces it
-only if its tools pass verification by hour 14.
+| Kartik | Understanding (Bedrock + checks), SHELF integration, WhatsApp Cloud API |
+| Jnanottam | Web app, AgentCore Gateway + Cedar + interceptor, the MCP connector demo |
+| Zaid | Mock portal and portal tools, Portal Forge, ElevenLabs (call, briefing, Scribe), demo data |
 
 ## Hour by hour
 
 | Hours | Goal | Done means |
 |---|---|---|
-| 0–4 | Skeleton | FastAPI up, portal-mcp answering, app shows Today |
-| 4–10 | Flow 1 | A sent email produces a notification in under 15 s; Add puts it in Calendar |
-| 10–16 | Flow 2 | Solver builds a clash-free plan; Approve writes it to Calendar |
-| 16–20 | Flow 3 + policy | Injection email blocked; log and live counter visible |
-| 20–22 | Polish | Voice features if time |
+| 0–4 | Skeleton | Supabase schema up, gateway serving one read tool, web app shows Today |
+| 4–10 | Forward → card | A forwarded message becomes a checked card in under 15 s; Add puts it in Calendar |
+| 10–14 | SHELF + MCP connector | Files filed and found; Claude Code answers from 7even5ive through the gateway |
+| 14–18 | Control + attendance | Injection blocked and logged; token tamper fails; bunk-math warning from the mock portal |
+| 18–21 | Voice | ElevenLabs call and briefing (stretch: mail filter) |
+| 21–22 | Polish | |
 | 22–24 | Freeze | Backup video recorded, demo rehearsed twice, no new code |
 
 ## Before hack day (if the organisers allow preparation)
 
+- AWS account with Bedrock (India region) access and AgentCore enabled; credits applied for
 - Google Cloud project, OAuth in testing mode, demo accounts added as test users
+- WhatsApp Cloud API test number
 - Mock portal with a made-up student
-- 20–30 sample professor emails and class-group messages to tune the extraction rules
-- Phone web app showing one push notification on an Android phone
+- 20–30 real (anonymised) class-group messages and mails as an eval set, including Jev comparisons

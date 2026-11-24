@@ -1,60 +1,58 @@
-# The brain: algorithms first, LLM as fallback
+# The brain: model reads first, code checks
 
-## 1. Deadline extraction cascade
+The model proposes; code decides what is true and what is allowed. That split, which SHELF already
+uses, is what keeps answers accurate without trusting the model blindly.
 
-Each stage hands on only what it could not settle.
+## 1. Understanding a message (LLM-first)
 
-| Stage | What runs | Cost |
-|---|---|---|
-| 0. Structured source | Google Classroom coursework already has `dueDate`; use it directly | Free |
-| 1. Rules | Date parser anchored to the message's **sent time** (so "next Friday" is right even if read days later); Indian day-month order; patterns such as "due by", "on or before", "submit before", "EOD" = 11:59 pm | Free |
-| 2. Subject | Exact name → cached alias → course-code pattern → mention scan → fuzzy match | Free |
-| 3. Jev | Intent classification with calibrated confidence, if API access arrives in time | Very cheap |
-| 4. LLM | Claude on Bedrock fills only the fields still missing | Paid, rare |
-| 5. Ask | Low confidence → a notification asks the student | Free |
+| Step | What runs |
+|---|---|
+| 1. Read | Claude on Amazon Bedrock reads the forwarded message (and up to a few images) and proposes a structured result: intent (deadline, note, notice, question, …), subject, due date and time, task. |
+| 2. Check | Code validates each field against the student's real data: the **subject must exist** in their subject list; the **date must be real**, resolved from the message's sent time (so "Friday" is right even if forwarded days later; "EOD" means 11:59 PM); the deadline must **not duplicate** one already saved. |
+| 3. Ask | If a check fails, or something is missing, 7even5ive asks one short question instead of guessing. |
+| 4. Act | Only a checked result is written, shown as a card, and logged with undo. |
 
-A confidence score decides the outcome: ≥ 0.9 acts alone, 0.6–0.9 calls the LLM, < 0.6 asks.
-Thresholds are tuned on a set of sample professor emails and class-group messages.
+**Jev** (being tested): a fast intent classifier that might handle the simplest messages ("thanks",
+"ok", greetings) before the model. It is not part of the build until its picks are compared with
+Claude's on our eval set.
 
-**What the LLM resolves is cached**, so the same phrasing never needs the LLM twice.
+## 2. SHELF: filing and finding files
 
-## 2. Deduplication
+- A forwarded PDF or image is filed by **caption, filename and subject** into notes, question
+  papers or circulars.
+- **Duplicates** are caught by the SHA-256 of the file's bytes, so the same PDF forwarded twice is
+  stored once.
+- "dbms unit 3 notes" returns the file. If nothing matches, it says so and asks which subject.
+- **PDF contents are not parsed for deadlines.**
 
-The same assignment often arrives three times (email, Classroom, WhatsApp forward).
+## 3. College mail filter
 
-- Files: SHA-256 of the bytes.
-- Deadlines: key of (subject, normalised title, due date ± 1 day). A match merges sources into one
-  deadline instead of creating three.
+Read-only Gmail. Each new mail is classified; only **placements, internships and exam-cell
+notices** are kept, with their deadline and form link, in SHELF's Opportunities. Newsletters,
+webinars and promotions are ignored. The student fills forms themselves.
 
-## 3. Week planner
+## 4. Attendance and bunk math
 
-Google OR-Tools CP-SAT.
+Pure arithmetic per subject, at the college's minimum (75% by default):
 
-- **Variables:** a start slot for each study block (30-minute grid over the week).
-- **Hard constraints:** no overlap with classes (timetable), exams, existing Calendar events, the
-  sleep window, placement tests; each deadline's blocks finish before it is due.
-- **Soft constraints (objective):** urgency (time to deadline) × weightage, weaker subjects (marks)
-  get more time, no more than N hours of study per day.
+- Can still skip: `floor(attended / minimum − held)`
+- Must attend to get back: `ceil((minimum × held − attended) / (1 − minimum))`
 
-The output is clash-free by construction. The LLM is used only to write the one-line summary
-("3 sessions for DBMS before Friday's assignment").
+Example: 33 of 45 classes (73%) → attend the next 3 to reach 75%.
+With the timetable, the projection runs to the end of the semester.
 
-## 4. Bunk meter
+## 5. Change detection
 
-Pure arithmetic, per subject, using the college's minimum attendance (configurable).
-
-- Can skip: `floor(attended / minimum − held)`
-- Must attend: `ceil((minimum × held − attended) / (1 − minimum))`
-
-With the timetable, the projection runs to the end of the semester, not just today.
-
-## 5. Change detection (triggers)
-
-The portal is synced on app open and once each morning. Each sync stores a hash of the result;
-a changed hash (new marks, attendance moved) fires an event. No polling every few minutes, so the
-portal sees one student's normal traffic.
+The portal is synced on app open and once each morning; a changed hash of the result (new marks,
+attendance moved) fires an event. No polling every few minutes, so the portal sees one student's
+normal traffic.
 
 ## 6. Morning briefing
 
-Built from a fixed template filled with the day's data: classes, deadlines, attendance warnings,
-plans waiting for approval. No LLM, so nothing can be invented. ElevenLabs voices it.
+A fixed template filled with the day's data: classes, deadlines, attendance risk, opportunities.
+No model writes it, so nothing can be invented; ElevenLabs voices it.
+
+## Removed from the earlier plan
+
+Rules-first extraction cascade and confidence thresholds · the "handled by rules %" counter ·
+the OR-Tools week planner · any class-rep feature. See [`decisions.md`](decisions.md).
