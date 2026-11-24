@@ -142,7 +142,16 @@ Design detail: [`docs/brain.md`](docs/brain.md).
 | Sponsor | Where it is used |
 |---|---|
 | **ElevenLabs** | Scribe speech-to-text: forwarded voice notes become deadlines (handles mixed Kannada/Hindi/English). Text-to-speech: the morning briefing. |
-| **AWS** | Bedrock: the fallback LLM, keeping student data in the India region. KMS: encrypts portal session cookies. EventBridge Scheduler: the morning sync and triggers. |
+| **AWS** | AgentCore Gateway + Policy: every tool call checked against Cedar rules. Lambda: our interceptor (provenance tags, one-time approval tokens) and the portal tools. Bedrock: the fallback LLM, with India cross-region inference. KMS: encrypts portal session cookies. EventBridge Scheduler: the morning sync and triggers. |
+
+## Business model
+
+Free → Plus (₹79–99 a month or per semester) → Pro "bring your own agent" → colleges (B2B) →
+opt-in partner offers. Rules-first keeps free users cheap, so paid students cover free ones.
+**We never sell or share student data.** Details: [`docs/business.md`](docs/business.md).
+
+The full final plan, with diagrams: [`Campus_Copilot_Build_Plan.pdf`](Campus_Copilot_Build_Plan.pdf)
+and [`diagrams/`](diagrams).
 
 ## Privacy and the college portal
 
