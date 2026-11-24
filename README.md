@@ -109,4 +109,5 @@ library, the storage layer. Note: SHELF files a PDF by its caption, filename and
 | `ppt/` | Round 1 deck on the official template |
 | `video/` | The Round 1 film: YouTube notes and its full source pipeline |
 | `brand/` | Logo (SVG/PNG), app icon, YouTube thumbnail |
-| `diagrams/` | Earlier diagrams (old name; some show the superseded rules-first design) |
+| `diagrams/7even5ive_Mind_Map_v2.png` | **The current workflow mind map** (PDF alongside) |
+| `diagrams/` (other files) | Earlier diagrams (old name; some show the superseded rules-first design) |
