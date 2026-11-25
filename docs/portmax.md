@@ -109,7 +109,9 @@ Bedrock access).
    collects everything once. The app sends the pages to our server, which parses them with the
    verified parsers, keeps only the five tools' fields and discards the pages.
 3. **Keep-alive:** one light page at the longest interval that keeps the login valid: the measured
-   idle timeout minus a fifth (at least two minutes), 15 minutes until it is measured. Every
+   idle timeout minus a fifth (at least two minutes). For MSRIT the timeout is between 45 and 61
+   minutes (measured 25 Nov), so the app pings **every 30 minutes**, 15 minutes inside the
+   shortest timeout seen. Every
    `refresh_minutes` (3 hours by default) the ping runs the whole plan instead. It runs on the phone
    only, from the same WebView cookies, device and network. WorkManager schedules it, running the
    ping in a headless WebView with the login's own cookies and User-Agent; if Android defers it
@@ -152,8 +154,11 @@ attendance is updated daily with the percentage shown, and **a login inside an a
 
 ## Tests before building
 
-1. **Idle timeout** (team, today): log in on a phone, touch nothing, check at 30, 60 and 120
-   minutes and overnight; each check resets the timer. This sets the ping interval.
+1. **Idle timeout: done 25 Nov (Zaid).** Login 14:45, alive at 15:15 (30 min idle), dead at
+   16:16 (61 min idle); login 16:21, alive at 17:06 (45 min idle). Timeout is between 45 and 61
+   minutes, so the ping runs every 30 minutes. Still to test: the one-session rule (a second
+   login elsewhere), closing the browser, and whether a session pinged all night survives (a
+   fixed maximum session length would show up only there).
 2. **Ping reliability** (build day): leave test phones idle overnight; check the pings arrived on
    time on each team member's phone brand.
 
