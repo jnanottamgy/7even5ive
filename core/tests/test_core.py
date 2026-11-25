@@ -272,6 +272,23 @@ def test_calendar_from_the_phone_waits_for_a_tap_and_approves_once(app):
     assert again.status_code == 403 and again.json()["detail"] == "approval already used"
 
 
+def test_expired_approvals_leave_the_phone(app, monkeypatch):
+    from types import SimpleNamespace
+
+    from seventy5 import gateway
+
+    a, sid = app()
+    item = _dated_item(a, sid)
+    client = TestClient(create(a))
+    client.post("/api/tools/add_to_calendar", json={"args": {"item_id": item}}, headers=AUTH)
+    token = client.get("/api/cards", headers=AUTH).json()["approvals"][0]["token"]
+    later = time.time() + 16 * 60
+    monkeypatch.setattr(gateway, "time", SimpleNamespace(time=lambda: later))
+    assert client.get("/api/cards", headers=AUTH).json()["approvals"] == []
+    refused = client.post("/api/approve", json={"token": token}, headers=AUTH)
+    assert refused.status_code == 403 and refused.json()["detail"] == "approval expired"
+
+
 # --- Lambda handlers --------------------------------------------------------------------
 def test_cascade_handler_reports_only_the_failed_record(app, monkeypatch):
     from seventy5 import aws

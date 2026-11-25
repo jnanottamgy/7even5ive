@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse
 
 from . import notify, tools
 from .app import App, build
-from .gateway import Denied
+from .gateway import Denied, read_token
 from .ingress import BadSignature, accept, verify
 
 WEB = Path(__file__).parent / "web"
@@ -33,6 +33,15 @@ def create(app_state: App | None = None) -> FastAPI:
             return state.gateway.authenticate((auth or "").removeprefix("Bearer ").strip())
         except Denied as err:
             raise HTTPException(401, str(err)) from err
+
+    def live(token: str) -> bool:
+        # A pending row outlives its token (15 minutes); the phone only shows what it can still
+        # approve. Used ones are already gone: spending the nonce deletes the row.
+        try:
+            read_token(token)
+        except Denied:
+            return False
+        return True
 
     @api.post("/bot/webhook")
     async def bot_webhook(request: Request, background: BackgroundTasks,
@@ -68,7 +77,7 @@ def create(app_state: App | None = None) -> FastAPI:
             "filtered": sum(1 for r in db.all_cards(sid) if r["status"] == "filtered"),
             "needs_review": [dict(r) for r in db.all_cards(sid) if r["status"] == "needs_review"],
             "approvals": [{"action": r["action"], "args": json.loads(r["args"]),
-                           "token": r["token"]} for r in db.pending(sid)],
+                           "token": r["token"]} for r in db.pending(sid) if live(r["token"])],
             "calendar": [dict(r) for r in db.calendar(sid)],
             "reminders": notify.list_reminders(db, sid),
             "audit": [dict(r) for r in db.audit_log(sid)][:12],

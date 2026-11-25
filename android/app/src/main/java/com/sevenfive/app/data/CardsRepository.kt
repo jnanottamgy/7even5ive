@@ -23,12 +23,17 @@ class CardsRepository(private val core: CoreApi) {
     val state: StateFlow<CardsState> = _state.asStateFlow()
     private val lock = Mutex()
 
+    /** Approvals already run or refused here: never shown again, whatever the next poll says. */
+    private val hiddenApprovals = mutableSetOf<String>()
+
     suspend fun refresh() {
         // Overlapping polls (a tap plus the timer) collapse into one request.
         if (lock.isLocked) return
         lock.withLock {
             try {
-                val cards = core.cards()
+                val cards = core.cards().let { c ->
+                    c.copy(approvals = c.approvals.filterNot { it.token in hiddenApprovals })
+                }
                 _state.value = CardsState(cards, loading = false, error = null, updatedAt = Instant.now())
             } catch (e: ApiException) {
                 _state.update { it.copy(loading = false, error = e.detail) }
@@ -44,8 +49,9 @@ class CardsRepository(private val core: CoreApi) {
         }
     }
 
-    /** Hides one approval right away, before the next poll confirms it. */
+    /** Hides one approval now and on every later poll (used, expired or refused tokens). */
     fun dropApproval(token: String) {
+        hiddenApprovals += token
         _state.update { s ->
             s.copy(cards = s.cards?.let { c -> c.copy(approvals = c.approvals.filterNot { it.token == token }) })
         }
@@ -58,6 +64,7 @@ class CardsRepository(private val core: CoreApi) {
     }
 
     fun reset() {
+        hiddenApprovals.clear()
         _state.value = CardsState()
     }
 
