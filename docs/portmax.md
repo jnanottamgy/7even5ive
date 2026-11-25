@@ -1,12 +1,12 @@
-# Portal Forge
+# PortMax
 
 **Status: planned, not built (25 Nov 2026).** The live, commented version of this plan is the
-"Portal Forge: Build Plan" doc; this file is its copy in the repository. Where they disagree, the
+"PortMax: Build Plan" doc (named Portal Forge until 25 Nov); this file is its copy in the repository. Where they disagree, the
 newer one wins and both get fixed.
 
 ## Conclusion
 
-Portal Forge is a factory that turns a college portal into **five read-only tools** with the same
+PortMax is a factory that turns a college portal into **five read-only tools** with the same
 shape for every college. We forge each college's connector once, with
 [reverse-api-engineer](https://github.com/kalil0321/reverse-api-engineer) (RAE) used as a pinned
 library under our own prompts, safety rules and tests.

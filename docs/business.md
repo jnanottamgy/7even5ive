@@ -27,7 +27,7 @@ Open: which tier SHELF and the MCP connector belong to (see [`decisions.md`](dec
 - RIT pilot after the hackathon, starting with our own class (SHELF's first users).
 - Student ambassadors (people, not a product feature), paid commission on paid referrals.
 - Placement season and exam weeks as the hook: the two moments the pain peaks.
-- If several colleges share one portal vendor, one Portal Forge spec covers all of them.
+- If several colleges share one portal vendor, one PortMax spec covers all of them.
 
 ## Key costs
 

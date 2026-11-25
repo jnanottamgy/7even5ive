@@ -36,7 +36,7 @@ the timetable and the circulars, and the ones who have them are busy studying. N
 
 | Layer | What it does |
 |---|---|
-| **In** | You forward a message or file to 7even5ive on WhatsApp in one tap. College mail (read-only), Google Classroom and the college portal (via Portal Forge) are connected once. Voice notes go through ElevenLabs Scribe. |
+| **In** | You forward a message or file to 7even5ive on WhatsApp in one tap. College mail (read-only), Google Classroom and the college portal (via PortMax) are connected once. Voice notes go through ElevenLabs Scribe. |
 | **Understand** | Claude on Amazon Bedrock reads each message first and picks out the subject, the deadline and the task. Code then checks every answer against the student's real data (their subjects, real dates, their saved deadlines), so nothing is guessed. We are testing **Jev**, a faster intent classifier, for the simplest messages. |
 | **SHELF** | Our WhatsApp library, built for ourselves. Every PDF you forward is filed by subject (notes, question papers, circulars). Ask "dbms unit 3 notes" and you get the file in seconds. |
 | **Out** | A card on your phone (Add to Calendar, logged, with undo); attendance warnings with the exact number of classes to attend; placement and exam-cell mail in your library; a 7 AM voice briefing; an urgent voice call when it matters. |
@@ -68,15 +68,15 @@ what you already have.
 
 The data lives in **Supabase** (Postgres with row-level security, Realtime and Auth, Mumbai region).
 
-## Portal Forge: connecting any college portal
+## PortMax: connecting any college portal
 
-College portals have no API, and every college's portal is different. **Portal Forge** is our layer
+College portals have no API, and every college's portal is different. **PortMax** is our layer
 on the open-source [reverse-api-engineer](https://github.com/kalil0321/reverse-api-engineer) (MIT):
 it records the portal being used once and builds a connector that gives every college the same five
 **read-only, replay-verified** tools (`get_attendance`, `get_timetable`, `get_marks`,
 `get_results`, `get_profile`). The student logs in once inside our Android app, CAPTCHA and all, and
 the app keeps that login alive so attendance stays fresh every day. For the demo a mock portal
-stands in, so the demo never depends on a real portal. Plan: [`docs/portal-forge.md`](docs/portal-forge.md).
+stands in, so the demo never depends on a real portal. Plan: [`docs/portmax.md`](docs/portmax.md).
 
 ## SHELF: why we trust this works
 
@@ -106,7 +106,7 @@ library, the storage layer. Note: SHELF files a PDF by its caption, filename and
 | [`docs/architecture.md`](docs/architecture.md) | Components, data flows, tech stack |
 | [`docs/brain.md`](docs/brain.md) | How messages, files, mail and attendance are understood and checked |
 | [`docs/policy.md`](docs/policy.md) | The control model enforced at the gateway |
-| [`docs/portal-forge.md`](docs/portal-forge.md) | Portal Forge: the five-tool contract, the forge pipeline, the Android login and keep-alive |
+| [`docs/portmax.md`](docs/portmax.md) | PortMax: the five-tool contract, the forge pipeline, the Android login and keep-alive |
 | [`docs/business.md`](docs/business.md) | Pricing (also in the deck), market, go-to-market |
 | [`docs/build-plan.md`](docs/build-plan.md) | Hack-day scope, owners, hour-by-hour plan |
 | `ppt/` | Round 1 deck on the official template |

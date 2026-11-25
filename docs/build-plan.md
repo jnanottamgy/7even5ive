@@ -7,7 +7,7 @@
 | Forward on WhatsApp → Claude on Bedrock reads it → code checks → card → Add to Calendar | College mail filter (read-only Gmail, demo account) | Week planner (removed) |
 | SHELF: forward PDFs → filed by subject; "dbms unit 3 notes" → the file | ElevenLabs urgent call and 7 AM briefing | Instagram, Telegram |
 | MCP connector: Claude Code or Claude Desktop asks "what's due this week?" through AgentCore Gateway | ElevenLabs Scribe for voice notes | Native Android app |
-| Control: injected forward blocked by the interceptor; approval token breaks when one character changes | Portal Forge generating the portal tools | Class-rep features (not a feature) |
+| Control: injected forward blocked by the interceptor; approval token breaks when one character changes | PortMax generating the portal tools | Class-rep features (not a feature) |
 | Mock portal + read-only portal tools → attendance warning with bunk math | Jev intent classifier, if its picks match Claude's on our evals | Reading deadlines out of PDFs |
 | Web app: Today, cards, approvals, activity log | | |
 
@@ -20,7 +20,7 @@ three that half-work.
 |---|---|
 | Kartik | Understanding (Bedrock + checks), SHELF integration, WhatsApp Cloud API |
 | Jnanottam | Web app, AgentCore Gateway + Cedar + interceptor, the MCP connector demo |
-| Zaid | Mock portal and portal tools, Portal Forge, ElevenLabs (call, briefing, Scribe), demo data |
+| Zaid | Mock portal and portal tools, PortMax, ElevenLabs (call, briefing, Scribe), demo data |
 
 ## Hour by hour
 
