@@ -1,0 +1,92 @@
+[
+  {
+    "step": "dashboard",
+    "file": "dashboard-0.html",
+    "path": "/index.php?option=com_studentdashboard&task=dashboard",
+    "status": 200
+  },
+  {
+    "step": "course",
+    "file": "course-0.html",
+    "path": "/index.php?option=com_courses&task=attendance&code=CS51",
+    "status": 200
+  },
+  {
+    "step": "course",
+    "file": "course-1.html",
+    "path": "/index.php?option=com_courses&task=attendance&code=CS52",
+    "status": 200
+  },
+  {
+    "step": "course",
+    "file": "course-2.html",
+    "path": "/index.php?option=com_courses&task=attendance&code=CS53",
+    "status": 200
+  },
+  {
+    "step": "course",
+    "file": "course-3.html",
+    "path": "/index.php?option=com_courses&task=attendance&code=CS54",
+    "status": 200
+  },
+  {
+    "step": "course",
+    "file": "course-4.html",
+    "path": "/index.php?option=com_courses&task=attendance&code=MA51",
+    "status": 200
+  },
+  {
+    "step": "course",
+    "file": "course-5.html",
+    "path": "/index.php?option=com_courses&task=attendance&code=CSL57",
+    "status": 200
+  },
+  {
+    "step": "cie",
+    "file": "cie-0.html",
+    "path": "/index.php?option=com_courses&task=cie&code=CS51",
+    "status": 200
+  },
+  {
+    "step": "cie",
+    "file": "cie-1.html",
+    "path": "/index.php?option=com_courses&task=cie&code=CS52",
+    "status": 200
+  },
+  {
+    "step": "cie",
+    "file": "cie-2.html",
+    "path": "/index.php?option=com_courses&task=cie&code=CS53",
+    "status": 200
+  },
+  {
+    "step": "cie",
+    "file": "cie-3.html",
+    "path": "/index.php?option=com_courses&task=cie&code=CS54",
+    "status": 200
+  },
+  {
+    "step": "cie",
+    "file": "cie-4.html",
+    "path": "/index.php?option=com_courses&task=cie&code=MA51",
+    "status": 200
+  },
+  {
+    "step": "cie",
+    "file": "cie-5.html",
+    "path": "/index.php?option=com_courses&task=cie&code=CSL57",
+    "status": 200
+  },
+  {
+    "step": "timetable",
+    "file": "timetable-0.html",
+    "path": "/index.php?option=com_timetable&task=view",
+    "status": 200
+  },
+  {
+    "step": "results",
+    "file": "results-0.html",
+    "path": "/index.php?option=com_results&task=view",
+    "status": 200
+  }
+]

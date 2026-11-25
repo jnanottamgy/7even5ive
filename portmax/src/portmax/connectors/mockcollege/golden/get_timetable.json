@@ -1,0 +1,121 @@
+[
+  {
+    "day": "Mon",
+    "end": "09:55:00",
+    "room": "LH-204",
+    "start": "09:00:00",
+    "subject_code": "CS52"
+  },
+  {
+    "day": "Mon",
+    "end": "10:55:00",
+    "room": "LH-204",
+    "start": "10:00:00",
+    "subject_code": "CS54"
+  },
+  {
+    "day": "Mon",
+    "end": "12:05:00",
+    "room": "LH-108",
+    "start": "11:10:00",
+    "subject_code": "MA51"
+  },
+  {
+    "day": "Mon",
+    "end": "14:55:00",
+    "room": "LAB-3",
+    "start": "14:00:00",
+    "subject_code": "CSL57"
+  },
+  {
+    "day": "Mon",
+    "end": "15:55:00",
+    "room": "LAB-3",
+    "start": "15:00:00",
+    "subject_code": "CSL57"
+  },
+  {
+    "day": "Tue",
+    "end": "09:55:00",
+    "room": "LH-204",
+    "start": "09:00:00",
+    "subject_code": "CS51"
+  },
+  {
+    "day": "Tue",
+    "end": "10:55:00",
+    "room": "LH-204",
+    "start": "10:00:00",
+    "subject_code": "CS53"
+  },
+  {
+    "day": "Tue",
+    "end": "13:00:00",
+    "room": "LH-204",
+    "start": "12:05:00",
+    "subject_code": "CS52"
+  },
+  {
+    "day": "Wed",
+    "end": "09:55:00",
+    "room": "LH-204",
+    "start": "09:00:00",
+    "subject_code": "CS54"
+  },
+  {
+    "day": "Wed",
+    "end": "12:05:00",
+    "room": "LH-206",
+    "start": "11:10:00",
+    "subject_code": "CS53"
+  },
+  {
+    "day": "Wed",
+    "end": "14:55:00",
+    "room": "LH-108",
+    "start": "14:00:00",
+    "subject_code": "MA51"
+  },
+  {
+    "day": "Thu",
+    "end": "10:55:00",
+    "room": "LH-204",
+    "start": "10:00:00",
+    "subject_code": "CS52"
+  },
+  {
+    "day": "Thu",
+    "end": "12:05:00",
+    "room": "LH-204",
+    "start": "11:10:00",
+    "subject_code": "CS51"
+  },
+  {
+    "day": "Fri",
+    "end": "09:55:00",
+    "room": "LH-204",
+    "start": "09:00:00",
+    "subject_code": "CS53"
+  },
+  {
+    "day": "Fri",
+    "end": "10:55:00",
+    "room": "LH-204",
+    "start": "10:00:00",
+    "subject_code": "CS54"
+  },
+  {
+    "day": "Fri",
+    "end": "13:00:00",
+    "room": "LH-108",
+    "start": "12:05:00",
+    "subject_code": "MA51"
+  },
+  {
+    "day": "Sat",
+    "end": "09:55:00",
+    "room": "LH-204",
+    "start": "09:00:00",
+    "subject_code": "CS51"
+  }
+]

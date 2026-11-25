@@ -1,0 +1,50 @@
+[
+  {
+    "component": "CIE-1",
+    "maximum": 30.0,
+    "scored": 24.0,
+    "subject_code": "CS51"
+  },
+  {
+    "component": "Quiz-1",
+    "maximum": 10.0,
+    "scored": 8.0,
+    "subject_code": "CS51"
+  },
+  {
+    "component": "CIE-1",
+    "maximum": 30.0,
+    "scored": 21.5,
+    "subject_code": "CS52"
+  },
+  {
+    "component": "CIE-1",
+    "maximum": 30.0,
+    "scored": 27.0,
+    "subject_code": "CS53"
+  },
+  {
+    "component": "CIE-1",
+    "maximum": 30.0,
+    "scored": 18.0,
+    "subject_code": "CS54"
+  },
+  {
+    "component": "Quiz-1",
+    "maximum": 10.0,
+    "scored": 9.0,
+    "subject_code": "CS54"
+  },
+  {
+    "component": "CIE-1",
+    "maximum": 30.0,
+    "scored": 22.0,
+    "subject_code": "MA51"
+  },
+  {
+    "component": "Lab record",
+    "maximum": 20.0,
+    "scored": 18.0,
+    "subject_code": "CSL57"
+  }
+]

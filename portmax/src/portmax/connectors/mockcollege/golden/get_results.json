@@ -1,0 +1,58 @@
+{
+  "semesters": [
+    {
+      "cgpa": 8.62,
+      "semester": 3,
+      "sgpa": 8.91
+    },
+    {
+      "cgpa": 8.58,
+      "semester": 4,
+      "sgpa": 8.45
+    }
+  ],
+  "subjects": [
+    {
+      "credits": 4.0,
+      "grade": "A",
+      "grade_points": 9.0,
+      "semester": 3,
+      "subject_code": "CS31"
+    },
+    {
+      "credits": 4.0,
+      "grade": "B+",
+      "grade_points": 8.0,
+      "semester": 3,
+      "subject_code": "CS32"
+    },
+    {
+      "credits": 3.0,
+      "grade": "A+",
+      "grade_points": 10.0,
+      "semester": 3,
+      "subject_code": "MA31"
+    },
+    {
+      "credits": 4.0,
+      "grade": "A",
+      "grade_points": 9.0,
+      "semester": 4,
+      "subject_code": "CS41"
+    },
+    {
+      "credits": 4.0,
+      "grade": "A",
+      "grade_points": 9.0,
+      "semester": 4,
+      "subject_code": "CS42"
+    },
+    {
+      "credits": 3.0,
+      "grade": "B",
+      "grade_points": 7.0,
+      "semester": 4,
+      "subject_code": "MA41"
+    }
+  ]
+}

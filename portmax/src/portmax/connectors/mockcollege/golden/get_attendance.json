@@ -1,0 +1,56 @@
+[
+  {
+    "as_of": "2026-11-24",
+    "attended": 26,
+    "held": 30,
+    "percent": 86.67,
+    "planned": 52,
+    "subject_code": "CS51",
+    "subject_name": "Computer Networks"
+  },
+  {
+    "as_of": "2026-11-24",
+    "attended": 22,
+    "held": 30,
+    "percent": 73.33,
+    "planned": 52,
+    "subject_code": "CS52",
+    "subject_name": "Database Management Systems"
+  },
+  {
+    "as_of": "2026-11-24",
+    "attended": 27,
+    "held": 29,
+    "percent": 93.1,
+    "planned": 48,
+    "subject_code": "CS53",
+    "subject_name": "Design and Analysis of Algorithms"
+  },
+  {
+    "as_of": "2026-11-24",
+    "attended": 25,
+    "held": 31,
+    "percent": 80.65,
+    "planned": 52,
+    "subject_code": "CS54",
+    "subject_name": "Operating Systems"
+  },
+  {
+    "as_of": "2026-11-22",
+    "attended": 19,
+    "held": 24,
+    "percent": 79.17,
+    "planned": 42,
+    "subject_code": "MA51",
+    "subject_name": "Probability and Statistics"
+  },
+  {
+    "as_of": "2026-11-24",
+    "attended": 11,
+    "held": 12,
+    "percent": 91.67,
+    "planned": 14,
+    "subject_code": "CSL57",
+    "subject_name": "DBMS Laboratory"
+  }
+]

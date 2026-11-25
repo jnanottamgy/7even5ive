@@ -1,0 +1,19 @@
+college: mockcollege
+name: Mock College of Engineering
+vendor: mock-erp
+# Tests and the local demo serve the mock portal here; the phone runner always uses the
+# origin of the page the student logged in on, never this value.
+base_url: http://127.0.0.1:8765
+login_path: /index.php
+fetch_mode: phone
+markers:
+  logged_in: "a#pm-logout"
+  login_page: "form#pm-login"
+session:
+  idle_timeout_minutes: 20
+  one_session_per_student: true
+tools: [get_attendance, get_timetable, get_marks, get_results, get_profile]
+connector_version: 1.0.0
+verified_at: 2026-11-25
+made_by:
+  hand_written: true

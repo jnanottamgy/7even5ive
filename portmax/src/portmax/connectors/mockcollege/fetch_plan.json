@@ -1,0 +1,22 @@
+{
+  "version": "1",
+  "steps": [
+    {"id": "dashboard", "path": "/index.php?option=com_studentdashboard&task=dashboard"},
+    {
+      "id": "course",
+      "for_each": {"from": "dashboard", "select": "table.pm-course-list a.pm-course", "attr": "href"}
+    },
+    {"id": "cie", "for_each": {"from": "course", "select": "a.pm-cie", "attr": "href"}},
+    {"id": "timetable", "path": "/index.php?option=com_timetable&task=view"},
+    {"id": "results", "path": "/index.php?option=com_results&task=view"}
+  ],
+  "keepalive_step": "dashboard",
+  "tool_steps": {
+    "get_profile": ["dashboard"],
+    "get_attendance": ["course"],
+    "get_marks": ["cie"],
+    "get_timetable": ["timetable"],
+    "get_results": ["results"]
+  },
+  "pace_ms": 400
+}

@@ -107,6 +107,9 @@ class FetchPlan(_Model):
     steps: list[Step] = Field(min_length=1, max_length=20)
     keepalive_step: str = Field(pattern=_STEP_ID)
     tool_steps: dict[ToolName, list[str]]
+    pace_ms: int = Field(
+        default=500, ge=0, le=10_000, description="Pause between requests, at a student's pace"
+    )
 
     @model_validator(mode="after")
     def _well_formed(self) -> Self:
