@@ -4,6 +4,7 @@ import android.app.ActivityManager
 import android.app.ApplicationExitInfo
 import android.content.Context
 import android.os.Build
+import androidx.annotation.RequiresApi
 import java.io.File
 import java.time.Instant
 
@@ -118,6 +119,7 @@ object Diagnostics {
     }
 
     /** The main thread's stack from an ANR trace: the part that says what it was stuck on. */
+    @RequiresApi(Build.VERSION_CODES.R)
     private fun mainThread(info: ApplicationExitInfo): String? = runCatching {
         info.traceInputStream?.bufferedReader()?.use { reader ->
             val lines = reader.lineSequence().take(4_000).toList()
