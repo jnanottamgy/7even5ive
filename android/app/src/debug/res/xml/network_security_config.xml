@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug builds talk to the laptop over plain HTTP (ports 8000, 8002, 8765). The laptop's LAN IP
+  is not known at build time and domain-config cannot match IP ranges, so cleartext is allowed
+  for debug builds only. Release builds keep the HTTPS-only config in src/main.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

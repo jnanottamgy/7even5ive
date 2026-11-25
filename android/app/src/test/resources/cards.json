@@ -1,0 +1,301 @@
+{
+    "student": {
+        "id": 1,
+        "name": "Demo Student",
+        "wa_phone": "919900000001",
+        "mcp_token": null,
+        "branch": "CSE",
+        "year": 3,
+        "interests": "hackathons, backend, AI",
+        "portal_id": "demo"
+    },
+    "due_this_week": [
+        {
+            "id": 1,
+            "kind": "deadline",
+            "subject": "Database Management Systems",
+            "title": "DBMS Assignment 3",
+            "due_at": "2026-11-27T23:59+05:30",
+            "status": "filed",
+            "source": "whatsapp",
+            "route": "bot"
+        },
+        {
+            "id": 7,
+            "kind": "event",
+            "subject": "Miscellaneous",
+            "title": "IISc open hackathon",
+            "due_at": "2026-11-28T10:00+05:30",
+            "status": "filed",
+            "source": "gmail",
+            "route": "jev+llm"
+        },
+        {
+            "id": 8,
+            "kind": "deadline",
+            "subject": "Operating Systems",
+            "title": "OS mini project (10 marks)",
+            "due_at": "2026-11-28T23:59+05:30",
+            "status": "filed",
+            "source": "classroom",
+            "route": "classroom"
+        },
+        {
+            "id": 3,
+            "kind": "exam",
+            "subject": "Computer Networks",
+            "title": "DCN CIE-2 (units 3 and 4)",
+            "due_at": "2026-11-30T09:00+05:30",
+            "status": "filed",
+            "source": "whatsapp",
+            "route": "jev+llm"
+        }
+    ],
+    "attendance": {
+        "connected": true,
+        "stale": false,
+        "fetched_at": "2026-11-25T19:11:56.312299+00:00",
+        "subjects": [
+            {
+                "subject_code": "CS52",
+                "subject_name": "Database Management Systems",
+                "attended": 22,
+                "held": 30,
+                "percent": 73.33,
+                "minimum_percent": 75.0,
+                "status": "short",
+                "can_skip_now": 0,
+                "must_attend": 2,
+                "next_classes": [
+                    "2026-11-26",
+                    "2026-11-30"
+                ],
+                "semester": {
+                    "planned": 52,
+                    "remaining": 22,
+                    "can_skip_rest_of_semester": 5,
+                    "best_final_percent": 84.62
+                },
+                "message": "CS52 73.33%: attend the next 2 classes in a row, starting Thu 26 Nov, to get back to 75%."
+            },
+            {
+                "subject_code": "MA51",
+                "subject_name": "Probability and Statistics",
+                "attended": 19,
+                "held": 24,
+                "percent": 79.17,
+                "minimum_percent": 75.0,
+                "status": "at_risk",
+                "can_skip_now": 1,
+                "must_attend": 0,
+                "next_classes": [
+                    "2026-11-27"
+                ],
+                "semester": {
+                    "planned": 42,
+                    "remaining": 18,
+                    "can_skip_rest_of_semester": 5,
+                    "best_final_percent": 88.1
+                },
+                "message": "MA51 79.17%: you can miss 1 class and stay at 75%. Over the rest of the semester you can miss 5 of 18."
+            },
+            {
+                "subject_code": "CS54",
+                "subject_name": "Operating Systems",
+                "attended": 25,
+                "held": 31,
+                "percent": 80.65,
+                "minimum_percent": 75.0,
+                "status": "safe",
+                "can_skip_now": 2,
+                "must_attend": 0,
+                "next_classes": [
+                    "2026-11-27"
+                ],
+                "semester": {
+                    "planned": 52,
+                    "remaining": 21,
+                    "can_skip_rest_of_semester": 7,
+                    "best_final_percent": 88.46
+                },
+                "message": "CS54 80.65%: you can miss 2 classes and stay at 75%. Over the rest of the semester you can miss 7 of 21."
+            },
+            {
+                "subject_code": "CS51",
+                "subject_name": "Computer Networks",
+                "attended": 26,
+                "held": 30,
+                "percent": 86.67,
+                "minimum_percent": 75.0,
+                "status": "safe",
+                "can_skip_now": 4,
+                "must_attend": 0,
+                "next_classes": [
+                    "2026-11-26"
+                ],
+                "semester": {
+                    "planned": 52,
+                    "remaining": 22,
+                    "can_skip_rest_of_semester": 9,
+                    "best_final_percent": 92.31
+                },
+                "message": "CS51 86.67%: you can miss 4 classes and stay at 75%. Over the rest of the semester you can miss 9 of 22."
+            },
+            {
+                "subject_code": "CSL57",
+                "subject_name": "DBMS Laboratory",
+                "attended": 11,
+                "held": 12,
+                "percent": 91.67,
+                "minimum_percent": 75.0,
+                "status": "safe",
+                "can_skip_now": 2,
+                "must_attend": 0,
+                "next_classes": [
+                    "2026-11-30"
+                ],
+                "semester": {
+                    "planned": 14,
+                    "remaining": 2,
+                    "can_skip_rest_of_semester": 2,
+                    "best_final_percent": 92.86
+                },
+                "message": "CSL57 91.67%: you can miss 2 classes and stay at 75%. Over the rest of the semester you can miss 2 of 2."
+            },
+            {
+                "subject_code": "CS53",
+                "subject_name": "Design and Analysis of Algorithms",
+                "attended": 27,
+                "held": 29,
+                "percent": 93.1,
+                "minimum_percent": 75.0,
+                "status": "safe",
+                "can_skip_now": 7,
+                "must_attend": 0,
+                "next_classes": [
+                    "2026-11-27"
+                ],
+                "semester": {
+                    "planned": 48,
+                    "remaining": 19,
+                    "can_skip_rest_of_semester": 10,
+                    "best_final_percent": 95.83
+                },
+                "message": "CS53 93.1%: you can miss 7 classes and stay at 75%. Over the rest of the semester you can miss 10 of 19."
+            }
+        ]
+    },
+    "materials": [
+        {
+            "id": 2,
+            "kind": "material",
+            "subject": "Database Management Systems",
+            "title": "DBMS_Unit3_notes.pdf",
+            "due_at": null,
+            "status": "filed",
+            "source": "whatsapp",
+            "route": "bot"
+        },
+        {
+            "id": 4,
+            "kind": "material",
+            "subject": "Computer Networks",
+            "title": "DCN_Lab_Manual.docx",
+            "due_at": null,
+            "status": "filed",
+            "source": "whatsapp",
+            "route": "bot"
+        }
+    ],
+    "opportunities": [
+        {
+            "id": 7,
+            "kind": "event",
+            "subject": "Miscellaneous",
+            "title": "IISc open hackathon",
+            "due_at": "2026-11-28T10:00+05:30",
+            "status": "filed",
+            "source": "gmail",
+            "route": "jev+llm",
+            "relevance": 0.88
+        }
+    ],
+    "filtered": 2,
+    "needs_review": [],
+    "approvals": [
+        {
+            "action": "add_to_calendar",
+            "args": {
+                "item_id": 1
+            },
+            "token": "eyJhIjoiYWRkX3RvX2NhbGVuZGFyIiwiZSI6MTc5NTYxNTAxNiwiZyI6eyJpdGVtX2lkIjoxfSwibiI6ImZjNDI2YThkNTIzMmNjYTAiLCJzIjoxfQ.lMG64VL1Yxy7nwJ9SlPhjk0lHIH1ki6bNs2Rp7fPibY"
+        },
+        {
+            "action": "add_to_calendar",
+            "args": {
+                "item_id": 1
+            },
+            "token": "eyJhIjoiYWRkX3RvX2NhbGVuZGFyIiwiZSI6MTc5NTYxNTAyNywiZyI6eyJpdGVtX2lkIjoxfSwibiI6IjdjNGM1NjZiZjU0OWU0OTciLCJzIjoxfQ._ZEDTvQTcJRQOq5yXYKfrehH0Vpcv_HBpzn7COfROhE"
+        }
+    ],
+    "calendar": [],
+    "reminders": [
+        {
+            "reminder_id": 1,
+            "fires_at": "2026-11-27T22:59+05:30",
+            "title": "DBMS Assignment 3",
+            "subject": "Database Management Systems",
+            "due_at": "2026-11-27T23:59+05:30"
+        }
+    ],
+    "audit": [
+        {
+            "id": 6,
+            "student_id": 1,
+            "tool": "add_to_calendar",
+            "decision": "ask",
+            "reason": "approval requested",
+            "at": "2026-11-25T19:12+05:30"
+        },
+        {
+            "id": 5,
+            "student_id": 1,
+            "tool": "set_reminder",
+            "decision": "allow",
+            "reason": "policy",
+            "at": "2026-11-25T19:12+05:30"
+        },
+        {
+            "id": 4,
+            "student_id": 1,
+            "tool": "send_email",
+            "decision": "deny",
+            "reason": "policy",
+            "at": "2026-11-25T19:11+05:30"
+        },
+        {
+            "id": 3,
+            "student_id": 1,
+            "tool": "add_to_calendar",
+            "decision": "ask",
+            "reason": "approval requested",
+            "at": "2026-11-25T19:11+05:30"
+        },
+        {
+            "id": 2,
+            "student_id": 1,
+            "tool": "attendance",
+            "decision": "allow",
+            "reason": "policy",
+            "at": "2026-11-25T19:11+05:30"
+        },
+        {
+            "id": 1,
+            "student_id": 1,
+            "tool": "due_this_week",
+            "decision": "allow",
+            "reason": "policy",
+            "at": "2026-11-25T19:11+05:30"
+        }
+    ]
+}
