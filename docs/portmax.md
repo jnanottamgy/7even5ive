@@ -132,6 +132,12 @@ digits, one session per student, bot-like clients IP-banned, scripted logins ref
 14 Nov 2026 ("cannot be used from third-party apps"), no timetable in the portal, results on
 `exam.msrit.edu`. From the team (25 Nov): the portal lists total classes for the semester,
 attendance is updated daily with the percentage shown, and **a login inside an app works**.
+On 25 Nov the login worked in Instagram's in-app browser (a WebView), while an automated
+browser (Playwright, the forge's `capture`) was refused: "This portal cannot be used from
+third-party apps." The block is aimed at automation, not at in-app logins. So the connector is
+built from a **hand-recorded** visit instead: a team member logs in in normal Chrome with
+DevTools open, saves the Network tab as a HAR, and runs `portmax forge sanitize --har ...`; the
+rest of the pipeline is unchanged. No disguising of the automated browser, ever (decision 22).
 
 ## Rules
 
