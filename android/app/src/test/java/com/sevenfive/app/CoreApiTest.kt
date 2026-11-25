@@ -101,4 +101,11 @@ class CoreApiTest {
         assertTrue(!c.isOnline)
         assertEquals(c, ServerConfig.parse("http://10.72.161.15:8000"))
     }
+
+    @Test
+    fun `a server's own HTTP address without a port is one address too`() {
+        val c = ServerConfig.parse("http://13.233.1.2")
+        assertEquals("http://13.233.1.2", c.portalUrl)
+        assertTrue(c.isOnline)
+    }
 }

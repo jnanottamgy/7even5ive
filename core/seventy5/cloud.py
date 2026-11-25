@@ -8,8 +8,9 @@ serves everything the app needs, routed by path:
     /dev            the core's development web page
     everything else the mock college portal the app's WebView logs in to
 
-Because the mock portal now lives at the service's own address, PortMax is told so: uploads
-are accepted only from pages fetched at PUBLIC_URL (Render sets RENDER_EXTERNAL_URL itself).
+Because the mock portal lives at the service's own address, PortMax accepts uploads only of
+pages fetched from that address: PUBLIC_URL (or Render's RENDER_EXTERNAL_URL) when set, else
+the scheme and host the upload itself arrives at (behind CloudFront, its HTTPS address).
 State is SQLite inside the container and is reseeded from the demo morning on every start;
 nothing here is real student data.
 """
@@ -18,9 +19,28 @@ from __future__ import annotations
 
 import os
 import sys
+from contextvars import ContextVar
 from typing import Any
 
 PREFIXES_CORE = ("/api/", "/bot/")
+# The address the phone is using for this request. All three apps share it, so the portal
+# pages it uploads must come from exactly here.
+REQUEST_ORIGIN: ContextVar[str | None] = ContextVar("REQUEST_ORIGIN", default=None)
+
+
+def origin_of(scope: dict[str, Any]) -> str | None:
+    """scheme://host the client used. Behind CloudFront the scheme is in its own header."""
+    headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope.get("headers", [])}
+    host = headers.get("host")
+    if not host:
+        return None
+    scheme = headers.get("cloudfront-forwarded-proto") or headers.get("x-forwarded-proto")
+    if not scheme and "x-amz-cf-id" in headers:
+        # Through CloudFront without its protocol header: the distribution redirects every
+        # viewer to HTTPS, so the phone used HTTPS.
+        scheme = "https"
+    scheme = (scheme or scope.get("scheme", "http")).split(",")[0].strip()
+    return f"{scheme}://{host}"
 
 
 class Router:
@@ -40,6 +60,7 @@ class Router:
                     await send({"type": "lifespan.shutdown.complete"})
                     return
         path = scope.get("path", "")
+        REQUEST_ORIGIN.set(origin_of(scope))
         if path.startswith(PREFIXES_CORE):
             await self.core(scope, receive, send)
         elif path.startswith("/v1/"):
@@ -50,36 +71,43 @@ class Router:
             await self.portal(scope, receive, send)
 
 
-def public_url() -> str:
+def public_url() -> str | None:
+    """A fixed public address, when the host knows it up front (Render does)."""
     url = os.environ.get("PUBLIC_URL") or os.environ.get("RENDER_EXTERNAL_URL")
-    if not url:
-        port = os.environ.get("PORT", "8000")
-        url = f"http://127.0.0.1:{port}"
-    return url.rstrip("/")
+    return url.rstrip("/") if url else None
 
 
 def build_router() -> Router:
     from portmax.api import DevTokens, create_api
-    from portmax.connector import with_portal_origins
+    from portmax.connector import Connector, load_connector
     from portmax.mock_portal.app import PortalConfig, create_app
     from portmax.store import Store
 
     from . import demo
     from .config import settings
 
-    origin = public_url()
+    fixed = public_url()
     os.environ.setdefault("PORTMAX_DEV_TOKENS", f"{demo.TOKEN}:{demo.PORTAL_ID}")
     _, core, _, live, lines = demo.prepare()
     print(f"mode: {'LIVE Jev + Claude' if live else 'offline, recorded answers'}")
     print("\n".join(lines))
 
-    portmax = create_api(
-        Store(settings.portmax_database_url),
-        DevTokens(),
-        with_portal_origins({"mockcollege": origin}),
-    )
+    def connectors(college: str) -> Connector:
+        # The mock portal is this service. Pages must come from the address the phone uses for
+        # it: the fixed public URL if the host gives one, else the address of this request
+        # (EC2 behind CloudFront learns its HTTPS address only once CloudFront exists).
+        connector = load_connector(college)
+        origin = fixed or REQUEST_ORIGIN.get()
+        if college != "mockcollege" or not origin:
+            return connector
+        manifest = connector.manifest.model_copy(update={"base_url": origin})
+        return Connector(manifest=manifest, plan=connector.plan, parsers=connector.parsers,
+                         root=connector.root)
+
+    portmax = create_api(Store(settings.portmax_database_url), DevTokens(), connectors)
     portal = create_app(config=PortalConfig(captcha="fixed"))
-    print(f"\n7even5ive is serving at {origin} (portal pages must come from there)", flush=True)
+    where = fixed or "the address each request arrives at"
+    print(f"\n7even5ive is serving; portal pages must come from {where}", flush=True)
     return Router(core, portmax, portal)
 
 

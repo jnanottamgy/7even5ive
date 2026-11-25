@@ -354,3 +354,21 @@ def test_webhook_passes_the_bot_decision_through(app):
     client.post("/bot/webhook", content=body, headers={"x-75-timestamp": str(ts), "x-75-signature": sign(body, ts)})
     assert a.last[0].route == "bot"
     assert a.db.items(sid, kinds=("material",))[0]["title"] == "DBMS_U3.pdf"
+
+
+# --- the online service ------------------------------------------------------------------
+def test_the_online_service_knows_the_address_the_phone_used():
+    from seventy5.cloud import origin_of
+
+    def scope(**headers):
+        return {"scheme": "http", "headers": [(k.encode(), v.encode()) for k, v in headers.items()]}
+
+    assert origin_of(scope(host="13.233.1.2")) == "http://13.233.1.2"
+    # CloudFront talks plain HTTP to the server but the phone used HTTPS: its header says so.
+    assert origin_of(scope(**{"host": "d1x.cloudfront.net", "cloudfront-forwarded-proto": "https"})) \
+        == "https://d1x.cloudfront.net"
+    assert origin_of(scope(**{"host": "x.onrender.com", "x-forwarded-proto": "https"})) \
+        == "https://x.onrender.com"
+    assert origin_of(scope(**{"host": "d1x.cloudfront.net", "x-amz-cf-id": "abc"})) \
+        == "https://d1x.cloudfront.net"
+    assert origin_of(scope()) is None

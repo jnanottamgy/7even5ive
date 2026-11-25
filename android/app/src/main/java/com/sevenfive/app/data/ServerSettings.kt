@@ -12,7 +12,7 @@ data class ServerConfig(
     val portalUrl: String,
 ) {
     /** The online service: one address for everything. A laptop setup uses three ports. */
-    val isOnline: Boolean get() = coreUrl.startsWith("https://")
+    val isOnline: Boolean get() = coreUrl == portmaxUrl && coreUrl == portalUrl
 
     companion object {
         /** One HTTPS address serving the core, PortMax and the portal (seventy5.cloud). */
@@ -24,7 +24,12 @@ data class ServerConfig(
         /** What the student typed: an online address (https://…) or a laptop's IP. */
         fun parse(input: String): ServerConfig {
             val t = input.trim().trimEnd('/')
-            return if (t.startsWith("https://") || (t.any { it.isLetter() } && !t.startsWith("http://"))) {
+            val http = t.startsWith("http://")
+            val hostPart = t.substringAfter("://").substringBefore('/')
+            val online = t.startsWith("https://") ||
+                (http && ':' !in hostPart) ||          // http://server, no port: one address
+                (!http && hostPart.any { it.isLetter() }) // a domain name, no scheme
+            return if (online) {
                 forOnline(t)
             } else {
                 forHost(t)
