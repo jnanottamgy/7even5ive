@@ -26,9 +26,13 @@ class CardsRepository(private val core: CoreApi) {
     /** Approvals already run or refused here: never shown again, whatever the next poll says. */
     private val hiddenApprovals = mutableSetOf<String>()
 
-    suspend fun refresh() {
-        // Overlapping polls (a tap plus the timer) collapse into one request.
-        if (lock.isLocked) return
+    /**
+     * Overlapping background polls collapse into one request. A pull to refresh passes
+     * [wait] = true: it waits for a poll already running and then asks again, so the student's
+     * gesture always gets a fresh answer instead of returning at once.
+     */
+    suspend fun refresh(wait: Boolean = false) {
+        if (!wait && lock.isLocked) return
         lock.withLock {
             try {
                 val cards = core.cards().let { c ->
