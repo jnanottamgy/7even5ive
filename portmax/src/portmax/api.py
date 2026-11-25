@@ -21,7 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from portmax.connector import Connector, load_connector
 from portmax.contract import utc_now
-from portmax.errors import NotSupported, SessionExpired, UnsafePlan
+from portmax.errors import NotSupported, PortalChanged, SessionExpired, UnsafePlan
 from portmax.ingest import ingest
 from portmax.manifest import keepalive_interval_minutes, needs_push_wakeup
 from portmax.pages import Page
@@ -109,6 +109,8 @@ def create_api(
             return JSONResponse({"code": error.code, "detail": error.detail}, status_code=409)
         except (UnsafePlan, NotSupported) as error:
             return JSONResponse({"code": error.code, "detail": error.detail}, status_code=400)
+        except PortalChanged as error:
+            return JSONResponse({"code": error.code, "detail": error.detail}, status_code=422)
         return JSONResponse(
             {
                 "fetched_at": result.fetched_at.isoformat(),

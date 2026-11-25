@@ -190,3 +190,11 @@ def test_the_phone_api_takes_pages_and_hands_out_the_plan(
     expired = [{**pages[0], "html": "<form id='pm-login'></form>"}]
     gone = api.post("/v1/pages", json={"college": "mockcollege", "pages": expired}, headers=auth)
     assert gone.status_code == 409 and gone.json()["code"] == "session_expired"
+    odd = [{**pages[0], "html": "<p>Down for maintenance</p>"}]
+    changed = api.post("/v1/pages", json={"college": "mockcollege", "pages": odd}, headers=auth)
+    assert changed.status_code == 422 and changed.json()["code"] == "portal_changed"
+    elsewhere = [{**pages[0], "url": "http://phishing.example.com/index.php?task=dashboard"}]
+    refused = api.post(
+        "/v1/pages", json={"college": "mockcollege", "pages": elsewhere}, headers=auth
+    )
+    assert refused.status_code == 400 and refused.json()["code"] == "unsafe_plan"

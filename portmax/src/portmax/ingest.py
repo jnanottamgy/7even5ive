@@ -35,9 +35,10 @@ def _check_pages(connector: Connector, pages: list[Page]) -> None:
     if not pages:
         raise UnsafePlan("no pages")
     known = {step.id for step in connector.plan.steps}
-    origins = {urlsplit(page.url)[:2] for page in pages}
-    if len(origins) != 1:
-        raise UnsafePlan("pages come from more than one site")
+    portal = urlsplit(connector.manifest.base_url)[:2]
+    for page in pages:
+        if urlsplit(page.url)[:2] != portal:
+            raise UnsafePlan(f"{page.step}: not from {connector.manifest.base_url}")
     for page in pages:
         if page.step not in known:
             raise UnsafePlan(f"{page.step} is not a step of this plan")

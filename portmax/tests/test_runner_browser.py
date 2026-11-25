@@ -50,6 +50,12 @@ def phone(live_portal: LivePortal) -> Iterator[Any]:
         browser.close()
 
 
+def at(connector: Connector, live: LivePortal) -> Connector:
+    """The connector pointed at the live mock portal's address, as ingest checks the origin."""
+    manifest = connector.manifest.model_copy(update={"base_url": live.url})
+    return Connector(manifest, connector.plan, connector.parsers, connector.root)
+
+
 def settings_for(connector: Connector) -> dict[str, Any]:
     settings = phone_settings(connector)
     settings["plan"]["pace_ms"] = 0
@@ -62,7 +68,7 @@ def test_the_runner_reads_the_portal_inside_the_students_session(
     raw = phone.evaluate("s => PortMaxRunner.run(s)", settings_for(connector))
     pages = [Page.model_validate(p) for p in raw]
     assert [p.step for p in pages].count("course") == 6
-    ingest(store, connector, "asha", pages, utc_now())
+    ingest(store, at(connector, live_portal), "asha", pages, utc_now())
     student = live_portal.state.student("1MC24CS042")
     assert answer(store, "asha", "get_attendance", utc_now()).data == expected_attendance(student)
     assert live_portal.portal.ended == []  # the student's own session was never disturbed
