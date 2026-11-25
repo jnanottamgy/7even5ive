@@ -1,5 +1,6 @@
 package com.sevenfive.app
 
+import kotlinx.serialization.decodeFromString
 import com.sevenfive.app.data.AppJson
 import com.sevenfive.app.data.Cards
 import org.junit.Assert.assertEquals
