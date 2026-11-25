@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "portmax": {
+      "command": "uv",
+      "args": ["run", "--directory", "portmax", "portmax", "mcp"],
+      "env": {
+        "PORTMAX_STUDENT_ID": "demo",
+        "PORTMAX_DATABASE_URL": "sqlite:///portmax-demo.db"
+      }
+    }
+  }
+}

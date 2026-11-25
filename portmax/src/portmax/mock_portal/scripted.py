@@ -75,3 +75,34 @@ def record_mock_fixtures(state: MockState | None = None) -> Connector:
     save_golden(connector, "get_results", expected_results(student))
     save_golden(connector, "get_profile", expected_profile(student))
     return connector
+
+
+def seed_demo(store_url: str, student_id: str) -> list[str]:
+    """Fill a store as if a student had connected the mock portal on their phone, for demos."""
+    from fastapi.testclient import TestClient
+
+    from portmax.contract import utc_now
+    from portmax.ingest import ingest
+    from portmax.store import Store
+
+    state = default_state()
+    config = PortalConfig(captcha="fixed")
+    mock = load_connector("mockcollege")
+    connector = Connector(
+        mock.manifest.model_copy(update={"base_url": "http://testserver"}),
+        mock.plan,
+        mock.parsers,
+        mock.root,
+    )
+    student = next(iter(state.students.values()))
+    with TestClient(create_app(state, config), headers={"user-agent": "PortMax demo"}) as c:
+        scripted_login(c, student, config.fixed_captcha)
+        pages = run_plan(
+            connector.plan,
+            connector.manifest,
+            c,
+            landing_url=f"http://testserver/{DASHBOARD}",
+            sleep=lambda _: None,
+        )
+    result = ingest(Store(store_url), connector, student_id, pages, utc_now())
+    return list(result.saved)

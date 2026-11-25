@@ -15,6 +15,15 @@ def _mock(args: argparse.Namespace) -> int:
         config = PortalConfig(captcha="fixed" if args.fixed_captcha else "random")
         uvicorn.run(create_app(config=config), host=args.host, port=args.port)
         return 0
+    if args.action == "seed":
+        import os
+
+        from portmax.mock_portal.scripted import seed_demo
+
+        url = os.environ.get("PORTMAX_DATABASE_URL", "sqlite:///portmax.db")
+        saved = seed_demo(url, args.student)
+        print(f"{args.student} connected to the mock portal; saved {saved} in {url}")
+        return 0
     from portmax.mock_portal.scripted import record_mock_fixtures
 
     connector = record_mock_fixtures()
@@ -129,7 +138,8 @@ def main(argv: list[str] | None = None) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
 
     mock = commands.add_parser("mock", help="the mock college portal")
-    mock.add_argument("action", choices=["serve", "fixtures"])
+    mock.add_argument("action", choices=["serve", "fixtures", "seed"])
+    mock.add_argument("--student", default="demo", help="seed: the student id to save under")
     mock.add_argument("--host", default="127.0.0.1")
     mock.add_argument("--port", type=int, default=8765)
     mock.add_argument("--fixed-captcha", action="store_true", help="CAPTCHA is always PM42X")
