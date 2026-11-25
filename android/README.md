@@ -76,3 +76,12 @@ cd android && ./gradlew testDebugUnitTest
 They parse a real `/api/cards` response from the demo, check the time formatting, and check the
 API client against a mock server (bearer token on every call, `{"args": ...}` for tools, the
 gateway's refusal text passed through).
+
+The portal glue is checked end to end against the real servers (the three terminals running),
+with Chromium standing in for the WebView. It reads the start script out of `PortalEngine.kt`, so
+it runs the app's own JavaScript: login detection, a full run, the upload, a keep-alive started
+from the login page, and `session_expired` once the cookies are gone.
+
+```bash
+node android/e2e/portal-e2e.js
+```
