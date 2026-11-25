@@ -7,7 +7,7 @@ decisions are Kartik's. Earlier entries 1–15 are replaced by 29 onwards (git h
 
 | # | Decision | Why |
 |---|---|---|
-| 29 | **Cascade: Classroom's own due date → Jev → LLM.** Every item is either filed or sent to the LLM; there is no third outcome. | The Classroom API already knows the date (free, exact); Jev costs almost nothing; the LLM runs only where it is needed. |
+| 29 | **Cascade: the bot's own decision → Classroom's own due date → Jev → LLM.** Every item is either filed or sent to the LLM; there is no third outcome. | The Classroom API already knows the date (free, exact); Jev costs almost nothing; the LLM runs only where it is needed. |
 | 30 | **Jev answers two questions on every message:** what it is (deadline, exam, material, event, notice, chit-chat) and which subject (the student's 5 subjects + Miscellaneous). On mail it also says whether it is spam, fake or an unviable paid offer, and how relevant it is to this student. Nothing more. | These are box-ticking questions; Jev bills input only, so they cost about $0.00003 a call. |
 | 31 | **No rules, regex or fuzzy matching for intent or subject.** | Text matching misreads intent; quality matters more than the saving. |
 | 32 | **The LLM reads dates and titles** (Jev cannot write text), with Jev's answers as hints when Jev was sure, or decides everything when it was not. Claude Haiku 5.5 on Bedrock, or GPT-6 Luna. | Hints shrink the prompt; a forced tool call with the student's subjects as an enum means it cannot invent a subject. |
@@ -18,7 +18,7 @@ decisions are Kartik's. Earlier entries 1–15 are replaced by 29 onwards (git h
 
 | # | Decision | Why |
 |---|---|---|
-| 35 | **The WhatsApp bot is both a trigger and a tool:** it pushes signed events (HMAC over timestamp + body, 300 s window) and serves an MCP server 7even5ive pulls files from. Events carry the raw message and, for an attachment, the bot's file id; **7even5ive classifies everything itself** with its own cascade. Format: [`bot-events.md`](bot-events.md). | Event-driven, nothing polls; one place decides what a message is. |
+| 35 | **The WhatsApp bot is both a trigger and a tool:** it pushes signed events (HMAC over timestamp + body, 300 s window) and serves an MCP server 7even5ive pulls files from. **When the bot has already filed a message, the event carries its decision** (kind, subject, title, date) and 7even5ive files it after a check in code, with no model call; when it was unsure, 7even5ive's own cascade decides. Format: [`bot-events.md`](bot-events.md). | The bot already classified it; doing it twice costs twice and two systems could disagree. Jev and the LLM do the work the bot never sees: mail and Classroom. |
 | 36 | **No share sheet.** Voice notes come only through the bot (ElevenLabs Scribe). | A share sheet would need its own pipeline, and it can't carry captions. |
 | 37 | **The portal is checked every 3 hours** (PortMax's refresh); only changes become events. The morning briefing uses the freshest saved answers and never waits on a login. | The portal has no push; attendance changes daily. |
 | 38 | **Classroom arrives through its Gmail emails,** plus the Classroom API for `dueDate`. | One push channel instead of two. |

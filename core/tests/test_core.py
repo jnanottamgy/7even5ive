@@ -257,3 +257,34 @@ def test_http_handler_serves_the_api_through_api_gateway(app, monkeypatch):
              "isBase64Encoded": False}
     resp = aws.http_handler(event, None)
     assert resp["statusCode"] == 200 and "due_this_week" in resp["body"]
+
+
+# --- the bot's own decision ---------------------------------------------------------------
+def test_bot_decision_is_filed_without_any_model_call(app):
+    jev, llm = ScriptedDecider({}), ScriptedLLM({})
+    a, sid = app(jev=jev, llm=llm)
+    out = run(a, sid, "DBMS assignment due Fri", decision={
+        "kind": "deadline", "subject": "Database Management Systems",
+        "title": "DBMS assignment", "due_at": "2030-01-04T23:59+05:30"})
+    assert (out.route, out.status) == ("bot", "filed")
+    assert jev.calls == [] and llm.calls == []
+
+
+def test_bot_decision_with_an_unknown_subject_goes_to_the_cascade(app):
+    text = "physics notes"
+    llm = ScriptedLLM({text: Proposal("material", "Miscellaneous", "Physics notes", None)})
+    a, sid = app(llm=llm)
+    out = run(a, sid, text, decision={"kind": "material", "subject": "Physics"})
+    assert out.route == "llm" and len(llm.calls) == 1
+
+
+def test_webhook_passes_the_bot_decision_through(app):
+    a, sid = app(jev=ScriptedDecider({}), llm=ScriptedLLM({}))
+    client = TestClient(create(a))
+    body = json.dumps({"from": demo.PHONE, "message_id": "m-bot", "text": "unit 3 notes",
+                       "attachment": "DBMS_U3.pdf",
+                       "decision": {"kind": "material", "subject": "Database Management Systems"}}).encode()
+    ts = int(time.time())
+    client.post("/bot/webhook", content=body, headers={"x-75-timestamp": str(ts), "x-75-signature": sign(body, ts)})
+    assert a.last[0].route == "bot"
+    assert a.db.items(sid, kinds=("material",))[0]["title"] == "DBMS_U3.pdf"

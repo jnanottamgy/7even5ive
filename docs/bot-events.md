@@ -1,8 +1,11 @@
 # WhatsApp bot → 7even5ive: event format
 
 The bot pushes every message a student sends it to 7even5ive, which never polls the bot.
-Send the raw message only: 7even5ive decides what it is (deadline, notes, notice…) with its own
-cascade. The file itself stays with the bot; 7even5ive fetches it over the bot's MCP tool by `file_id`.
+When the bot has already filed the message, send its **decision** too: 7even5ive checks it in
+code (the subject must be one of the student's subjects, the date must be real) and files it
+without calling a model. Leave `decision` out when the bot was unsure, and 7even5ive's own
+cascade (Jev, then the LLM) decides. The file itself stays with the bot; 7even5ive fetches it
+over the bot's MCP tool by `file_id`.
 
 ## Request
 
@@ -20,7 +23,13 @@ X-75-Signature: <hex>                 # see below
   "text": "DBMS Assignment 3 due Fri 11:59 pm",
   "attachment": "DBMS_Unit3_notes.pdf", // optional: file name only
   "file_id": "f_8812",                // optional: the bot's id for that file, fetched later over MCP
-  "group": "CSE 3B Announcements"      // optional: where it was forwarded from
+  "group": "CSE 3B Announcements",     // optional: where it was forwarded from
+  "decision": {                        // optional: what the bot already decided
+    "kind": "deadline",                // deadline | exam | material | event | notice | chitchat
+    "subject": "Database Management Systems",  // exactly as in the student's subject list
+    "title": "DBMS Assignment 3",      // optional for materials (the file name is used)
+    "due_at": "2026-11-27T23:59+05:30" // ISO 8601, IST; required for deadline, exam, event
+  }
 }
 ```
 

@@ -1,4 +1,9 @@
-"""The cascade: Classroom's own date -> Jev -> LLM. Every item is filed or goes to the LLM.
+"""The cascade: the bot's decision -> Classroom's own date -> Jev -> LLM.
+
+Why the bot first: a WhatsApp message the bot already filed (kind, subject, date) needs
+no second classification; code checks the bot's answer and files it. Mail, Classroom and
+anything the bot was unsure of go on through Jev and the LLM.
+Every item is filed or goes to the LLM.
 
 Why this order: the Classroom API already knows a due date (free and exact); Jev is next
 because it costs ~nothing and answers "what is it / which subject / is it spam"; the LLM
@@ -37,7 +42,7 @@ KIND_HELP = {
 
 @dataclass
 class Outcome:
-    route: str  # classroom | jev | jev+llm | llm | review
+    route: str  # bot | classroom | jev | jev+llm | llm | review
     status: str  # filed | filtered | skipped | needs_review
     item_id: int | None = None
     jev_tokens: int = 0
@@ -115,6 +120,16 @@ class Cascade:
         base = {"student_id": student["id"], "event_id": event_id, "source": source,
                 "created_at": clock.iso(clock.now())}
 
+        # 0. The bot already decided: it filed this message itself. Check its answer in code
+        # (no model call) and file it as it is; only a failed check falls through to Jev.
+        if (bot := self._from_bot(payload, subjects)) is not None:
+            if bot.kind == "chitchat":
+                return Outcome("bot", "skipped")
+            item = self.db.insert_item(**base, kind=bot.kind, subject=bot.subject,
+                                       title=bot.title, due_at=_parse_due(bot.due_at),
+                                       route="bot", relevance=None)
+            return Outcome("bot", "filed", item)
+
         state = {"source": source, "text": payload.get("text", ""),
                  "attachment": payload.get("attachment")}
         try:
@@ -171,6 +186,20 @@ class Cascade:
                                    due_at=_parse_due(p.due_at), status=status, route=route,
                                    relevance=relevance)
         return Outcome(route, status, item, tokens)
+
+    @staticmethod
+    def _from_bot(payload: dict[str, Any], subjects: list[str]) -> Proposal | None:
+        d = payload.get("decision")
+        if not isinstance(d, dict):
+            return None
+        p = Proposal(kind=str(d.get("kind", "")), subject=str(d.get("subject", "")),
+                     title=str(d.get("title") or _display_title(payload)).strip(),
+                     due_at=d.get("due_at"))
+        if (reason := gate(p, subjects)) is not None:
+            # Usually the two systems' subject lists drifting apart; our cascade decides.
+            log.info("bot decision refused", extra={"reason": reason})
+            return None
+        return p
 
     def _review(self, base: dict[str, Any], payload: dict[str, Any], reason: str,
                 tokens: int) -> Outcome:

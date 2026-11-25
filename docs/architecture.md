@@ -33,7 +33,10 @@ box below lives in [`core/seventy5/`](../core/seventy5) unless it says PortMax.
 ## The cascade
 
 ```
-event ──> Classroom dueDate?  ── yes ──> Jev names the subject ──> deadline card       (no LLM)
+event ──> bot's decision passes the check? ── yes ──> card                           (no model)
+            │ no
+            ▼
+          Classroom dueDate?  ── yes ──> Jev names the subject ──> deadline card       (no LLM)
             │ no
             ▼
           Jev: kind? subject? (mail: spam? relevant?)
@@ -49,9 +52,9 @@ event ──> Classroom dueDate?  ── yes ──> Jev names the subject ─�
 ## Flows
 
 1. **A forward becomes a deadline.** Student forwards "DBMS Assignment 3 due Fri 11:59 pm" → the
-   bot posts a signed event → bot-webhook λ verifies and enqueues → cascade λ: Jev says deadline,
-   DBMS → the LLM reads "Fri 11:59 pm" → the gate checks it → card in "Due this week". No
-   notification: the student sent it.
+   bot files it and posts a signed event carrying its decision → bot-webhook λ verifies and
+   enqueues → cascade λ checks the decision in code → card in "Due this week". No model call,
+   and no notification: the student sent it. Had the bot been unsure, Jev and the LLM decide.
 2. **Mail, filtered.** Gmail push → gmail-webhook λ → cascade: Jev rules out spam and fakes, and
    scores relevance to the student's branch, year and interests → opportunities, most relevant first.
 3. **Attendance.** Every 3 hours portal-check λ refreshes PortMax; a changed answer is an event;

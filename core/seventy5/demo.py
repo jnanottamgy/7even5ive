@@ -38,10 +38,14 @@ def messages() -> list[dict[str, Any]]:
     """(source, message, what Jev says, what the LLM says) -- the LLM part only if reached."""
     friday = (4 - clock.now().weekday()) % 7 or 7
     return [
+        # The bot already filed this one: 7even5ive checks its answer and files it, no model.
         {"source": "whatsapp", "text": "DBMS Assignment 3 due Fri 11:59 pm",
+         "decision": {"kind": "deadline", "subject": "Database Management Systems",
+                      "title": "DBMS Assignment 3", "due_at": _at(friday, 23, 59)},
          "jev": {"kind": ("deadline", .95), "subject": ("Database Management Systems", .93)},
          "llm": Proposal("deadline", "Database Management Systems", "DBMS Assignment 3", _at(friday, 23, 59))},
         {"source": "whatsapp", "text": "DBMS unit 3 notes", "attachment": "DBMS_Unit3_notes.pdf",
+         "decision": {"kind": "material", "subject": "Database Management Systems"},
          "jev": {"kind": ("material", .96), "subject": ("Database Management Systems", .94)}},
         {"source": "whatsapp", "text": "CIE-2 for DCN on Monday, units 3 and 4",
          "jev": {"kind": ("exam", .91), "subject": ("Computer Networks", .62)},
@@ -50,6 +54,7 @@ def messages() -> list[dict[str, Any]]:
         {"source": "whatsapp", "text": "ok 👍", "jev": {"kind": ("chitchat", .97)}},
         {"source": "whatsapp", "text": "DCN lab manual, print it",
          "attachment": "DCN_Lab_Manual.docx",
+         "decision": {"kind": "material", "subject": "Computer Networks"},
          "jev": {"kind": ("material", .9), "subject": ("Computer Networks", .88)}},
         {"source": "gmail", "text": "OFFICIAL NOTICE from \"MSRIT T&P Cell\": mandatory "
                                     "placement registration, pay Rs 499 by tonight",
@@ -128,8 +133,10 @@ def play(app: Any, client: Any, sid: int) -> list[str]:
     lines = []
     for i, m in enumerate(messages(), 1):
         if m["source"] == "whatsapp":
+            # No decision = the bot was unsure, so 7even5ive's own cascade decides.
             body = json.dumps({"from": PHONE, "message_id": f"wamid.demo{i}", "text": m["text"],
-                               "attachment": m.get("attachment")}).encode()
+                               "attachment": m.get("attachment"),
+                               "decision": m.get("decision")}).encode()
             ts = int(time.time())
             r = client.post("/bot/webhook", content=body,
                             headers={"x-75-timestamp": str(ts), "x-75-signature": sign(body, ts)})

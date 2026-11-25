@@ -48,7 +48,7 @@ def create(app_state: App | None = None) -> FastAPI:
         if student is None:
             # Unknown number: no reply, no row, no model call. Spam costs one SELECT.
             return {"ok": True}
-        payload = {k: event.get(k) for k in ("text", "attachment", "file_id", "group")
+        payload = {k: event.get(k) for k in ("text", "attachment", "file_id", "group", "decision")
                    if event.get(k)}
         event_id = accept(state.db, state.queue, student["id"], "whatsapp",
                           str(event["message_id"]), payload)

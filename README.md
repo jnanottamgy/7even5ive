@@ -35,7 +35,7 @@ raw attendance numbers and never warns you before you're barred.
 | | |
 |---|---|
 | **In** | The student forwards to our WhatsApp bot, which pushes a signed event to 7even5ive. College mail (read-only), Google Classroom and the portal (through PortMax) are connected once. Voice notes come only through the bot. |
-| **Understand** | A cascade: Classroom's own due date → **Jev** → **LLM**. Jev ticks boxes (what is it, which subject, is the mail spam or fake, is it relevant); the LLM reads dates and titles, or decides when Jev is unsure. Code checks every value against the student's real data before anything is written. |
+| **Understand** | What the bot already filed is checked and kept. Everything else goes through a cascade: Classroom's own due date → **Jev** → **LLM**. Jev ticks boxes (what is it, which subject, is the mail spam or fake, is it relevant); the LLM reads dates and titles, or decides when Jev is unsure. Code checks every value against the student's real data before anything is written. |
 | **Library** | Every material filed by subject (5 subjects + Miscellaneous), one tap away. |
 | **Out** | "Due this week" on the phone; attendance with the exact classes to attend or skip; opportunities that fit the student's branch, year and interests; opt-in reminders and an opt-in urgent call. |
 | **Your own AI** | 7even5ive is an MCP server: plug it into Claude, ChatGPT, Claude Code or any MCP client. |
