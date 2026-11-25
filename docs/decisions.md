@@ -14,13 +14,13 @@ Full plan: [`portal-forge.md`](portal-forge.md).
 | 19 | **The student logs in inside our Android app** (the portal's own page in a WebView) and completes everything the portal asks, CAPTCHA included. We never automate the login or store the password. The team confirmed on 25 Nov that MSRIT accepts a login inside an app. | Only the student can pass the portal's login; an in-app login lets the app hold the session. |
 | 20 | **The app keeps the login alive** with one light portal page at the longest interval the portal allows, sent from the phone (WorkManager, woken by a Firebase push if Android defers it). Our server never holds the cookies. | Attendance at MSRIT changes daily and matters most; a ping is one page request and costs nothing. |
 | 21 | **The briefing never waits on a login.** Every fetch is saved with its time; a lapsed session means one login the next time the student opens the app. | A student who needs a 7 AM briefing must not be asked to log in at 7 AM. |
+| 23 | **Adapter: Lambda behind AgentCore Gateway** for the product; the MCP server only for development and the demo; HTTP/OpenAPI only if the app ever needs its own API. | Every tool call then goes through the gateway's checks (decision 12), with no public endpoint, and it costs nothing when idle. |
 | 22 | **No evasion:** no CAPTCHA solving, WebView spoofing, fingerprint cloaking or IP rotation. Real students only after MSRIT agrees in writing; we ask for an official read-only feed. | MSRIT's portal says it "cannot be used from third-party apps", and IT Act s.43 turns on the owner's permission. |
 
 ### Still open (Portal Forge)
 
 - The portal's idle timeout, which sets the ping interval (team test, today).
 - Who approaches MSRIT's CSE department, and whether wHACKiest allows building before hack day.
-- Which adapter (MCP, HTTP/OpenAPI, Lambda) Kartik's architecture needs.
 
 ## 2026-11-24: the direction for Round 1 and hack day
 

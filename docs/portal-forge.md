@@ -33,9 +33,10 @@ carries `fetched_at` and the connector version. Failures are named: `SessionExpi
 `PortalUnavailable`, `PortalChanged`, `NotSupported`.
 
 Per college, Forge outputs `manifest.yaml`, `connector.py`, `parsers.py`, `raw_openapi.json`
-(reference only), `fixtures/` and `golden/`. Three small adapters wrap any connector: an MCP server
-(FastMCP, hand-written tools), an HTTP service serving our canonical OpenAPI spec (fits an
-AgentCore Gateway OpenAPI target), and a Lambda handler. Kartik's architecture picks which ships.
+(reference only), `fixtures/` and `golden/`. Three small adapters can wrap any connector. **Chosen (25 Nov): the
+Lambda adapter behind AgentCore Gateway** for the product, so every tool call passes the gateway's
+checks. The MCP server (FastMCP) is for development and the stage demo; the HTTP/OpenAPI service is
+built only if the app ever needs its own API.
 
 ## Forge time: once per college, by our team
 
@@ -109,7 +110,7 @@ attendance is updated daily with the percentage shown, and **a login inside an a
    connector with no hand edits, and we know the cost of one forge.
 3. **MSRIT through the app login** (~2 days). Done when attendance and CIE marks match the screen
    for one team member and the login stays alive 24 hours on pings alone.
-4. **Android login, keep-alive and the chosen adapter** (hack day). Done when a second team member
+4. **Android login, keep-alive and the Lambda adapter** (hack day). Done when a second team member
    connects in under two minutes and stays fresh for 24 hours with no second login.
 
 ## Tests before building
@@ -123,4 +124,3 @@ attendance is updated daily with the percentage shown, and **a login inside an a
 
 - Who asks MSRIT's CSE department for permission or an official read-only feed.
 - Whether wHACKiest allows building before hack day (README says code lands on 1–2 Dec).
-- Which adapter Kartik's architecture needs.
