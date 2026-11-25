@@ -26,6 +26,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sevenfive.app.ui.AppViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** The frame every tab shares: a collapsing title, the offline banner, pull to refresh. */
@@ -76,7 +77,12 @@ fun TabScaffold(
                 onRefresh = {
                     pulling = true
                     scope.launch {
-                        vm.container.cards.refresh()
+                        val started = System.currentTimeMillis()
+                        vm.container.cards.refresh(wait = true)
+                        // A laptop on the same Wi-Fi answers in ~50 ms: without a floor the
+                        // spinner pops up and snaps away before it can be seen turning.
+                        val shown = System.currentTimeMillis() - started
+                        if (shown < MIN_SPINNER_MILLIS) delay(MIN_SPINNER_MILLIS - shown)
                         pulling = false
                     }
                 },
@@ -87,3 +93,5 @@ fun TabScaffold(
         }
     }
 }
+
+private const val MIN_SPINNER_MILLIS = 800L

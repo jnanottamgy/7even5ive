@@ -63,7 +63,8 @@ const script = (settings, keepAlive, nonce) =>
   const full = await runOnce(false, 'nonce-1');
   const pages = full.kind === 'pages' ? JSON.parse(full.a) : [];
   console.log('3 run:', full.started, full.kind, 'nonce', full.nonce, 'pages', pages.length, [...new Set(pages.map(p => p.step))].join(','));
-  console.log('4 upload:', ...(await upload(full.a)));
+  const fullUpload = await upload(full.a);
+  console.log('4 upload:', ...fullUpload);
   const after = (await (await fetch(`${CORE}/api/cards`, { headers: H })).json()).attendance;
   console.log('5 cards fetched_at', before, '->', after.fetched_at, 'subjects', after.subjects.length);
 
@@ -71,7 +72,8 @@ const script = (settings, keepAlive, nonce) =>
   await page.goto(`${PORTAL}/index.php`);
   const keep = await runOnce(true, 'nonce-2');
   console.log('6 keep-alive from login page:', keep.kind, keep.kind === 'pages' ? JSON.parse(keep.a).map(p => p.step) : keep.a);
-  console.log('7 upload:', (await upload(keep.a))[0]);
+  const keepUpload = await upload(keep.a);
+  console.log('7 upload:', keepUpload[0], keepUpload[0] === 200 ? '' : keepUpload[1]);
 
   // Session gone: the runner must say session_expired, not crash.
   await ctx.clearCookies();
@@ -79,7 +81,8 @@ const script = (settings, keepAlive, nonce) =>
   const dead = await runOnce(false, 'nonce-3');
   console.log('8 after cookies cleared:', dead.kind, dead.a, '|', dead.b);
   await browser.close();
-  const ok = loggedInAfter && full.kind === 'pages' && keep.kind === 'pages' && dead.a === 'session_expired';
+  const ok = loggedInAfter && full.kind === 'pages' && fullUpload[0] === 200 &&
+    keep.kind === 'pages' && keepUpload[0] === 200 && dead.a === 'session_expired';
   console.log(ok ? 'PASS' : 'FAIL');
   process.exit(ok ? 0 : 1);
 })().catch(e => { console.error('FAILED', e); process.exit(1); });

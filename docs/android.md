@@ -70,9 +70,12 @@ $env:HOST="0.0.0.0"; $env:PORTMAX_DATABASE_URL="sqlite:///D:/Projects/7even5ive/
 ```
 
 ```powershell
-# 2. PortMax API (portal settings + page upload), same token, same portal database
+# 2. PortMax API (portal settings + page upload), same token, same portal database.
+#    PORTMAX_PORTAL_ORIGINS: where the phone reaches the mock portal (the laptop's LAN IP).
+#    Uploads are refused unless every page came from that one address.
 cd core
 $env:PORTMAX_DEV_TOKENS="demo-student-token:demo"; $env:PORTMAX_DATABASE_URL="sqlite:///D:/Projects/7even5ive/core/data/portmax.db"
+$env:PORTMAX_PORTAL_ORIGINS="mockcollege=http://192.168.1.20:8765"   # your laptop's IPv4
 .venv\Scripts\portmax api --host 0.0.0.0 --port 8002
 ```
 
@@ -83,7 +86,11 @@ cd core
 ```
 
 Both APIs share `PORTMAX_DATABASE_URL`, so attendance the phone uploads to PortMax shows up in
-7even5ive's cards. Change the path to wherever the repository is.
+7even5ive's cards. Change the path to wherever the repository is; create `core\data` first.
+
+`PORTMAX_PORTAL_ORIGINS` must be the address the phone opens the portal at: the laptop's LAN IP
+on a phone, `http://10.0.2.2:8765` on the emulator. Without it PortMax expects
+`http://127.0.0.1:8765` and refuses the upload with "dashboard: not from http://127.0.0.1:8765".
 
 **Every request** to both APIs carries:
 

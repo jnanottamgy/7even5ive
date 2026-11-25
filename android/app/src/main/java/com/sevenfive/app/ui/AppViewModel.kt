@@ -10,6 +10,7 @@ import com.sevenfive.app.data.Item
 import com.sevenfive.app.data.Reminder
 import com.sevenfive.app.data.ServerConfig
 import com.sevenfive.app.portal.PortalStatus
+import com.sevenfive.app.util.Diagnostics
 import com.sevenfive.app.util.Time
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,6 +38,12 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     private val _messages = Channel<String>(Channel.BUFFERED)
     /** One-off messages for the snackbar: the server's own words when it refuses. */
     val messages = _messages.receiveAsFlow()
+
+    init {
+        if (Diagnostics.hasUnseen(container.appContext)) {
+            say("7even5ive closed unexpectedly last time. Details: Settings → Diagnostics.")
+        }
+    }
 
     fun refresh() = viewModelScope.launch { container.cards.refresh() }
 
