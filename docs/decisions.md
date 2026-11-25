@@ -2,6 +2,26 @@
 
 The source of truth when any other document, diagram, PDF or slide disagrees. Newest first.
 
+## 2026-11-25: Portal Forge
+
+Full plan: [`portal-forge.md`](portal-forge.md).
+
+| # | Decision | Why |
+|---|---|---|
+| 16 | **Portal Forge is a factory: one portal in, five read-only tools out** (`get_attendance`, `get_timetable`, `get_marks`, `get_results`, `get_profile`), the same shape for every college. | The rest of the system never needs to know which portal it is talking to, so Forge does not wait on the architecture. |
+| 17 | **Built on reverse-api-engineer as a pinned library, under our own prompts and checks.** Its defaults hardcode captured cookies, keep the password in captures and tell the model to beat bot detection; we replace all three. | It does the hard part (traffic to working code) and is MIT-licensed, but it is built for one developer scraping for themselves. |
+| 18 | **The hackathon app is Android only; no iOS.** | Team decision. |
+| 19 | **The student logs in inside our Android app** (the portal's own page in a WebView) and completes everything the portal asks, CAPTCHA included. We never automate the login or store the password. The team confirmed on 25 Nov that MSRIT accepts a login inside an app. | Only the student can pass the portal's login; an in-app login lets the app hold the session. |
+| 20 | **The app keeps the login alive** with one light portal page at the longest interval the portal allows, sent from the phone (WorkManager, woken by a Firebase push if Android defers it). Our server never holds the cookies. | Attendance at MSRIT changes daily and matters most; a ping is one page request and costs nothing. |
+| 21 | **The briefing never waits on a login.** Every fetch is saved with its time; a lapsed session means one login the next time the student opens the app. | A student who needs a 7 AM briefing must not be asked to log in at 7 AM. |
+| 22 | **No evasion:** no CAPTCHA solving, WebView spoofing, fingerprint cloaking or IP rotation. Real students only after MSRIT agrees in writing; we ask for an official read-only feed. | MSRIT's portal says it "cannot be used from third-party apps", and IT Act s.43 turns on the owner's permission. |
+
+### Still open (Portal Forge)
+
+- The portal's idle timeout, which sets the ping interval (team test, today).
+- Who approaches MSRIT's CSE department, and whether wHACKiest allows building before hack day.
+- Which adapter (MCP, HTTP/OpenAPI, Lambda) Kartik's architecture needs.
+
 ## 2026-11-24: the direction for Round 1 and hack day
 
 | # | Decision | Why |

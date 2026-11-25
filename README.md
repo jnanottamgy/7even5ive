@@ -72,9 +72,11 @@ The data lives in **Supabase** (Postgres with row-level security, Realtime and A
 
 College portals have no API, and every college's portal is different. **Portal Forge** is our layer
 on the open-source [reverse-api-engineer](https://github.com/kalil0321/reverse-api-engineer) (MIT):
-it watches the portal being used once, writes an OpenAPI spec, and the gateway turns that spec into
-**read-only, replay-verified** tools (`get_attendance`, `get_timetable`, `get_marks`). One spec per
-college. For the demo a hand-written mock portal stands in, so the demo never depends on Forge.
+it records the portal being used once and builds a connector that gives every college the same five
+**read-only, replay-verified** tools (`get_attendance`, `get_timetable`, `get_marks`,
+`get_results`, `get_profile`). The student logs in once inside our Android app, CAPTCHA and all, and
+the app keeps that login alive so attendance stays fresh every day. For the demo a mock portal
+stands in, so the demo never depends on a real portal. Plan: [`docs/portal-forge.md`](docs/portal-forge.md).
 
 ## SHELF: why we trust this works
 
@@ -104,6 +106,7 @@ library, the storage layer. Note: SHELF files a PDF by its caption, filename and
 | [`docs/architecture.md`](docs/architecture.md) | Components, data flows, tech stack |
 | [`docs/brain.md`](docs/brain.md) | How messages, files, mail and attendance are understood and checked |
 | [`docs/policy.md`](docs/policy.md) | The control model enforced at the gateway |
+| [`docs/portal-forge.md`](docs/portal-forge.md) | Portal Forge: the five-tool contract, the forge pipeline, the Android login and keep-alive |
 | [`docs/business.md`](docs/business.md) | Pricing (also in the deck), market, go-to-market |
 | [`docs/build-plan.md`](docs/build-plan.md) | Hack-day scope, owners, hour-by-hour plan |
 | `ppt/` | Round 1 deck on the official template |
