@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.db
+# Raw captures hold cookies and personal data: never committed, only sanitised fixtures are.
+captures/
+*.har
+!src/portmax/connectors/**/fixtures/*.har
