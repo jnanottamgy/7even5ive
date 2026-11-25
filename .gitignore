@@ -8,3 +8,10 @@ video/source/render/
 video/source/probe/
 video/source/sfx/
 __pycache__/
+
+# 75 core: local env, databases and keys never go in git
+core/.venv/
+core/data/
+.env
+*.db
+.pytest_cache/

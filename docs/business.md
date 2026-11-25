@@ -14,7 +14,7 @@ Pricing is shown in the deck, not in the film. Numbers are to be validated in th
 
 **We never sell or share student data. Partners pay for placement, not for profiles.**
 
-Open: which tier SHELF and the MCP connector belong to (see [`decisions.md`](decisions.md)).
+Open: which tier the MCP connector belongs to (see [`decisions.md`](decisions.md)).
 
 ## Market
 
@@ -24,7 +24,7 @@ Open: which tier SHELF and the MCP connector belong to (see [`decisions.md`](dec
 
 ## Go-to-market
 
-- RIT pilot after the hackathon, starting with our own class (SHELF's first users).
+- Pilot with our own class first.
 - Student ambassadors (people, not a product feature), paid commission on paid referrals.
 - Placement season and exam weeks as the hook: the two moments the pain peaks.
 - If several colleges share one portal vendor, one PortMax spec covers all of them.
