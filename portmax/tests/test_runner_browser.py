@@ -7,62 +7,26 @@ mock with a fixed CAPTCHA; on a real portal the student types it.
 from __future__ import annotations
 
 import os
-import socket
-import threading
 import time
 from collections.abc import Iterator
-from dataclasses import dataclass
 from typing import Any
 
 import pytest
-import uvicorn
 
 from portmax.api import RUNNER_JS, phone_settings
 from portmax.connector import Connector
 from portmax.contract import utc_now
 from portmax.ingest import ingest
-from portmax.mock_portal.app import MockPortal, PortalConfig, create_app
-from portmax.mock_portal.data import MockState, default_state, expected_attendance
+from portmax.mock_portal.data import expected_attendance
 from portmax.pages import Page
 from portmax.store import Store
 from portmax.tools import answer
-from tests.conftest import PHONE_UA
+from tests.conftest import IDLE_TIMEOUT, PHONE_UA, LivePortal
 
 os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", "/opt/pw-browsers")
 playwright = pytest.importorskip("playwright.sync_api")
 
 pytestmark = pytest.mark.browser
-
-IDLE_TIMEOUT = 3.0  # seconds; short so the keep-alive test runs fast
-
-
-@dataclass
-class LivePortal:
-    url: str
-    portal: MockPortal
-    state: MockState
-
-
-def _free_port() -> int:
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        port: int = s.getsockname()[1]
-        return port
-
-
-@pytest.fixture
-def live_portal() -> Iterator[LivePortal]:
-    state = default_state()
-    app = create_app(state, PortalConfig(captcha="fixed", idle_timeout_seconds=IDLE_TIMEOUT))
-    port = _free_port()
-    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    while not server.started:
-        time.sleep(0.02)
-    yield LivePortal(f"http://127.0.0.1:{port}", app.state.portal, state)
-    server.should_exit = True
-    thread.join(timeout=5)
 
 
 @pytest.fixture

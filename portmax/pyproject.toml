@@ -52,7 +52,7 @@ mypy_path = "src"
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["selectolax.*", "mcp.*"]
+module = ["selectolax.*", "mcp.*", "reverse_api.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

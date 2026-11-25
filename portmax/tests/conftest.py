@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+import socket
+import threading
+import time
 from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
+import uvicorn
 from fastapi.testclient import TestClient
 
 from portmax.connector import Connector, load_connector
 from portmax.executor import run_plan
-from portmax.mock_portal.app import DASHBOARD, PortalConfig, create_app
+from portmax.mock_portal.app import DASHBOARD, MockPortal, PortalConfig, create_app
 from portmax.mock_portal.data import MockState, default_state
 from portmax.pages import Page
 from portmax.store import Store
@@ -98,3 +103,35 @@ def refresh(connector: Connector, client: TestClient, steps: list[str] | None = 
 def store(tmp_path: Path) -> Store:
     # A file, not ":memory:": the API test serves requests from another thread.
     return Store(f"sqlite:///{tmp_path / 'portmax.db'}")
+
+
+IDLE_TIMEOUT = 3.0  # seconds; short so the keep-alive test runs fast
+
+
+@dataclass
+class LivePortal:
+    url: str
+    portal: MockPortal
+    state: MockState
+
+
+def _free_port() -> int:
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port: int = s.getsockname()[1]
+        return port
+
+
+@pytest.fixture
+def live_portal() -> Iterator[LivePortal]:
+    state = default_state()
+    app = create_app(state, PortalConfig(captcha="fixed", idle_timeout_seconds=IDLE_TIMEOUT))
+    port = _free_port()
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    while not server.started:
+        time.sleep(0.02)
+    yield LivePortal(f"http://127.0.0.1:{port}", app.state.portal, state)
+    server.should_exit = True
+    thread.join(timeout=5)
