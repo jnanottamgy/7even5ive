@@ -106,6 +106,12 @@ def create(app_state: App | None = None) -> FastAPI:
         except Denied as err:
             raise HTTPException(403, str(err)) from err
 
+    @api.get("/api/health")
+    def health() -> dict[str, Any]:
+        # No token: the phone app scans its Wi-Fi for this to find the laptop by itself.
+        # Says only what this is; nothing about any student.
+        return {"service": "7even5ive", "version": 1}
+
     @api.get("/")
     def index() -> FileResponse:
         return FileResponse(WEB / "index.html")

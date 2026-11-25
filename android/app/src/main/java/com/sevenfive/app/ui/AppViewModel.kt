@@ -39,7 +39,10 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     /** One-off messages for the snackbar: the server's own words when it refuses. */
     val messages = _messages.receiveAsFlow()
 
+    val searching: StateFlow<Boolean> = container.finder.searching
+
     init {
+        viewModelScope.launch { container.finder.messages.collect { say(it) } }
         if (Diagnostics.hasUnseen(container.appContext)) {
             say("7even5ive closed unexpectedly last time. Details: Settings → Diagnostics.")
         }
@@ -91,6 +94,8 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         }
         container.cards.refresh()
     }
+
+    fun findLaptop() = viewModelScope.launch { container.finder.find(userAsked = true) }
 
     fun saveServers(config: ServerConfig) {
         container.servers.save(config)

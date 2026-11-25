@@ -16,18 +16,18 @@ Every card shows a small `via bot / classroom / jev / jev+llm / llm` badge: what
 
 ## Run it
 
-1. Start the three backend terminals from [`docs/android.md`](../docs/android.md) section 5
-   (core on 8000 with `HOST=0.0.0.0`, PortMax API on 8002, the mock portal on 8765). Give
-   PortMax the address the phone opens the portal at, or uploads are refused:
-   `PORTMAX_PORTAL_ORIGINS=mockcollege=http://<laptop-ip>:8765` (`http://10.0.2.2:8765` on the
-   emulator).
+1. On the laptop, double-click **`start-demo.bat`** in the repository root (macOS/Linux:
+   `./start-demo.sh`). One window runs the core, PortMax and the mock portal, with the portal
+   address set and kept current. The separate terminals are in
+   [`docs/android.md`](../docs/android.md) section 5.
 2. Open `android/` in Android Studio and run the `app` configuration, or:
    ```bash
    cd android && ./gradlew installDebug
    ```
    Or download `7even5ive-debug-apk` from the latest **Android** workflow run on GitHub.
-3. **Emulator:** works as is (`10.0.2.2`). **Real phone:** same Wi-Fi as the laptop; tap the
-   gear → type the laptop's IPv4 → **Fill in** → **Save and reconnect**.
+3. **Real phone:** on the laptop's Wi-Fi, or the laptop on the phone's hotspot. The app finds
+   the laptop by itself within a few seconds ("Found the laptop at …"). If it doesn't: gear →
+   **Find the laptop**, or type the laptop's IPv4. **Emulator:** works as is (`10.0.2.2`).
 4. Attendance → **Connect portal** → log in as the invented student: USN `1MC24CS042`, date of
    birth 14-08-2005, CAPTCHA `PM42X`, then parent's phone last digits `2345`. The app sees the
    logged-in marker, fetches the pages and attendance appears.

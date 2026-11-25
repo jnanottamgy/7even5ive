@@ -67,9 +67,21 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
             Modifier.padding(inner).fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            val searching by vm.searching.collectAsStateWithLifecycle()
             Text("Laptop on the same Wi-Fi", style = MaterialTheme.typography.titleMedium)
             Text(
-                "Type the laptop's IPv4 address (ipconfig on Windows). On the Android emulator, use 10.0.2.2.",
+                "The app finds the laptop by itself when it runs start-demo and the phone is on " +
+                    "its Wi-Fi or hotspot. Type an address only if that doesn't work.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Button(
+                onClick = { vm.findLaptop() },
+                enabled = !searching,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text(if (searching) "Looking…" else "Find the laptop") }
+            Text(
+                "Or type the laptop's IPv4 address (ipconfig on Windows). On the Android emulator, use 10.0.2.2.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

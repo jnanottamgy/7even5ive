@@ -6,6 +6,7 @@ import com.sevenfive.app.data.CardsRepository
 import com.sevenfive.app.data.CoreApi
 import com.sevenfive.app.data.Http
 import com.sevenfive.app.data.PortMaxApi
+import com.sevenfive.app.data.ServerFinder
 import com.sevenfive.app.data.ServerSettings
 import com.sevenfive.app.portal.PortalEngine
 import com.sevenfive.app.portal.PortalStore
@@ -32,4 +33,5 @@ class AppContainer(context: Context) {
     val cards = CardsRepository(core)
     val portalStore = PortalStore(context)
     val portal = PortalEngine(portmax, cards, portalStore, BuildConfig.COLLEGE)
+    val finder = ServerFinder(servers, cards, portmax)
 }

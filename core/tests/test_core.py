@@ -249,6 +249,12 @@ def test_phone_sets_lists_and_cancels_a_reminder_through_the_gateway(app):
     assert client.get("/api/cards", headers=AUTH).json()["reminders"] == []
 
 
+def test_health_names_the_service_and_nothing_else(app):
+    a, _ = app()
+    body = TestClient(create(a)).get("/api/health").json()
+    assert body == {"service": "7even5ive", "version": 1}
+
+
 def test_phone_tools_keep_the_gateway_rules(app):
     a, sid = app()
     client = TestClient(create(a))
