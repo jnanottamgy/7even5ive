@@ -151,8 +151,11 @@ def play(app: Any, client: Any, sid: int) -> list[str]:
     return lines
 
 
-def main() -> None:
-    sys.stdout.reconfigure(encoding="utf-8")  # Windows consoles default to cp1252
+def prepare() -> tuple[Any, Any, int, bool, list[str]]:
+    """Build the app, seed the student and replay the morning: (app, api, sid, live, lines).
+
+    Shared by the local demo and the cloud service, so both start from the same morning.
+    """
     from fastapi.testclient import TestClient
 
     from .api import create
@@ -166,10 +169,16 @@ def main() -> None:
     )
     sid = seed(app)
     api = create(app)
-    client = TestClient(api)
+    lines = play(app, TestClient(api), sid)
+    return app, api, sid, live, lines
+
+
+def main() -> None:
+    sys.stdout.reconfigure(encoding="utf-8")  # Windows consoles default to cp1252
+    app, api, sid, live, lines = prepare()
     print(f"mode: {'LIVE Jev + Claude' if live else 'offline, recorded answers'}\n")
     print("source    route     outcome      message")
-    print("\n".join(play(app, client, sid)))
+    print("\n".join(lines))
 
     print("\nMCP-style calls through the gateway:")
     gw = app.gateway

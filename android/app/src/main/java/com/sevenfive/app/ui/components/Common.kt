@@ -138,7 +138,7 @@ fun EmptyState(icon: ImageVector, title: String, body: String? = null, modifier:
 
 /** The last good cards stay on screen; this says the server is out of reach and since when. */
 @Composable
-fun OfflineBanner(error: String?, updatedAt: Instant?, onSettings: () -> Unit) {
+fun OfflineBanner(error: String?, updatedAt: Instant?, onSettings: () -> Unit, searching: Boolean = false) {
     if (error == null) return
     Surface(
         color = MaterialTheme.colorScheme.errorContainer,
@@ -149,7 +149,11 @@ fun OfflineBanner(error: String?, updatedAt: Instant?, onSettings: () -> Unit) {
             Icon(Icons.Outlined.CloudOff, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) {
-                Text(error, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+                Text(
+                    if (searching) "Looking for the laptop on this network…" else error,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                )
                 if (updatedAt != null) {
                     Text("Showing data from ${Time.ago(updatedAt)}", style = MaterialTheme.typography.labelSmall)
                 }

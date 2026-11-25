@@ -1,0 +1,186 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  7even5ive demo server: the core, PortMax's phone API and the mock college portal as one
+  service (core/seventy5/cloud.py) on EC2, behind CloudFront for HTTPS. The server builds the
+  public GitHub repository itself; rebooting it pulls and runs the latest code.
+
+Parameters:
+  RepoUrl:
+    Type: String
+    Default: https://github.com/jnanottamgy/7even5ive.git
+    Description: Public Git repository to build.
+  Branch:
+    Type: String
+    Default: claude/busy-pasteur-lake3c
+    Description: Branch to build (the repository's default branch).
+  InstanceType:
+    Type: String
+    Default: t3.small
+    AllowedValues: [t3.micro, t3.small, t3.medium]
+    Description: t3.small (2 GB) builds comfortably; t3.micro (1 GB) works with the swap file.
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+    Description: Latest Amazon Linux 2023, looked up by AWS at deploy time.
+
+Conditions:
+  # EC2 public DNS names: compute-1.amazonaws.com in us-east-1, <region>.compute.amazonaws.com elsewhere.
+  IsUsEast1: !Equals [!Ref "AWS::Region", us-east-1]
+
+Resources:
+  WebSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: 7even5ive demo server, HTTP for CloudFront
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: 7even5ive-demo
+
+  # Lets an administrator open a shell from the console (Session Manager): no SSH, no key pair.
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref InstanceRole]
+
+  Server:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref LatestAmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref InstanceProfile
+      SecurityGroupIds: [!GetAtt WebSecurityGroup.GroupId]
+      MetadataOptions:
+        HttpTokens: required
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs: { VolumeSize: 16, VolumeType: gp3, Encrypted: true }
+      Tags:
+        - Key: Name
+          Value: 7even5ive-demo
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euxo pipefail
+          dnf install -y docker git
+          systemctl enable --now docker
+          # Room for pip to build on a small instance.
+          if [ ! -f /swapfile ]; then
+            { dd if=/dev/zero of=/swapfile bs=1M count=2048 && chmod 600 /swapfile \
+              && mkswap /swapfile && swapon /swapfile \
+              && echo '/swapfile none swap sw 0 0' >> /etc/fstab; } || echo "no swap file; continuing"
+          fi
+          cat > /usr/local/bin/sevenfive-start <<'SCRIPT'
+          #!/bin/bash
+          # Every start: fetch the latest code, rebuild, run. A reboot is a redeploy.
+          set -eux
+          if [ -d /opt/7even5ive/.git ]; then
+            git -C /opt/7even5ive fetch --depth 1 origin "${Branch}"
+            git -C /opt/7even5ive reset --hard FETCH_HEAD
+          else
+            git clone --depth 1 --branch "${Branch}" "${RepoUrl}" /opt/7even5ive
+          fi
+          docker build -t sevenfive /opt/7even5ive
+          docker rm -f sevenfive 2>/dev/null || true
+          exec docker run --name sevenfive -p 80:8000 \
+            -e PORTMAX_DEV_TOKENS=demo-student-token:demo sevenfive
+          SCRIPT
+          chmod +x /usr/local/bin/sevenfive-start
+          cat > /etc/systemd/system/sevenfive.service <<'UNIT'
+          [Unit]
+          Description=7even5ive demo server
+          After=docker.service network-online.target
+          Requires=docker.service
+          Wants=network-online.target
+
+          [Service]
+          ExecStart=/usr/local/bin/sevenfive-start
+          Restart=always
+          RestartSec=10
+          TimeoutStartSec=1200
+
+          [Install]
+          WantedBy=multi-user.target
+          UNIT
+          systemctl daemon-reload
+          systemctl enable --now sevenfive.service
+
+  # A fixed address: stopping and starting the server can't change what CloudFront points at.
+  ServerIp:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: 7even5ive-demo
+
+  ServerIpAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      InstanceId: !Ref Server
+      AllocationId: !GetAtt ServerIp.AllocationId
+
+  # HTTPS in front of the server. Nothing is cached, and every viewer header, cookie and query
+  # string reaches the server: the portal login needs its cookies, Referer and User-Agent.
+  Cdn:
+    Type: AWS::CloudFront::Distribution
+    DependsOn: ServerIpAssociation
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: 7even5ive demo server
+        PriceClass: PriceClass_200
+        HttpVersion: http2
+        Origins:
+          - Id: server
+            # The Elastic IP's public DNS name, e.g. ec2-13-233-1-2.ap-south-1.compute.amazonaws.com
+            DomainName: !If
+              - IsUsEast1
+              - !Sub
+                - "ec2-${Dashed}.compute-1.amazonaws.com"
+                - Dashed: !Join ["-", !Split [".", !Ref ServerIp]]
+              - !Sub
+                - "ec2-${Dashed}.${AWS::Region}.compute.amazonaws.com"
+                - Dashed: !Join ["-", !Split [".", !Ref ServerIp]]
+            CustomOriginConfig:
+              OriginProtocolPolicy: http-only
+              HTTPPort: 80
+              OriginReadTimeout: 60
+        DefaultCacheBehavior:
+          TargetOriginId: server
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS, PUT, PATCH, POST, DELETE]
+          CachedMethods: [GET, HEAD]
+          Compress: true
+          # Managed policies: CachingDisabled, and AllViewerAndCloudFrontHeaders-2022-06 (every
+          # viewer header incl. Host, plus CloudFront-Forwarded-Proto so the server knows the
+          # phone used HTTPS).
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          OriginRequestPolicyId: 33f36d7e-f396-46d9-90e0-52428a34d9dc
+
+Outputs:
+  AppUrl:
+    Description: Put this in android/gradle.properties as sevenfive.defaultServer.
+    Value: !Sub https://${Cdn.DomainName}
+  HealthCheck:
+    Description: Should answer {"service":"7even5ive","version":1} about 10 minutes after creation.
+    Value: !Sub https://${Cdn.DomainName}/api/health
+  ServerDirect:
+    Description: The EC2 server itself (HTTP, fixed Elastic IP), for troubleshooting.
+    Value: !Sub http://${ServerIp}

@@ -1,0 +1,15 @@
+# Render Blueprint: Render → New → Blueprint → this repository → Apply.
+# One free web service in Singapore (nearest Render region to India). Render sets
+# RENDER_EXTERNAL_URL, which the service uses as its own address (core/seventy5/cloud.py).
+services:
+  - type: web
+    name: 7even5ive
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: PORTMAX_DEV_TOKENS
+        value: demo-student-token:demo

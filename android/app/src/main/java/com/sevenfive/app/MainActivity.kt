@@ -32,6 +32,7 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { container.cards.pollForever() }
+                launch { container.finder.runWhileStarted() }
                 launch { sync.runWhileStarted() }
             }
         }

@@ -82,4 +82,30 @@ class CoreApiTest {
         assertEquals("http://192.168.1.20:8002", c.portmaxUrl)
         assertEquals("http://192.168.1.20:8765", c.portalUrl)
     }
+
+    @Test
+    fun `an online address serves everything from one place`() {
+        val c = ServerConfig.parse("7even5ive.onrender.com/")
+        assertEquals("https://7even5ive.onrender.com", c.coreUrl)
+        assertEquals(c.coreUrl, c.portmaxUrl)
+        assertEquals(c.coreUrl, c.portalUrl)
+        assertTrue(c.isOnline)
+        assertEquals(c, ServerConfig.parse("https://7even5ive.onrender.com"))
+    }
+
+    @Test
+    fun `a laptop IP still means the three local ports`() {
+        val c = ServerConfig.parse("10.72.161.15")
+        assertEquals("http://10.72.161.15:8000", c.coreUrl)
+        assertEquals("http://10.72.161.15:8765", c.portalUrl)
+        assertTrue(!c.isOnline)
+        assertEquals(c, ServerConfig.parse("http://10.72.161.15:8000"))
+    }
+
+    @Test
+    fun `a server's own HTTP address without a port is one address too`() {
+        val c = ServerConfig.parse("http://13.233.1.2")
+        assertEquals("http://13.233.1.2", c.portalUrl)
+        assertTrue(c.isOnline)
+    }
 }

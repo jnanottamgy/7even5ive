@@ -6,6 +6,7 @@ import com.sevenfive.app.data.CardsRepository
 import com.sevenfive.app.data.CoreApi
 import com.sevenfive.app.data.Http
 import com.sevenfive.app.data.PortMaxApi
+import com.sevenfive.app.data.ServerFinder
 import com.sevenfive.app.data.ServerSettings
 import com.sevenfive.app.portal.PortalEngine
 import com.sevenfive.app.portal.PortalStore
@@ -25,11 +26,12 @@ class SevenFiveApp : Application() {
 /** Hand-wired dependencies: a prototype doesn't need a DI framework. */
 class AppContainer(context: Context) {
     val appContext: Context = context.applicationContext
-    val servers = ServerSettings(context, BuildConfig.DEFAULT_HOST)
+    val servers = ServerSettings(context, BuildConfig.DEFAULT_HOST, BuildConfig.DEFAULT_SERVER)
     private val http = Http(BuildConfig.STUDENT_TOKEN)
     val core = CoreApi(http) { servers.config.value.coreUrl }
     val portmax = PortMaxApi(http) { servers.config.value.portmaxUrl }
     val cards = CardsRepository(core)
     val portalStore = PortalStore(context)
     val portal = PortalEngine(portmax, cards, portalStore, BuildConfig.COLLEGE)
+    val finder = ServerFinder(servers, cards, portmax)
 }

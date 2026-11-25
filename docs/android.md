@@ -56,6 +56,15 @@ The app never calls Google, the WhatsApp bot, Jev or the LLM directly; the backe
 
 ## 5. Running the backend for the phone
 
+**The easy way:** double-click `start-demo.bat` in the repository root (macOS/Linux:
+`./start-demo.sh`). It sets up Python on the first run, finds the laptop's IP, starts all three
+servers below in one window, sets `PORTMAX_PORTAL_ORIGINS` itself, and restarts PortMax when the
+IP changes (a hotspot restart). The app finds the laptop on its Wi-Fi or hotspot by itself
+(`GET /api/health` on the phone's /24), so nobody types an address. Settings → **Find the
+laptop** searches on demand; typing an address still works as a fallback.
+
+The three terminals below are what it runs, for when you need them separately.
+
 Everything runs on a laptop; the phone must be on the **same Wi-Fi**. Use the laptop's LAN IP
 (`ipconfig` → IPv4, e.g. `192.168.1.20`). On the Android emulator use `10.0.2.2` instead.
 

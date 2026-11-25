@@ -14,6 +14,8 @@ data class CardsState(
     val loading: Boolean = true,
     /** Why the last poll failed; the last good cards stay on screen. */
     val error: String? = null,
+    /** The last poll couldn't reach the server at all (wrong or changed address). */
+    val unreachable: Boolean = false,
     val updatedAt: Instant? = null,
 )
 
@@ -40,7 +42,7 @@ class CardsRepository(private val core: CoreApi) {
                 }
                 _state.value = CardsState(cards, loading = false, error = null, updatedAt = Instant.now())
             } catch (e: ApiException) {
-                _state.update { it.copy(loading = false, error = e.detail) }
+                _state.update { it.copy(loading = false, error = e.detail, unreachable = e.status == 0) }
             }
         }
     }

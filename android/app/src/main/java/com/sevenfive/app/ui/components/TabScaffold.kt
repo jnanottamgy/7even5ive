@@ -40,6 +40,7 @@ fun TabScaffold(
     content: @Composable () -> Unit,
 ) {
     val state by vm.cards.collectAsStateWithLifecycle()
+    val searching by vm.searching.collectAsStateWithLifecycle()
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val scope = rememberCoroutineScope()
     var pulling by remember { mutableStateOf(false) }
@@ -63,7 +64,7 @@ fun TabScaffold(
         },
     ) { inner ->
         Column(Modifier.padding(inner).fillMaxSize()) {
-            OfflineBanner(state.error, state.updatedAt, onSettings)
+            OfflineBanner(state.error, state.updatedAt, onSettings, searching)
             if (subtitle != null) {
                 Text(
                     subtitle,

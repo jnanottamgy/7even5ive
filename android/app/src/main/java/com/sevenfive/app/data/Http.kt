@@ -25,8 +25,9 @@ private val JSON_TYPE = "application/json; charset=utf-8".toMediaType()
  */
 class Http(private val token: String) {
     val client: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(6, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
+        .connectTimeout(10, TimeUnit.SECONDS)
+        // A free online server sleeps when idle and takes up to a minute to wake: wait for it.
+        .readTimeout(70, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 

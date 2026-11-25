@@ -1,6 +1,7 @@
 // Plays the Android WebView against the real servers: the same runner.js, and the start script
 // read straight out of PortalEngine.kt, so the check runs the app's own JavaScript.
 //   node android/e2e/portal-e2e.js      (core :8000, PortMax API :8002, mock portal :8765)
+//   BASE=https://… node android/e2e/portal-e2e.js   (the cloud service: one address for all three)
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
@@ -10,7 +11,9 @@ const indent = Math.min(...raw.split('\n').filter(l => l.trim()).map(l => l.matc
 const T = raw.split('\n').map(l => l.slice(indent)).join('\n').split('${PortalBridge.NAME}').join('SevenFiveBridge');
 const H = { Authorization: 'Bearer demo-student-token' };
 const HOST = process.env.HOST || '127.0.0.1';
-const PORTAL = `http://${HOST}:8765`, PM = `http://${HOST}:8002`, CORE = `http://${HOST}:8000`;
+// BASE: the cloud service, where one address serves the core, PortMax and the portal.
+const BASE = process.env.BASE && process.env.BASE.replace(/\/$/, '');
+const PORTAL = BASE || `http://${HOST}:8765`, PM = BASE || `http://${HOST}:8002`, CORE = BASE || `http://${HOST}:8000`;
 const script = (settings, keepAlive, nonce) =>
   T.split('$settingsJson').join(settings).split('$call').join(keepAlive ? 'keepAlive' : 'run').split('$nonce').join(nonce);
 
