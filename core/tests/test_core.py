@@ -229,6 +229,49 @@ def test_cancelled_reminder_never_fires(app):
         clock.freeze(None)
 
 
+# --- the phone's API ---------------------------------------------------------------------
+AUTH = {"authorization": f"Bearer {demo.TOKEN}"}
+
+
+def test_phone_sets_lists_and_cancels_a_reminder_through_the_gateway(app):
+    a, sid = app()
+    item = _dated_item(a, sid)
+    client = TestClient(create(a))
+    r = client.post("/api/tools/set_reminder", json={"args": {"item_id": item, "before_minutes": 60}},
+                    headers=AUTH)
+    assert r.status_code == 200 and r.json()["status"] == "ok"
+    rid = r.json()["result"]["reminder_id"]
+    listed = client.post("/api/tools/list_reminders", headers=AUTH).json()["result"]
+    assert [x["reminder_id"] for x in listed] == [rid]
+    assert [x["reminder_id"] for x in client.get("/api/cards", headers=AUTH).json()["reminders"]] == [rid]
+    out = client.post("/api/tools/cancel_reminder", json={"args": {"reminder_id": rid}}, headers=AUTH)
+    assert out.json()["result"]["cancelled"]
+    assert client.get("/api/cards", headers=AUTH).json()["reminders"] == []
+
+
+def test_phone_tools_keep_the_gateway_rules(app):
+    a, sid = app()
+    client = TestClient(create(a))
+    assert client.post("/api/tools/due_this_week").status_code == 401
+    denied = client.post("/api/tools/send_email", json={"args": {"to": "x"}}, headers=AUTH)
+    assert denied.status_code == 403 and denied.json()["detail"] == "send_email is not allowed"
+    bad = client.post("/api/tools/set_reminder", json={"args": {"item_id": 9999}}, headers=AUTH)
+    assert bad.status_code == 403
+    assert client.post("/api/tools/due_this_week", json={"args": []}, headers=AUTH).status_code == 400
+
+
+def test_calendar_from_the_phone_waits_for_a_tap_and_approves_once(app):
+    a, sid = app()
+    item = _dated_item(a, sid)
+    client = TestClient(create(a))
+    out = client.post("/api/tools/add_to_calendar", json={"args": {"item_id": item}}, headers=AUTH)
+    assert out.json()["status"] == "approval_needed"
+    token = client.get("/api/cards", headers=AUTH).json()["approvals"][0]["token"]
+    assert client.post("/api/approve", json={"token": token}, headers=AUTH).status_code == 200
+    again = client.post("/api/approve", json={"token": token}, headers=AUTH)
+    assert again.status_code == 403 and again.json()["detail"] == "approval already used"
+
+
 # --- Lambda handlers --------------------------------------------------------------------
 def test_cascade_handler_reports_only_the_failed_record(app, monkeypatch):
     from seventy5 import aws

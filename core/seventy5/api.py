@@ -15,7 +15,7 @@ from typing import Any
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse
 
-from . import tools
+from . import notify, tools
 from .app import App, build
 from .gateway import Denied
 from .ingress import BadSignature, accept, verify
@@ -70,6 +70,7 @@ def create(app_state: App | None = None) -> FastAPI:
             "approvals": [{"action": r["action"], "args": json.loads(r["args"]),
                            "token": r["token"]} for r in db.pending(sid)],
             "calendar": [dict(r) for r in db.calendar(sid)],
+            "reminders": notify.list_reminders(db, sid),
             "audit": [dict(r) for r in db.audit_log(sid)][:12],
         }
 
@@ -78,6 +79,21 @@ def create(app_state: App | None = None) -> FastAPI:
         sid = student_from(authorization)
         try:
             return state.gateway.approve(sid, body.get("token", ""))
+        except Denied as err:
+            raise HTTPException(403, str(err)) from err
+
+    @api.post("/api/tools/{tool}")
+    def call_tool(tool: str, body: dict[str, Any] | None = None,
+                  authorization: str | None = Header(None)) -> dict[str, Any]:
+        # The app's door to the same gateway an MCP client uses. No approval token here:
+        # an "ask" tool returns approval_needed, and the tap goes through /api/approve.
+        sid = student_from(authorization)
+        args = (body or {}).get("args")
+        args = {} if args is None else args
+        if not isinstance(args, dict):
+            raise HTTPException(400, "args must be an object")
+        try:
+            return state.gateway.call(sid, tool, args)
         except Denied as err:
             raise HTTPException(403, str(err)) from err
 
