@@ -38,14 +38,14 @@ class Settings:
     # After an outage, never reach further back than this.
     lookback: timedelta = timedelta(days=7)
     max_mails_per_run: int = 200
-    max_listed: int = 2000
     # What Claude reads of one mail's text; the rest is cut and marked.
     max_text_chars: int = 15_000
     check_now_cooldown: timedelta = timedelta(minutes=5)
     # A mail Claude could not judge is tried at this many checks, then given up.
     max_attempts: int = 3
-    # A check holds the student's mailbox this long at most (a Lambda runs 15 minutes at most).
-    lease: timedelta = timedelta(minutes=14)
+    # A check's hold on the mailbox, renewed before every mail: it lapses only when the check
+    # died, and then another check may take over.
+    lease: timedelta = timedelta(minutes=10)
     # The Jev slot: a sorter may drop a mail as "other" without Claude only at this confidence.
     sorter_threshold: float = 0.9
     # Google sign-in for development and the demo (production: AgentCore Identity).

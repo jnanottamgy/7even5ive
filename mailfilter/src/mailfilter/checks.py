@@ -19,6 +19,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from mailfilter.contract import KEPT_KINDS, DatedQuote, KeptKind, Proposal
 from mailfilter.dates import END_OF_DAY, mentions
 from mailfilter.mail import MailMessage
+from mailfilter.mime import clean_link
 from mailfilter.timekit import IST, to_ist
 
 LIMITS = {"title": 100, "organisation": 120, "role": 120, "details": 300, "quote": 300}
@@ -135,25 +136,29 @@ def _dated(
     return moment, clock is not None
 
 
-def _link(
-    proposed: str | None, mail: MailMessage, mail_text: str, rejected: list[str]
-) -> str | None:
+def _link(proposed: str | None, mail: MailMessage, rejected: list[str]) -> str | None:
     if proposed is None:
         return None
-    link = proposed.strip()
+    link = clean_link(proposed)
     if not link:
         return None
-    parts = urlsplit(link)
+    try:
+        parts = urlsplit(link)
+        host = parts.hostname
+    except ValueError:  # "https://[insert form link here]" and other unparseable text
+        rejected.append("form_link:bad_link")
+        return None
     if parts.scheme.lower() != "https":
         rejected.append("form_link:not_https")
         return None
-    if not parts.hostname or "@" in parts.netloc or any(c.isspace() for c in link):
+    if not host or "@" in parts.netloc or any(c.isspace() for c in link):
         rejected.append("form_link:bad_link")
         return None
     if len(link) > 2000:
         rejected.append("form_link:too_long")
         return None
-    if link not in mail.content.links and link not in mail_text:
+    # Exactly a link the mail contains, never a piece of one: a shortened link is a broken one.
+    if link not in mail.content.links:
         rejected.append("form_link:not_in_mail")
         return None
     return link
@@ -184,37 +189,53 @@ def check(proposal: Proposal, mail: MailMessage, mail_text: str) -> Checked:
         deadline=deadline[0] if deadline else None,
         event_date=event[0] if event else None,
         event_has_time=bool(event and event[1]),
-        form_link=_link(proposal.form_link, mail, mail_text, rejected),
+        form_link=_link(proposal.form_link, mail, rejected),
         details=_span("details", proposal.details, mail_text, rejected),
         rejected=tuple(rejected),
     )
 
 
-def canonical_link(link: str) -> str:
+def canonical_link(link: str) -> str | None:
     """A form link as a matching key: host lower-cased, tracking and fragment dropped."""
-    parts = urlsplit(link)
+    try:
+        parts = urlsplit(link)
+        host = (parts.hostname or "").lower()
+    except ValueError:
+        return None
     query = [
         (k, v)
         for k, v in parse_qsl(parts.query, keep_blank_values=True)
         if not k.startswith("utm_")
     ]
-    path = parts.path.rstrip("/")
-    return urlunsplit(("https", (parts.hostname or "").lower(), path, urlencode(query), ""))
+    return urlunsplit(("https", host, parts.path.rstrip("/"), urlencode(query), ""))
 
 
-def specific_link(link: str) -> bool:
-    """A link that names one form, not a portal's front page shared by many notices."""
-    parts = urlsplit(link)
-    return bool(parts.path.strip("/") or parts.query)
+def link_key(link: str | None) -> str | None:
+    """The key a link gives a card, or None for a portal's front page shared by many notices."""
+    if not link:
+        return None
+    try:
+        parts = urlsplit(link)
+    except ValueError:
+        return None
+    if not (parts.path.strip("/") or parts.query):
+        return None
+    key = canonical_link(link)
+    return key[:300] if key else None
 
 
-def card_key(checked: Checked, mail: MailMessage) -> str:
-    """Which existing card a mail belongs to: the same form, else the same company and role,
-    else the same Gmail conversation."""
-    if checked.form_link and specific_link(checked.form_link):
-        return f"link:{checked.kind}:{canonical_link(checked.form_link)}"[:300]
-    if checked.organisation and checked.role:
-        return f"org:{checked.kind}:{normalise(checked.organisation)}|{normalise(checked.role)}"[
-            :300
-        ]
-    return f"thread:{mail.thread_id}"
+_LITTLE_WORDS = frozenset((
+    "a", "an", "and", "at", "by", "for", "from", "in", "is", "of", "on", "re", "fw", "fwd",
+    "the", "to", "with", "reminder", "update", "updated", "revised", "last", "date",
+    "extended", "new", "notice",
+))  # fmt: skip
+
+
+def title_words(title: str) -> frozenset[str]:
+    return frozenset(re.findall(r"[a-z0-9]+", normalise(title))) - _LITTLE_WORDS
+
+
+def same_title(first: str, second: str) -> bool:
+    """Two titles name the same thing when most of their words are shared."""
+    a, b = title_words(first), title_words(second)
+    return bool(a and b) and len(a & b) / len(a | b) >= 0.5

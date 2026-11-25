@@ -4,7 +4,7 @@ from datetime import datetime
 
 import pytest
 
-from mailfilter.checks import Checked, canonical_link, card_key, check
+from mailfilter.checks import Checked, canonical_link, check, link_key, same_title
 from mailfilter.contract import OTHER, DatedQuote, Proposal
 from mailfilter.fake import FakeMail, FakeMailbox, build_raw
 from mailfilter.mail import MailMessage, render
@@ -172,43 +172,16 @@ def test_dates_too_far_ahead_are_refused() -> None:
     assert check(answer, mail, render(mail).checkable).rejected == ("deadline:too_far",)
 
 
-def test_card_keys_match_the_same_opportunity_and_nothing_else() -> None:
-    drive, text = sample("nimbus_drive")
-    forward, forward_text = sample("forward_of_drive")
-    a = check(BY_KEY["nimbus_drive"].golden, drive, text)
-    b = check(BY_KEY["forward_of_drive"].golden, forward, forward_text)
-    assert card_key(a, drive) == card_key(b, forward)  # same form, different conversation
-    sde, sde_text = sample("orbit_sde")
-    analyst, analyst_text = sample("orbit_analyst")
-    key_sde = card_key(check(BY_KEY["orbit_sde"].golden, sde, sde_text), sde)
-    key_analyst = card_key(check(BY_KEY["orbit_analyst"].golden, analyst, analyst_text), analyst)
-    assert key_sde.startswith("org:internship:orbit labs|") and key_sde != key_analyst
-    pdf, pdf_text = sample("pdf_only")
-    assert (
-        card_key(check(BY_KEY["pdf_only"].golden, pdf, pdf_text), pdf) == f"thread:{pdf.thread_id}"
-    )
-
-
-def test_a_portal_front_page_does_not_merge_notices() -> None:
+def test_only_a_specific_link_can_tie_mails_together() -> None:
     assert canonical_link("https://Forms.GLE/Abc/?utm_source=x&id=7#top") == (
         "https://forms.gle/Abc?id=7"
     )
-    portal = check(
-        proposal("exam_notice", "SEE hall tickets available", link=None),
-        *sample("hall_ticket_http"),
-    )
-    mail, _ = sample("hall_ticket_http")
-    front_page = Checked(
-        "exam_notice",
-        "t",
-        None,
-        None,
-        None,
-        None,
-        False,
-        "https://exam.mockcollege.edu.in/",
-        None,
-        (),
-    )
-    assert card_key(front_page, mail) == f"thread:{mail.thread_id}"
-    assert card_key(portal, mail) == f"thread:{mail.thread_id}"
+    assert link_key("https://forms.gle/Abc/") == "https://forms.gle/Abc"
+    assert link_key("https://exam.mockcollege.edu.in/") is None  # a portal's front page
+    assert link_key("https://[broken") is None and link_key(None) is None
+
+
+def test_titles_name_the_same_thing_by_their_words() -> None:
+    assert same_title("Nimbus Systems Campus Drive", "Reminder: Nimbus Systems Campus Drive")
+    assert not same_title("SEE Timetable – Odd Semester", "Revaluation applications – SEE")
+    assert not same_title("", "Drive")

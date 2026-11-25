@@ -145,11 +145,10 @@ def test_gmail_link_without_an_address_or_message_id() -> None:
 def test_an_older_authoritative_mail_only_fills_gaps(store: Store) -> None:
     def draft(when: datetime, deadline: datetime | None, role: str | None) -> CardDraft:
         return CardDraft(
-            key="link:placement:https://forms.gle/x", kind="placement", title="Drive",
-            organisation="Org", role=role, deadline=deadline, event_date=None,
-            event_has_time=False, form_link="https://forms.gle/x", details=None,
-            received_at=when, message_id=f"m{when:%d%H}", rfc822_id=None, thread_id="t",
-            authoritative=True,
+            kind="placement", title="Drive", organisation="Org", role=role, deadline=deadline,
+            event_date=None, event_has_time=False, form_link="https://forms.gle/x",
+            link_key="https://forms.gle/x", details=None, received_at=when, news_at=when,
+            forwarded=False, message_id=f"m{when:%d%H}", rfc822_id=None, thread_id="t",
         )  # fmt: skip
 
     now = at(3, 9)

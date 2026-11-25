@@ -9,7 +9,7 @@ out, everything after a moment. A mail can be hidden from listing (Gmail indexin
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from email.message import EmailMessage
 from email.utils import format_datetime
@@ -87,12 +87,35 @@ class FakeMailbox:
     list_error: Exception | None = None
     # The present moment: mail received later does not exist yet. None shows everything.
     now: Callable[[], datetime] | None = None
+    # Gmail's change history: (history id, message id) for mail that arrived or was moved out
+    # of spam or trash. History at or below `history_floor` has expired.
+    history: list[tuple[int, str]] = field(default_factory=list)
+    history_counter: int = 1000
+    history_floor: int = 0
     got: list[str] = field(default_factory=list)
 
     def add(self, mails: Iterable[FakeMail]) -> None:
         self.mails.extend(mails)
 
-    def list_ids(self, after: datetime, limit: int) -> tuple[list[str], bool]:
+    def _record(self, message_id: str) -> None:
+        self.history_counter += 1
+        self.history.append((self.history_counter, message_id))
+
+    def arrive(self, mail: FakeMail) -> None:
+        self.mails.append(mail)
+        self._record(mail.id)
+
+    def move_to_inbox(self, message_id: str) -> None:
+        """The student rescues a mail from spam or trash; Gmail records the label change."""
+        self.mails = [
+            replace(mail, labels=(mail.labels - {"SPAM", "TRASH"}) | {"INBOX"})
+            if mail.id == message_id
+            else mail
+            for mail in self.mails
+        ]
+        self._record(message_id)
+
+    def list_ids(self, after: datetime) -> list[str]:
         if self.list_error is not None:
             raise self.list_error
         visible = [
@@ -104,8 +127,16 @@ class FakeMailbox:
             and not mail.labels & {"SPAM", "TRASH"}
         ]
         visible.sort(key=lambda mail: mail.received_at, reverse=True)
-        ids = [mail.id for mail in visible]
-        return ids[:limit], len(ids) > limit
+        return [mail.id for mail in visible]
+
+    def history_id(self) -> str:
+        return str(self.history_counter)
+
+    def changed_since(self, history_id: str) -> list[str] | None:
+        start = int(history_id)
+        if start < self.history_floor:
+            return None
+        return list(dict.fromkeys(mid for hid, mid in self.history if hid > start))
 
     def get(self, message_id: str) -> MailMessage | None:
         self.got.append(message_id)

@@ -46,7 +46,7 @@ def render(mail: MailMessage) -> Rendered:
     if content.attachments:
         lines.append("Attachments (not read): " + ", ".join(content.attachments[:10]))
     lines += ["", "--- mail text ---", content.text or "(no text)"]
-    extra = [link for link in content.links if link not in content.text]
+    extra = [link for link in content.links if link not in content.text][:40]
     if extra:
         lines += ["--- links in the mail ---", *extra]
     lines.append("--- end of mail ---")

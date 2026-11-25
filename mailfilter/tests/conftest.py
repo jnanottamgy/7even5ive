@@ -66,6 +66,17 @@ class GmailFake:
     fail: dict[str, list[tuple[int, dict[str, Any], dict[str, str]]]] = field(default_factory=dict)
     requests: list[httpx.Request] = field(default_factory=list)
     tokens_seen: list[str] = field(default_factory=list)
+    history_counter: int = 5000
+    history_floor: int = 0
+    history_records: list[dict[str, Any]] = field(default_factory=list)
+
+    def record(self, kind: str, mail: FakeMail, labels: list[str] | None = None) -> None:
+        """A Gmail history record: kind "messagesAdded" or "labelsRemoved"."""
+        self.history_counter += 1
+        entry: dict[str, Any] = {"message": {"id": mail.id, "threadId": mail.thread_id}}
+        if labels is not None:
+            entry["labelIds"] = labels
+        self.history_records.append({"id": str(self.history_counter), kind: [entry]})
 
     def queue(self, fragment: str, status: int, body: dict[str, Any] | None = None,
               headers: dict[str, str] | None = None) -> None:  # fmt: skip
@@ -80,7 +91,23 @@ class GmailFake:
                 status, body, headers = queued.pop(0)
                 return httpx.Response(status, json=body, headers=headers)
         if path.endswith("/profile"):
-            return httpx.Response(200, json={"emailAddress": self.address, "messagesTotal": 1})
+            return httpx.Response(200, json={"emailAddress": self.address, "messagesTotal": 1,
+                                             "historyId": str(self.history_counter)})  # fmt: skip
+        if path.endswith("/history"):
+            start = int(request.url.params["startHistoryId"])
+            assert request.url.params.get_list("historyTypes") == ["messageAdded", "labelRemoved"]
+            if start < self.history_floor:
+                return httpx.Response(404, json={"error": {"code": 404, "message": "Not Found"}})
+            newer = [r for r in self.history_records if int(r["id"]) > start]
+            offset = int(request.url.params.get("pageToken", "0") or 0)
+            size = min(self.page_size, int(request.url.params.get("maxResults", "100")))
+            body = {
+                "history": newer[offset : offset + size],
+                "historyId": str(self.history_counter),
+            }
+            if offset + size < len(newer):
+                body["nextPageToken"] = str(offset + size)
+            return httpx.Response(200, json=body)
         if path.endswith("/messages"):
             query = request.url.params.get("q", "")
             match = re.fullmatch(r"after:(\d+)", query)

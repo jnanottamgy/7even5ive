@@ -24,9 +24,11 @@ deadlines this week?", Claude Code answers from the same cards.
 
 ## How a check works
 
-1. List the mail since the last check (Gmail `after:` in exact seconds: a plain date means
-   midnight Pacific time), two hours of overlap for mail Gmail lists late, oldest first. The first
-   check after connecting reads exactly that day, from midnight India time.
+1. Retry, by id, mail that could not be judged before; take in what Gmail's change history says
+   arrived or was moved out of spam or trash (a rescued mail keeps its old date); then list the
+   mail since the last check (Gmail `after:` in exact seconds: a plain date means midnight
+   Pacific time), two hours of overlap for mail Gmail lists late, oldest first. The first check
+   after connecting reads exactly that day, from midnight India time.
 2. Skip mail already judged (by id), sent mail, drafts, spam and trash.
 3. The Jev slot may drop obvious junk (only as "other", only at 90% confidence or more). Off.
 4. Claude reads the sender, subject, text (cut at 15,000 characters), every link and the names of
@@ -35,10 +37,12 @@ deadlines this week?", Claude Code answers from the same cards.
    quote names, at the time it names (23:59 when none), not before the mail arrived; a form link
    must be https, carry no user name, and appear in the mail.
 6. Save the outcome and, for a kept mail, the card, in one transaction. A reminder or forward of
-   the same opportunity updates the card (same form link, else same company and role, else same
-   conversation); a forward fills gaps but never overrides.
+   the same opportunity updates the card (same form link from the same company, else the same
+   conversation and title, else the same company and role). Per field the newest news wins, and
+   a forward counts from the date of the mail it forwards.
 7. The next check starts after settled mail only: an outage, a mail Claude cannot judge (retried at
-   three checks, then given up) or a cap never loses a mail.
+   three checks, then given up), a cap, a disconnect mid-check or two checks overlapping (a lease
+   renewed before every mail) never loses a mail or judges one twice.
 
 ## Getting into Gmail (confirmed on Google's pages, 25 Nov)
 
@@ -63,7 +67,10 @@ Bedrock prices separately, so confirm). The Jev slot and prompt caching bring it
 ## Build status
 
 Built on 25 Nov in [`mailfilter/`](../mailfilter): Python 3.12+, ruff and strict mypy clean,
-173 tests passing offline, 30 invented sample mails.
+206 tests passing offline, 30 invented sample mails. An independent review found 11 bugs (lost
+mail at a listing cap, stale dates kept, drives merged through a shared portal link, date ranges
+misread, mail rescued from spam never read, overlapping checks, a disconnect leaving data); each
+is fixed and has a test that failed before the fix.
 
 | Part | Status | Code |
 | --- | --- | --- |

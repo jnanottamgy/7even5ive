@@ -5,6 +5,7 @@ from datetime import datetime
 import httpx
 import pytest
 
+from mailfilter import gmail
 from mailfilter.errors import (
     CollegeBlocked,
     GmailConfigError,
@@ -40,8 +41,7 @@ def mailbox(
 def test_listing_pages_through_everything_newest_first() -> None:
     fake = GmailFake(fake_mails(), page_size=7)
     box, _ = mailbox(fake)
-    ids, capped = box.list_ids(MONDAY, 2000)
-    assert not capped
+    ids = box.list_ids(MONDAY)
     assert len(ids) == 30
     received = {m.id: m.received_at for m in fake.mails}
     assert [received[i] for i in ids] == sorted(received.values(), reverse=True)
@@ -49,10 +49,42 @@ def test_listing_pages_through_everything_newest_first() -> None:
     assert query["q"] == f"after:{int(MONDAY.timestamp())}"  # seconds: exact, not Pacific days
 
 
-def test_listing_stops_at_the_limit_and_says_so() -> None:
+def test_listing_never_cuts_the_list_it_stops_loudly_instead(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(gmail, "MAX_LISTED", 10)
     box, _ = mailbox(GmailFake(fake_mails(), page_size=7))
-    ids, capped = box.list_ids(MONDAY, 10)
-    assert len(ids) == 10 and capped
+    with pytest.raises(GmailUnavailable) as raised:
+        box.list_ids(MONDAY)
+    assert raised.value.detail == "listing_too_large"
+
+
+def test_a_page_token_that_repeats_stops_the_listing() -> None:
+    fake = GmailFake(fake_mails())
+    looping = {"messages": [{"id": fake.mails[0].id}], "nextPageToken": "same"}
+    fake.queue("/messages", 200, looping)
+    fake.queue("/messages", 200, looping)
+    box, _ = mailbox(fake)
+    with pytest.raises(GmailUnavailable) as raised:
+        box.list_ids(MONDAY)
+    assert raised.value.detail == "listing_loops"
+
+
+def test_history_names_mail_that_arrived_or_left_spam() -> None:
+    fake = GmailFake(fake_mails(), page_size=1)
+    start = fake.history_counter
+    fake.record("messagesAdded", fake.mails[0])
+    fake.record("labelsRemoved", fake.mails[1], ["SPAM", "UNREAD"])
+    fake.record("labelsRemoved", fake.mails[2], ["UNREAD"])  # only read: not a rescue
+    box, _ = mailbox(fake)
+    assert box.history_id() == str(fake.history_counter)
+    assert box.changed_since(str(start)) == [fake.mails[0].id, fake.mails[1].id]
+
+
+def test_expired_history_is_none_not_an_error() -> None:
+    fake = GmailFake(fake_mails(), history_floor=6000)
+    box, _ = mailbox(fake)
+    assert box.changed_since("5000") is None
 
 
 def test_a_mail_comes_back_parsed_with_its_labels_and_time() -> None:
@@ -155,7 +187,7 @@ def test_forbidden_answers_are_named(reason: str, error: type[Exception]) -> Non
     fake.queue("/messages", 403, google_error(403, reason))
     box, _ = mailbox(fake)
     with pytest.raises(error):
-        box.list_ids(MONDAY, 100)
+        box.list_ids(MONDAY)
 
 
 def test_one_broken_mail_is_unreadable_not_an_outage() -> None:
@@ -182,10 +214,11 @@ def test_quota_pacing_waits_instead_of_tripping_googles_limit() -> None:
 
 def test_the_client_has_no_way_to_change_mail() -> None:
     public = {name for name in dir(GmailMailbox) if not name.startswith("_")}
-    assert public == {"list_ids", "get", "email_address"}
+    assert public == {"list_ids", "get", "email_address", "history_id", "changed_since"}
     fake = GmailFake(fake_mails())
     box, _ = mailbox(fake)
-    box.list_ids(MONDAY, 50)
+    box.list_ids(MONDAY)
     box.get(fake.mails[0].id)
     box.email_address()
+    box.changed_since(box.history_id())
     assert {request.method for request in fake.requests} == {"GET"}

@@ -19,7 +19,9 @@ _TRAILING = ".,;:!?)]}'\""
 _INVISIBLE = dict.fromkeys(map(ord, "​‌‍⁠﻿­"), None)
 _FORWARD_SUBJECT = re.compile(r"^\s*(fwd?|fw)\s*:", re.IGNORECASE)
 _FORWARD_MARK = re.compile(r"-{3,}\s*forwarded message\s*-{3,}|begin forwarded message", re.I)
-MAX_LINKS = 40
+_FORWARD_DATE = re.compile(r"^\s*\*?(?:date|sent)\s*:\*?\s*(.+)$", re.IGNORECASE | re.MULTILINE)
+# Every link is kept for the checks; what Claude is shown is capped in mail.render.
+MAX_LINKS = 300
 
 
 @dataclass(frozen=True)
@@ -33,6 +35,9 @@ class MailContent:
     text: str
     links: tuple[str, ...]
     truncated: bool
+    # The "Date:" line of the forwarded original, when this mail is a forward: when the news
+    # it carries was first sent, which can be long before the forward arrived.
+    forwarded_date: str | None = None
 
 
 def clean_link(raw: str) -> str:
@@ -138,6 +143,14 @@ def _header(message: Message, name: str) -> str:
     return "" if value is None else str(value)
 
 
+def forwarded_date(body: str) -> str | None:
+    marker = _FORWARD_MARK.search(body)
+    if marker is None:
+        return None
+    found = _FORWARD_DATE.search(body[marker.end() : marker.end() + 800])
+    return found.group(1).strip()[:120] if found else None
+
+
 def parse_raw(raw: bytes, max_chars: int) -> MailContent:
     message = message_from_bytes(raw, policy=policy.default)
     plains: list[str] = []
@@ -186,6 +199,7 @@ def parse_raw(raw: bytes, max_chars: int) -> MailContent:
         precedence in ("bulk", "list", "junk")
     )
     forwarded = bool(_FORWARD_SUBJECT.match(subject) or _FORWARD_MARK.search(body))
+    original_date = forwarded_date(body) if forwarded else None
     return MailContent(
         sender=sender,
         subject=subject,
@@ -196,4 +210,5 @@ def parse_raw(raw: bytes, max_chars: int) -> MailContent:
         text=body,
         links=tuple(links[:MAX_LINKS]),
         truncated=truncated,
+        forwarded_date=original_date,
     )

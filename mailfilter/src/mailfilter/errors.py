@@ -69,6 +69,12 @@ class CheckInProgress(MailFilterError):
     code = "check_in_progress"
 
 
+class LeaseLost(MailFilterError):
+    """This check's hold on the mailbox lapsed and another check took over: stop at once."""
+
+    code = "lease_lost"
+
+
 class TooSoon(MailFilterError):
     """'Check now' was pressed again within the cooldown."""
 
@@ -84,4 +90,5 @@ RUN_STOPPING = (
     GmailConfigError,
     JudgeUnavailable,
     JudgeConfigError,
+    LeaseLost,
 )

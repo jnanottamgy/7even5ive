@@ -58,13 +58,13 @@ the open question below before either is wired to production.
 
 | # | Decision | Why |
 |---|---|---|
-| 51 | **The mail filter checks college mail twice a day, at 1 PM and 9 PM India time**, plus "check now" (5-minute cooldown). Each check reads everything since the last one; a two-hour overlap catches mail Gmail lists late. | Simple and free; the 1 PM check catches a morning mail with a same-day deadline in time. |
+| 51 | **The mail filter checks college mail twice a day, at 1 PM and 9 PM India time**, plus "check now" (5-minute cooldown). Each check reads everything since the last one; a two-hour overlap catches mail Gmail lists late, and Gmail's change history brings in mail rescued from spam or trash. | Simple and free; the 1 PM check catches a morning mail with a same-day deadline in time. |
 | 52 | **Claude Haiku 5.5 on Bedrock (Mumbai) judges each mail** in a fixed JSON shape (placement, internship, exam notice or other, with quotes); **code checks every field against the mail**: copied words must be in it, a date must be one its quote names and not before the mail arrived, a link must be https and in the mail. What fails is dropped. | Same model as decision 32; quotes make an invented date or link detectable in code. |
 | 53 | **A slot for Jev in front of Claude, switched off.** It may only drop a mail as "other" at 0.9 or more, never keep one. | Matches decision 33's drop cut-off; Jev cannot write the dates and links a card needs. |
 | 54 | **Gmail read-only (`gmail.readonly`); demo accounts in Testing mode for the hackathon.** Real students wait for Google's verification (about 6 weeks) and yearly security assessment. | Both Gmail scopes that read mail are restricted; Testing mode allows 100 test users and a 7-day sign-in. Confirmed on Google's pages, 25 Nov. |
 | 55 | **If a college's Google admin blocks the app, the fallback is a Gmail forwarding filter** to a 7even5ive address. | Needs no Google permission. |
 | 56 | **Mail bodies are never stored;** a dropped mail leaves only its id, a kept one only its checked card fields. | As decision 48, applied to storage. |
-| 57 | **Its own store for now** (cards merged across reminders and forwards: same form link, else company and role, else conversation; a forward fills gaps but never overrides). | Built before the core's database existed; moves to Supabase if adopted. |
+| 57 | **Its own store for now.** Cards merge reminders and forwards (same form link from the same company, else the same conversation and title, else the same company and role); per field the newest news wins, and a forward counts from the date of the mail it forwards. | Built before the core's database existed; moves to Supabase if adopted. A shared placement-portal link alone must never merge two drives. |
 | 58 | **Searches use exact seconds, not dates.** | Gmail reads a plain `after:` date as midnight Pacific time, which would miss or repeat India-time mail. |
 
 ### Open (mail filter)

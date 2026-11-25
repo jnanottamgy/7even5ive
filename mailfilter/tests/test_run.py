@@ -186,13 +186,15 @@ def test_a_mail_claude_cannot_judge_is_retried_then_given_up(
         assert state.attempts == attempt
         connection = store.connection(STUDENT)
         assert connection is not None
+        # The retry is queued by id, so the window moves on without it.
+        assert connection.checked_through == clock()
         if attempt < 3:
             assert state.outcome == "retry" and result.retried == 1
-            assert connection.checked_through <= stuck.mail.received_at  # held for it
+            assert store.retry_ids(STUDENT) == [stuck.mail.id]
         else:
             assert state.outcome == "failed" and result.failed == 1
-            assert connection.checked_through == clock()  # released at last
-        clock.advance(hours=8)
+            assert store.retry_ids(STUDENT) == []
+        clock.advance(days=3)  # far past the window: the retry is found by id, not by date
     assert judge.calls.count(stuck.marker) == 3
     assert judge.calls.count(BY_KEY["nimbus_drive"].marker) == 1
 
@@ -211,10 +213,11 @@ def test_one_unreadable_or_crashing_mail_costs_that_mail_only(
     assert len(store.cards(STUDENT)) == 16
     states = store.seen_states(STUDENT, [BY_KEY["webinar"].mail.id, crash.mail.id])
     assert {state.outcome for state in states.values()} == {"retry"}
-    connection = store.connection(STUDENT)
-    assert connection is not None
-    # The webinar's time was never read, so the start of the next check is held where it was.
-    assert connection.checked_through == MONDAY
+    assert set(store.retry_ids(STUDENT)) == {BY_KEY["webinar"].mail.id, crash.mail.id}
+    del mailbox.errors[BY_KEY["webinar"].mail.id]
+    clock.advance(hours=12)
+    again = run(store, mailbox, golden_judge(), settings, clock)
+    assert again.retried == 0 and len(store.cards(STUDENT)) == 17
 
 
 @pytest.mark.parametrize(
@@ -307,9 +310,9 @@ def test_after_a_long_outage_reading_stops_at_the_lookback(
     seen: list[datetime] = []
 
     class Spy(FakeMailbox):
-        def list_ids(self, after: datetime, limit: int) -> tuple[list[str], bool]:
+        def list_ids(self, after: datetime) -> list[str]:
             seen.append(after)
-            return super().list_ids(after, limit)
+            return super().list_ids(after)
 
     run(store, Spy(fake_mails(), now=clock), golden_judge(), settings, clock)
     assert seen == [clock() - settings.lookback]

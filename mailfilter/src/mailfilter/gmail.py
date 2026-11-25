@@ -38,17 +38,31 @@ API = "https://gmail.googleapis.com/gmail/v1/users/me"
 COST_LIST = 5
 COST_GET_RAW = 60
 COST_PROFILE = 1
+COST_HISTORY = 2
+# A week of a student's college mail is far below this; past it, a check stops rather than
+# cut the list.
+MAX_LISTED = 20_000
 # Google allows 6,000 units per user per minute; stay below it.
 UNITS_PER_MINUTE = 5_000
 PAGE_SIZE = 500
 _ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
+Params = dict[str, str | int | list[str]]
 _RATE_LIMITED = {"rateLimitExceeded", "userRateLimitExceeded", "RATE_LIMIT_EXCEEDED"}
 _SCOPE_MISSING = {"insufficientPermissions", "ACCESS_TOKEN_SCOPE_INSUFFICIENT"}
 
 
 class Mailbox(Protocol):
-    def list_ids(self, after: datetime, limit: int) -> tuple[list[str], bool]:
-        """Ids of mail received after `after`, newest first, and whether `limit` cut the list."""
+    def list_ids(self, after: datetime) -> list[str]:
+        """Ids of every mail received after `after`, newest first."""
+        ...
+
+    def history_id(self) -> str:
+        """Where the mailbox's change history stands now."""
+        ...
+
+    def changed_since(self, history_id: str) -> list[str] | None:
+        """Mail added, or moved out of spam or trash, since `history_id`; None once Google no
+        longer keeps that history (after about a week, sometimes sooner)."""
         ...
 
     def get(self, message_id: str) -> MailMessage | None:
@@ -113,31 +127,78 @@ class GmailMailbox:
         self._max_attempts = max_attempts
         self._spent: deque[tuple[float, int]] = deque()
 
-    def list_ids(self, after: datetime, limit: int) -> tuple[list[str], bool]:
-        params: dict[str, str | int] = {
-            "q": f"after:{epoch_seconds(after)}",
-            "maxResults": PAGE_SIZE,
-        }
-        ids: list[str] = []
+    def list_ids(self, after: datetime) -> list[str]:
+        params: Params = {"q": f"after:{epoch_seconds(after)}", "maxResults": PAGE_SIZE}
+        ids: dict[str, None] = {}
+        pages: set[str] = set()
         while True:
             body = self._call(f"{API}/messages", params, COST_LIST)
-            if body is None:  # only `get` may answer "not found"; guard, not assert
+            if body is None:  # only `get` and `history` may answer "not found"
                 raise GmailUnavailable("not_found")
             for item in body.get("messages") or []:
                 message_id = str(item.get("id", "")) if isinstance(item, dict) else ""
-                if _ID.fullmatch(message_id) and message_id not in ids:
-                    ids.append(message_id)
+                if _ID.fullmatch(message_id):
+                    ids[message_id] = None
+            if len(ids) > MAX_LISTED:
+                # Never cut the list (the oldest mail would be lost); stop loudly instead.
+                raise GmailUnavailable("listing_too_large")
             page = body.get("nextPageToken")
-            if len(ids) >= limit:
-                return ids[:limit], bool(page) or len(ids) > limit
             if not page:
-                return ids, False
+                return list(ids)
+            if str(page) in pages:
+                raise GmailUnavailable("listing_loops")
+            pages.add(str(page))
             params = {**params, "pageToken": str(page)}
+
+    def history_id(self) -> str:
+        body = self._call(f"{API}/profile", None, COST_PROFILE)
+        if body is None or not str(body.get("historyId", "")).isdigit():
+            raise GmailUnavailable("bad_profile")
+        return str(body["historyId"])
+
+    def changed_since(self, history_id: str) -> list[str] | None:
+        params: Params = {
+            "startHistoryId": history_id,
+            "historyTypes": ["messageAdded", "labelRemoved"],
+            "maxResults": PAGE_SIZE,
+        }
+        ids: dict[str, None] = {}
+        pages: set[str] = set()
+        while True:
+            body = self._call(f"{API}/history", params, COST_HISTORY, missing_ok=True)
+            if body is None:
+                return None  # history expired: the date window still covers recent mail
+            for record in body.get("history") or []:
+                if not isinstance(record, dict):
+                    continue
+                for added in record.get("messagesAdded") or []:
+                    self._take(ids, added)
+                for removed in record.get("labelsRemoved") or []:
+                    if isinstance(removed, dict) and {"SPAM", "TRASH"} & set(
+                        removed.get("labelIds") or []
+                    ):
+                        self._take(ids, removed)
+            page = body.get("nextPageToken")
+            if not page:
+                return list(ids)
+            if str(page) in pages or len(ids) > MAX_LISTED:
+                raise GmailUnavailable("history_too_large")
+            pages.add(str(page))
+            params = {**params, "pageToken": str(page)}
+
+    @staticmethod
+    def _take(ids: dict[str, None], item: object) -> None:
+        message = item.get("message") if isinstance(item, dict) else None
+        message_id = str(message.get("id", "")) if isinstance(message, dict) else ""
+        if _ID.fullmatch(message_id):
+            ids[message_id] = None
 
     def get(self, message_id: str) -> MailMessage | None:
         if not _ID.fullmatch(message_id):
             raise MailUnreadable("bad_message_id")
-        body = self._call(f"{API}/messages/{message_id}", {"format": "raw"}, COST_GET_RAW, True)
+        body = self._call(
+            f"{API}/messages/{message_id}", {"format": "raw"}, COST_GET_RAW, missing_ok=True
+        )
         if body is None:
             return None
         try:
@@ -179,7 +240,7 @@ class GmailMailbox:
     def _call(
         self,
         url: str,
-        params: dict[str, str | int] | None,
+        params: Params | None,
         cost: int,
         missing_ok: bool = False,
     ) -> dict[str, Any] | None:
@@ -206,7 +267,7 @@ class GmailMailbox:
     def _once(
         self,
         url: str,
-        params: dict[str, str | int] | None,
+        params: Params | None,
         fresh_token: bool,
         missing_ok: bool,
     ) -> dict[str, Any] | None:

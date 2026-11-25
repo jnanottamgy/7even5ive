@@ -1,31 +1,36 @@
 """One check of one student's mailbox, and the twice-daily sweep over every student.
 
-A check reads every mail since the last check (minus a two-hour overlap for mail Gmail lists
-late; mail already judged is skipped by id), oldest first. Each mail is settled in its own
-transaction: its outcome and, if kept, its card. Where the next check starts moves forward only
-past mail that is settled, so a crash, an outage or a cap never loses a mail:
+A check reads three sets of mail, in this order:
 
-- Claude or Gmail down: the check stops; the next one starts before the first unsettled mail.
-- One mail Claude cannot judge, or Gmail cannot give us: retried at the next checks, and given
-  up after `max_attempts` so one bad mail cannot hold the mailbox back for ever.
-- More mail than one check takes: the next check carries on where this one stopped.
+1. mail it could not judge before (retried at every check, given up after `max_attempts`);
+2. mail Gmail's change history says arrived, or was moved out of spam or trash, since the last
+   complete check: a rescued mail keeps its old date, so no date window would ever find it;
+3. every mail since the last check by date, minus a two-hour overlap for mail Gmail lists
+   late, oldest first. The first check after connecting reads exactly that day.
+
+Mail already settled is skipped by id. Each mail is settled in its own transaction: its outcome
+and, if kept, its card. The date window moves forward only past mail that is settled or queued
+for retry, and the history position only when a check completes, so an outage, a crash, a cap or
+a lapsed lease never loses a mail and never judges one twice.
 """
 
 from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from dataclasses import dataclass
+from datetime import datetime, time, timedelta
 
-from mailfilter.checks import card_key, check
+from mailfilter.checks import check, link_key
 from mailfilter.config import Settings
 from mailfilter.contract import ConnectionStatus
+from mailfilter.dates import moment_named
 from mailfilter.errors import (
     RUN_STOPPING,
     CheckInProgress,
     CollegeBlocked,
     JudgeFailed,
+    LeaseLost,
     MailFilterError,
     MailUnreadable,
     NeedsReconnect,
@@ -34,12 +39,16 @@ from mailfilter.errors import (
 )
 from mailfilter.gmail import Mailbox
 from mailfilter.judge import Judge
-from mailfilter.mail import render
+from mailfilter.mail import MailMessage, render
 from mailfilter.sorter import NoSorter, Sorter, drops_without_claude
 from mailfilter.store import CardDraft, Outcome, RunRecord, Store
-from mailfilter.timekit import utc_now
+from mailfilter.timekit import IST, to_ist, utc_now
 
 log = logging.getLogger("mailfilter")
+# Mail the student sent, drafts and chats are never judged. Spam and trash are not judged
+# either, but not recorded: if the student rescues one, Gmail's history brings it back.
+NEVER_JUDGED = frozenset({"SENT", "DRAFT", "CHAT"})
+NOT_YET = frozenset({"SPAM", "TRASH"})
 
 
 @dataclass
@@ -62,42 +71,8 @@ class RunResult:
 @dataclass(frozen=True)
 class _Settled:
     received_at: datetime | None
-    final: bool
     counter: str
     judged: bool
-
-
-@dataclass
-class _Progress:
-    """What decides where the next check starts."""
-
-    complete: bool = False
-    settled_through: datetime | None = None
-    unsettled_from: datetime | None = None
-    unsettled_unknown: bool = False
-    listed_at: datetime | None = None
-    reasons: list[str] = field(default_factory=list)
-
-    def add(self, settled: _Settled) -> None:
-        when = settled.received_at
-        if settled.final:
-            if when is not None:
-                self.settled_through = max(self.settled_through or when, when)
-        elif when is None:
-            self.unsettled_unknown = True
-        else:
-            self.unsettled_from = min(self.unsettled_from or when, when)
-
-    def next_start(self, previous: datetime) -> datetime:
-        if self.unsettled_unknown:
-            return previous
-        if self.complete and self.listed_at is not None:
-            candidate = self.listed_at
-        else:
-            candidate = self.settled_through or previous
-        if self.unsettled_from is not None:
-            candidate = min(candidate, self.unsettled_from)
-        return max(previous, candidate)
 
 
 def status_for(error: MailFilterError) -> ConnectionStatus:
@@ -106,6 +81,19 @@ def status_for(error: MailFilterError) -> ConnectionStatus:
     if isinstance(error, CollegeBlocked):
         return "college_blocked"
     return "connected"
+
+
+def news_time(mail: MailMessage) -> datetime:
+    """When the news in a mail was sent: a forward's original date when it can be read (a
+    forward of last week's notice is last week's news), else when the mail arrived."""
+    if mail.content.forwarded and mail.content.forwarded_date:
+        named = moment_named(mail.content.forwarded_date, to_ist(mail.received_at).date())
+        if named is not None:
+            day, clock = named
+            moment = datetime.combine(day, clock or time(0), IST)
+            if moment <= mail.received_at:
+                return moment
+    return mail.received_at
 
 
 def _failure(
@@ -122,7 +110,7 @@ def _failure(
     final = attempts + 1 >= settings.max_attempts
     outcome: Outcome = "failed" if final else "retry"
     store.record_mail(student_id, message_id, received, outcome, reason, now())
-    return _Settled(received, final, "failed" if final else "retried", judged)
+    return _Settled(received, "failed" if final else "retried", judged)
 
 
 def _settle(
@@ -144,17 +132,19 @@ def _settle(
         )
     if mail is None:
         store.record_mail(student_id, message_id, None, "gone", None, now())
-        return _Settled(None, True, "skipped", False)
+        return _Settled(None, "skipped", False)
     received = mail.received_at
-    if mail.skipped:
+    if mail.labels & NOT_YET:
+        return _Settled(received, "skipped", False)
+    if mail.labels & NEVER_JUDGED:
         store.record_mail(student_id, message_id, received, "skipped", "label", now())
-        return _Settled(received, True, "skipped", False)
+        return _Settled(received, "skipped", False)
     rendered = render(mail)
     if drops_without_claude(sorter, rendered.for_claude, settings.sorter_threshold):
         store.record_mail(
             student_id, message_id, received, "dropped", f"sorter:{sorter.name}", now()
         )
-        return _Settled(received, True, "dropped", False)
+        return _Settled(received, "dropped", False)
     try:
         proposal = judge.judge(rendered.for_claude)
     except JudgeFailed as error:
@@ -162,11 +152,10 @@ def _settle(
             store, student_id, message_id, received, error.detail, attempts, settings, now, True
         )
     checked = check(proposal, mail, rendered.checkable)
-    if not checked.keep or checked.kind is None:
+    if checked.kind is None:
         store.record_mail(student_id, message_id, received, "dropped", "other", now())
-        return _Settled(received, True, "dropped", True)
+        return _Settled(received, "dropped", True)
     draft = CardDraft(
-        key=card_key(checked, mail),
         kind=checked.kind,
         title=checked.title,
         organisation=checked.organisation,
@@ -175,16 +164,21 @@ def _settle(
         event_date=checked.event_date,
         event_has_time=checked.event_has_time,
         form_link=checked.form_link,
+        link_key=link_key(checked.form_link),
         details=checked.details,
         received_at=received,
+        news_at=news_time(mail),
+        forwarded=mail.content.forwarded,
         message_id=mail.id,
         rfc822_id=mail.content.message_id,
         thread_id=mail.thread_id,
-        authoritative=not mail.content.forwarded,
     )
     reason = ",".join(checked.rejected) or None
     change = store.record_mail(student_id, message_id, received, "carded", reason, now(), draft)
-    return _Settled(received, True, "carded" if change == "created" else "updated", True)
+    counter = {"created": "carded", "updated": "updated", "unchanged": "updated"}.get(
+        change or "", "skipped"
+    )
+    return _Settled(received, counter, True)
 
 
 def check_mailbox(
@@ -199,54 +193,67 @@ def check_mailbox(
     now: Callable[[], datetime] = utc_now,
     time_left: Callable[[], float] | None = None,
 ) -> RunResult:
-    connection = store.connection(student_id)
-    if connection is None:
+    before = store.connection(student_id)
+    if before is None:
         raise NotConnected("no_connection")
-    result = RunResult(student_id=student_id, trigger=trigger, status=connection.status)
-    if connection.status != "connected":
+    result = RunResult(student_id=student_id, trigger=trigger, status=before.status)
+    if before.status != "connected":
         # A mailbox Google will not open is not tried until the student reconnects.
-        result.error = connection.status
+        result.error = before.status
         return result
     started = now()
-    if not store.acquire(student_id, started, settings.lease):
+    token = store.acquire(student_id, started, settings.lease)
+    if token is None:
         raise CheckInProgress("lease_held")
+    connection = store.connection(student_id)  # read again, now that this check holds it
+    if connection is None:
+        raise NotConnected("disconnected")
+    previous = connection.checked_through
+    first = connection.last_ok_at is None
+    window_start = max(
+        previous - (timedelta(seconds=1) if first else settings.overlap),
+        started - settings.lookback,
+    )
     use_sorter = sorter or NoSorter()
-    if connection.last_run_at is None:
-        # The first check reads exactly that day's mail, from midnight in India (a second
-        # earlier, in case Gmail's `after:` excludes the boundary itself).
-        window_start = max(
-            connection.checked_through - timedelta(seconds=1), started - settings.lookback
-        )
-    else:
-        window_start = max(
-            connection.checked_through - settings.overlap, started - settings.lookback
-        )
-    progress = _Progress()
+    listed_at = started
+    history_now: str | None = None
+    settled_through: datetime | None = None
+    complete = lost = False
     bug: Exception | None = None
     try:
-        progress.listed_at = now()
-        ids, capped = mailbox.list_ids(window_start, settings.max_listed)
-        if capped:
-            log.warning("listing capped", extra={"student_id": student_id, "listed": len(ids)})
-        oldest_first = list(reversed(ids))
-        result.listed = len(oldest_first)
-        states = store.seen_states(student_id, oldest_first)
-        todo = [
-            message_id
-            for message_id in oldest_first
-            if message_id not in states or states[message_id].outcome == "retry"
-        ]
-        result.more = capped or len(todo) > settings.max_mails_per_run
-        stopped_early = False
-        for message_id in todo[: settings.max_mails_per_run]:
-            if time_left is not None and time_left() < 60:
-                result.more = stopped_early = True
+        listed_at = now()
+        history_now = mailbox.history_id()
+        window = list(reversed(mailbox.list_ids(window_start)))
+        changed: list[str] = []
+        if connection.history_id:
+            since = mailbox.changed_since(connection.history_id)
+            if since is None:
+                log.warning("gmail history expired", extra={"student_id": student_id})
+            else:
+                changed = since
+        retries = store.retry_ids(student_id)
+        states = store.seen_states(student_id, [*retries, *changed, *window])
+
+        def still_open(message_id: str) -> bool:
+            return message_id not in states or states[message_id].outcome == "retry"
+
+        first_pass = [i for i in dict.fromkeys([*retries, *changed]) if still_open(i)]
+        in_first_pass = set(first_pass)
+        window_todo = [i for i in window if still_open(i) and i not in in_first_pass]
+        in_window = set(window_todo)
+        result.listed = len(set(window) | set(changed) | set(retries))
+        stopped = False
+        for index, message_id in enumerate([*first_pass, *window_todo]):
+            if index >= settings.max_mails_per_run or (time_left is not None and time_left() < 60):
+                stopped = True
                 break
+            if not store.renew(student_id, token, now(), settings.lease):
+                raise LeaseLost("renew_refused")
             attempts = states[message_id].attempts if message_id in states else 0
             try:
                 settled = _settle(
-                    store, mailbox, judge, use_sorter, student_id, message_id, attempts, settings,
-                    now,
+                    store, mailbox, judge, use_sorter, student_id, message_id, attempts,
+                    settings, now,
                 )  # fmt: skip
             except RUN_STOPPING:
                 raise
@@ -263,12 +270,16 @@ def check_mailbox(
                     store, student_id, message_id, None, f"error:{type(error).__name__}",
                     attempts, settings, now, False,
                 )  # fmt: skip
-            progress.add(settled)
+            if message_id in in_window and settled.received_at is not None:
+                settled_through = max(settled_through or settled.received_at, settled.received_at)
             setattr(result, settled.counter, getattr(result, settled.counter) + 1)
-            if settled.judged:
-                result.judged += 1
-        progress.complete = not stopped_early and not result.more
-        result.status = "connected"
+            result.judged += settled.judged
+        result.more = stopped
+        complete = not stopped
+    except LeaseLost:
+        lost = True
+        result.error = LeaseLost.code
+        log.warning("check lost its lease", extra={"student_id": student_id})
     except MailFilterError as error:
         result.error = error.code
         result.status = status_for(error)
@@ -282,13 +293,17 @@ def check_mailbox(
         log.error("check crashed", extra={"student_id": student_id, "error": type(error).__name__})
     finally:
         finished_at = now()
-        store.finish(
-            student_id,
-            finished_at,
-            progress.next_start(connection.checked_through),
-            result.status,
-            result.error,
-        )
+        if not lost:
+            next_start = listed_at if complete else (settled_through or previous)
+            store.finish(
+                student_id,
+                token,
+                finished_at,
+                max(previous, next_start),
+                history_now if complete else None,
+                result.status,
+                result.error,
+            )
         store.record_run(
             RunRecord(
                 student_id=student_id,
@@ -306,7 +321,7 @@ def check_mailbox(
                 error=result.error,
             )
         )
-        store.release(student_id)
+        store.release(student_id, token)
     if bug is not None:
         raise bug
     log.info(
@@ -341,7 +356,8 @@ def check_now(
     force: bool = False,
     trigger: str = "check_now",
 ) -> RunResult:
-    """The app's "check now" button: refused within the cooldown of the last check."""
+    """The app's "check now" button: refused within the cooldown of the last check's start,
+    and while a check is running (it holds the lease)."""
     connection = store.connection(student_id)
     if connection is None:
         raise NotConnected("no_connection")

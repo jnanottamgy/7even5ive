@@ -12,7 +12,9 @@ The plan, and why each piece is the way it is: [`../docs/mailfilter.md`](../docs
 - **When:** at 1 PM and 9 PM India time (EventBridge, `mailfilter schedule` prints the cron
   expressions) and when the student presses "check now" (5-minute cooldown). Each check reads
   every mail since the last one, oldest first; a two-hour overlap catches mail Gmail lists late,
-  and mail already judged is skipped by id.
+  and mail already judged is skipped by id. Gmail's change history brings in mail the student
+  rescues from spam or trash (it keeps its old date, so no date window would find it), and mail
+  that could not be judged is retried by id at the next checks.
 - **Reading:** `gmail.py` lists ids (`after:` in exact seconds, because a plain date means
   midnight Pacific time) and fetches each mail raw; `mime.py` turns it into text with every link,
   including those behind "click here", and attachment names only. Sent mail, drafts, spam and
@@ -26,11 +28,15 @@ The plan, and why each piece is the way it is: [`../docs/mailfilter.md`](../docs
   "other" and only at 90% confidence or more. Off until Jev is compared with Claude on the sample
   mails.
 - **Cards** (`store.py`): the same opportunity seen again (a reminder, a forward) updates one
-  card, matched on the form link, then company and role, then the Gmail conversation. A forward
-  fills gaps but never overrides, because it repeats old news. Mail bodies are never stored.
+  card: matched on the same form link from the same company (a shared placement-portal link
+  alone never merges two drives), else the same conversation and title, else the same company
+  and role. Per field, the newest news wins; a forward counts from the date of the mail it
+  forwards, so it can carry an extension but never bring back a replaced date. Mail bodies are
+  never stored.
 - **Never losing a mail** (`run.py`): the next check starts after mail that is settled only. Claude
   or Gmail down, one mail that cannot be judged (retried at three checks, then given up), more
-  mail than one check takes, a crash: each is covered by a test.
+  mail than one check takes, a crash, a disconnect mid-check, two checks overlapping (a lease
+  renewed before every mail; only its holder can move the start): each is covered by a test.
 - **Serving:** `get_opportunities` through a Lambda behind AgentCore Gateway
   (`adapters/lambda_handler.py`) or locally over MCP; `tools.py` also writes the 7 AM briefing
   lines and lists what is due within a day for the urgent call. No model writes any of it.
