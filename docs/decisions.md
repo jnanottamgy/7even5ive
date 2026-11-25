@@ -2,6 +2,27 @@
 
 The source of truth when any other document, diagram, PDF or slide disagrees. Newest first.
 
+## 2026-11-25: the college mail filter
+
+Full plan: [`mailfilter.md`](mailfilter.md).
+
+| # | Decision | Why |
+|---|---|---|
+| 29 | **College mail is checked twice a day, at 1 PM and 9 PM India time**, plus "check now" in the app (5-minute cooldown). Each check reads everything since the last one. No push alerts. | Simple and free; the 1 PM check catches a morning mail with a same-day deadline in time. |
+| 30 | **Claude Haiku 5.5 on Amazon Bedrock (Mumbai) judges each mail** in a fixed JSON shape; code checks every field against the mail and drops what fails. | Sorting mail and copying out a date and a link is a simple job: Haiku is about 40 times cheaper than Opus (roughly ₹0.03 a mail). The model is a setting; the eval decides. |
+| 31 | **A slot for Jev in front of Claude**, switched off. A sorter may only drop a mail as "other" at 90% confidence or more; it can never keep one. | Most college mail is newsletters and ads; Jev may skip Claude for them once it matches Claude on the sample mails. |
+| 32 | **Gmail read-only (`gmail.readonly`); demo accounts in Testing mode for the hackathon.** Real students wait for Google's verification and yearly security assessment. | Both Gmail scopes that read mail are restricted; Testing mode allows 100 test users with a 7-day sign-in. |
+| 33 | **If a college's Google admin blocks the app, the fallback is a Gmail forwarding filter** to a 7even5ive address. | Needs no Google permission at all. |
+| 34 | **Mail bodies are never stored.** A dropped mail leaves only its id; a kept mail leaves only its checked card fields. Logs carry ids and counts only. | Least data (DPDP); nothing to leak. |
+| 35 | **The code lives in `mailfilter/` beside `portmax/`; cards stay in its own store** until SHELF's Opportunities is ready. | Same tools and checks as PortMax; does not wait on the SHELF import. |
+| 36 | **The mail filter moves from Stretch to Must** in the build plan. | Team decision (25 Nov): it is next. |
+
+### Still open (mail filter)
+
+- Whether MSRIT's mail is Google Workspace, and whether its IT allows outside apps to read it.
+- Who owns the mail filter on hack day.
+- The team's Google Cloud OAuth client; Bedrock access to Haiku 5.5 in Mumbai for the eval.
+
 ## 2026-11-25: PortMax (named Portal Forge until the same day)
 
 Full plan: [`portmax.md`](portmax.md).

@@ -6,10 +6,11 @@ deadlines, notes, attendance and placement mail.**
 > wHACKiest 2026 · Track 1: *Make MCP Matter. Less Magic, More Utility.*
 > Team: Jnanottam GY · Kartik · Mohammed Zaid
 
-**Status: Round 1 blueprint, with PortMax being built.** The ideathon round is plans only, so this
-repository holds the design, the deck and the film. PortMax, the portal connector, is being built
-ahead of hack day in [`portmax/`](portmax) (declare it as prior work if the rules require); the
-rest of the code lands on hack day (1–2 Dec, RIT).
+**Status: Round 1 blueprint, with PortMax and the mail filter built.** The ideathon round is plans
+only, so this repository holds the design, the deck and the film. PortMax, the portal connector,
+and the college mail filter are built ahead of hack day in [`portmax/`](portmax) and
+[`mailfilter/`](mailfilter) (declare them as prior work if the rules require); the rest of the code
+lands on hack day (1–2 Dec, RIT).
 
 > **The current plan is this README and [`docs/`](docs).** Read
 > [`docs/decisions.md`](docs/decisions.md) first: it records every decision and why. The PDFs in the
@@ -82,6 +83,16 @@ writes. The student logs in once inside our Android app, CAPTCHA and all, and
 the app keeps that login alive so attendance stays fresh every day. For the demo a mock portal
 stands in, so the demo never depends on a real portal. Plan: [`docs/portmax.md`](docs/portmax.md).
 
+## The college mail filter
+
+Placement drives, internships and exam-cell notices are the mail students miss most. The **mail
+filter** reads the student's college mail (read-only Gmail) at 1 PM and 9 PM India time and keeps
+only those three kinds, each as a card with its deadline, event date and form link. Claude Haiku on
+Amazon Bedrock (Mumbai) reads each mail; code then checks every field against the mail itself, so
+a date or link the mail does not contain never reaches a card. Mail bodies are never stored. The
+cards feed the 7 AM briefing and the `get_opportunities` tool. Plan:
+[`docs/mailfilter.md`](docs/mailfilter.md); code: [`mailfilter/`](mailfilter).
+
 ## SHELF: why we trust this works
 
 SHELF is the WhatsApp library we built and use in our own class, after too many midnights chasing
@@ -94,8 +105,8 @@ library, the storage layer. Note: SHELF files a PDF by its caption, filename and
 - **WhatsApp:** the official API cannot read existing class groups, so the student forwards to
   7even5ive's number. Each business-initiated alert costs money (roughly ₹0.12–0.15 per utility
   message in India), so routine alerts go to the app and WhatsApp is kept for what matters.
-- **Gmail read-only** is a restricted Google scope: fine for the demo, but a public launch needs
-  Google's security assessment.
+- **Gmail read-only** is a restricted Google scope: fine for the demo (test accounts, 7-day
+  sign-in), but a public launch needs Google's verification and yearly security assessment.
 - **Not connected:** Instagram (no usable API for this) and Telegram (blocked in India in June 2026
   over exam leaks).
 - **Privacy (DPDP Act):** consent, purpose limitation, deletion on request. The student logs in to
@@ -111,6 +122,7 @@ library, the storage layer. Note: SHELF files a PDF by its caption, filename and
 | [`docs/brain.md`](docs/brain.md) | How messages, files, mail and attendance are understood and checked |
 | [`docs/policy.md`](docs/policy.md) | The control model enforced at the gateway |
 | [`docs/portmax.md`](docs/portmax.md) | PortMax: the five-tool contract, the forge pipeline, the Android login and keep-alive |
+| [`docs/mailfilter.md`](docs/mailfilter.md) | The college mail filter: twice-daily checks, Claude Haiku plus code checks, Gmail access rules |
 | [`docs/business.md`](docs/business.md) | Pricing (also in the deck), market, go-to-market |
 | [`docs/build-plan.md`](docs/build-plan.md) | Hack-day scope, owners, hour-by-hour plan |
 | `ppt/` | Round 1 deck on the official template |

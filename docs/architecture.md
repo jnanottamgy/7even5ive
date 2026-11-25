@@ -9,7 +9,7 @@ through one door: **Amazon Bedrock AgentCore Gateway**.
 flowchart LR
   subgraph In["Sources"]
     WA["WhatsApp forwards<br/>Cloud API webhook"]
-    GM["College mail<br/>Gmail push · read-only"]
+    GM["College mail<br/>Gmail read-only · 1 PM + 9 PM"]
     SS["Share sheet<br/>S3 → ElevenLabs Scribe"]
     GC["Google Classroom<br/>API"]
     EB["EventBridge<br/>07:00 daily"]
@@ -90,9 +90,10 @@ PDF contents are not read for deadlines.
 ### 3. College mail, filtered
 
 ```
-Gmail push (read-only scope) → SQS → λ understand keeps only placements, internships and
-exam-cell notices; the rest is ignored
-  → Opportunities in SHELF, with the deadline and form link
+EventBridge at 1 PM and 9 PM (and "check now") → λ mail check reads Gmail (read-only) since the
+last check → Claude Haiku on Bedrock judges each mail → code checks every field; only placements,
+internships and exam-cell notices are kept, the rest is ignored
+  → cards with the deadline and form link (SHELF's Opportunities once ready; mailfilter/)
   → included in the 7 AM briefing; urgent ones trigger the call
 The student submits forms themselves; there is no submit tool.
 ```

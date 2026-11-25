@@ -1,0 +1,8 @@
+__pycache__/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.db
+# Google refresh tokens for development sign-ins: secrets, never committed.
+.mailfilter-tokens.json

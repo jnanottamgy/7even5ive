@@ -27,9 +27,14 @@ Claude's on our eval set.
 
 ## 3. College mail filter
 
-Read-only Gmail. Each new mail is classified; only **placements, internships and exam-cell
-notices** are kept, with their deadline and form link, in SHELF's Opportunities. Newsletters,
-webinars and promotions are ignored. The student fills forms themselves.
+Read-only Gmail, checked at 1 PM and 9 PM India time ([`mailfilter.md`](mailfilter.md)). Claude
+Haiku 5.5 on Bedrock reads each new mail; only **placements, internships and exam-cell notices**
+are kept, as cards with their deadline, event date and form link (in SHELF's Opportunities once it
+is ready). Newsletters, webinars, promotions and job-portal digests are ignored. Code checks every
+field against the mail: copied words must be in it, a date must be one its quote names and not
+before the mail arrived, a link must be https and in the mail. What fails is dropped, never
+guessed. A slot for Jev can drop obvious junk before Claude reads it (off for now). The student
+fills forms themselves.
 
 ## 4. Attendance and bunk math
 

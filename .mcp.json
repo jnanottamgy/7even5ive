@@ -2,10 +2,30 @@
   "mcpServers": {
     "portmax": {
       "command": "uv",
-      "args": ["run", "--directory", "portmax", "portmax", "mcp"],
+      "args": [
+        "run",
+        "--directory",
+        "portmax",
+        "portmax",
+        "mcp"
+      ],
       "env": {
         "PORTMAX_STUDENT_ID": "demo",
         "PORTMAX_DATABASE_URL": "sqlite:///portmax-demo.db"
+      }
+    },
+    "mailfilter": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "mailfilter",
+        "mailfilter",
+        "mcp"
+      ],
+      "env": {
+        "MAILFILTER_STUDENT_ID": "demo",
+        "MAILFILTER_DATABASE_URL": "sqlite:///mailfilter-demo.db"
       }
     }
   }
