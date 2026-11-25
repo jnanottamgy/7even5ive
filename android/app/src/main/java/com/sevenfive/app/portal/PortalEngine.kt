@@ -10,6 +10,7 @@ import com.sevenfive.app.data.CardsRepository
 import com.sevenfive.app.data.Connector
 import com.sevenfive.app.data.PagesResult
 import com.sevenfive.app.data.PortMaxApi
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
@@ -144,6 +145,11 @@ class PortalEngine(
         } catch (e: ApiException) {
             if (e.status == 409 || e.code == "session_expired") return expired()
             return fail(e.detail)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // A malformed answer from the page or the server is a failed refresh, not a crash.
+            return fail("Refresh failed: ${e.javaClass.simpleName}")
         } finally {
             store.setBusy(false)
         }

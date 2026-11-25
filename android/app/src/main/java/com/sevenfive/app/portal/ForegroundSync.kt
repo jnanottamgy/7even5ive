@@ -2,6 +2,7 @@ package com.sevenfive.app.portal
 
 import android.content.Context
 import android.net.Uri
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -45,7 +46,7 @@ class ForegroundSync(
 
     private suspend fun maybeSync(openedNow: Boolean) {
         val status = store.status.value
-        if (!status.everConnected || status.needsLogin || status.busy) return
+        if (!status.everConnected || status.needsLogin || status.busy || store.screenOpen) return
         val connector = try {
             engine.connector()
         } catch (e: ApiException) {
@@ -59,12 +60,17 @@ class ForegroundSync(
         val keep = sinceKeep >= connector.info.keepaliveMinutes
         if (!full && !keep) return
 
-        val view = web ?: createWebView().also { web = it }
-        val loaded = CompletableDeferred<Unit>().also { pageLoaded = it }
-        view.loadUrl(engine.loginUrl(servers.config.value.portalUrl, connector))
-        withTimeoutOrNull(PAGE_TIMEOUT_MILLIS) { loaded.await() } ?: return
-        engine.fetchAndUpload(view, bridge, connector, keepAlive = !full)
-        view.loadUrl("about:blank")
+        // A fresh WebView per sync, destroyed after: nothing lingers in memory between runs.
+        val view = createWebView().also { web = it }
+        try {
+            val loaded = CompletableDeferred<Unit>().also { pageLoaded = it }
+            view.loadUrl(engine.loginUrl(servers.config.value.portalUrl, connector))
+            withTimeoutOrNull(PAGE_TIMEOUT_MILLIS) { loaded.await() } ?: return
+            if (store.screenOpen) return
+            engine.fetchAndUpload(view, bridge, connector, keepAlive = !full)
+        } finally {
+            destroy()
+        }
     }
 
     private fun createWebView(): WebView = WebView(context).apply {
@@ -78,12 +84,23 @@ class ForegroundSync(
             override fun onPageFinished(view: WebView, url: String?) {
                 if (url != null && url != "about:blank") pageLoaded?.complete(Unit)
             }
+
+            // The page's renderer died (memory, a WebView bug). Without this, Android kills the
+            // whole app with it. Drop this sync; the next one starts a new WebView.
+            override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+                pageLoaded?.completeExceptionally(IllegalStateException("portal page renderer gone"))
+                if (web === view) web = null
+                view.destroy()
+                return true
+            }
         }
     }
 
     fun destroy() {
-        web?.destroy()
+        val view = web ?: return
         web = null
+        view.stopLoading()
+        view.destroy()
     }
 
     private companion object {

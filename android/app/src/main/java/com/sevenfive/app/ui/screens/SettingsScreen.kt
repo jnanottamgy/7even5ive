@@ -32,12 +32,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sevenfive.app.BuildConfig
 import com.sevenfive.app.data.ServerConfig
 import com.sevenfive.app.ui.AppViewModel
+import com.sevenfive.app.util.Diagnostics
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -118,6 +123,9 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
             }) { Text("Log out of portal on this phone") }
 
             HorizontalDivider()
+            DiagnosticsSection(vm)
+
+            HorizontalDivider()
             Text(
                 "Signed in as the demo student (built in) · college ${BuildConfig.COLLEGE} · v${BuildConfig.VERSION_NAME}",
                 style = MaterialTheme.typography.bodySmall,
@@ -137,4 +145,44 @@ private fun UrlField(label: String, value: String, onChange: (String) -> Unit) {
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
         modifier = Modifier.fillMaxWidth(),
     )
+}
+
+@Composable
+private fun DiagnosticsSection(vm: AppViewModel) {
+    val context = vm.container.appContext
+    var report by remember { mutableStateOf(Diagnostics.report(context)) }
+    val clipboard = LocalClipboardManager.current
+    Text("Diagnostics", style = MaterialTheme.typography.titleMedium)
+    if (report == null) {
+        Text(
+            "No crashes recorded.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        return
+    }
+    Text(
+        "Why the app last closed. Copy it and send it to the team. It holds no messages or passwords.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Text(
+        report!!.take(3_000),
+        style = MaterialTheme.typography.bodySmall,
+        fontFamily = FontFamily.Monospace,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = 280.dp)
+            .verticalScroll(rememberScrollState()),
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(onClick = {
+            clipboard.setText(AnnotatedString(report!!))
+            vm.say("Copied: paste it into a message")
+        }) { Text("Copy") }
+        OutlinedButton(onClick = {
+            Diagnostics.clear(context)
+            report = Diagnostics.report(context)
+        }) { Text("Clear") }
+    }
 }

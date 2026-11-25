@@ -2,6 +2,7 @@ package com.sevenfive.app.ui.screens
 
 import android.graphics.Bitmap
 import android.net.Uri
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -36,8 +37,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -79,6 +82,14 @@ fun PortalScreen(vm: AppViewModel, onDone: () -> Unit) {
     var attempt by remember { mutableIntStateOf(0) }
     var webView by remember { mutableStateOf<WebView?>(null) }
     var pageLoading by remember { mutableStateOf(false) }
+    // Bumped to build a fresh WebView after the old one's renderer died.
+    var webKey by remember { mutableIntStateOf(0) }
+
+    val store = vm.container.portalStore
+    DisposableEffect(Unit) {
+        store.screenOpen = true
+        onDispose { store.screenOpen = false }
+    }
 
     LaunchedEffect(attempt) {
         phase = Phase.Loading
@@ -88,6 +99,11 @@ fun PortalScreen(vm: AppViewModel, onDone: () -> Unit) {
             phase = Phase.Login
         } catch (e: ApiException) {
             problem = "Couldn't load the portal settings from PortMax: ${e.detail}"
+            phase = Phase.Failed
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            problem = "Couldn't read the portal settings from PortMax (${e.javaClass.simpleName})"
             phase = Phase.Failed
         }
     }
@@ -168,7 +184,7 @@ fun PortalScreen(vm: AppViewModel, onDone: () -> Unit) {
                 if (c != null) {
                     val loginUrl = engine.loginUrl(servers.portalUrl, c)
                     val portalOrigin = Uri.parse(servers.portalUrl)
-                    AndroidView(
+                    key(webKey) { AndroidView(
                         modifier = Modifier.fillMaxSize(),
                         factory = { ctx ->
                             WebView(ctx).apply {
@@ -193,6 +209,15 @@ fun PortalScreen(vm: AppViewModel, onDone: () -> Unit) {
                                         }
                                     }
 
+                                    // The page's renderer died. Without this Android kills the app too.
+                                    override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+                                        if (webView === view) webView = null
+                                        pageLoading = false
+                                        problem = "The portal page stopped working. Tap Try again to reload it."
+                                        phase = Phase.Failed
+                                        return true
+                                    }
+
                                     override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
                                         if (!request.isForMainFrame) return
                                         pageLoading = false
@@ -205,7 +230,7 @@ fun PortalScreen(vm: AppViewModel, onDone: () -> Unit) {
                             }
                         },
                         onRelease = { it.destroy() },
-                    )
+                    ) }
                 }
 
                 when (phase) {
@@ -226,8 +251,11 @@ fun PortalScreen(vm: AppViewModel, onDone: () -> Unit) {
                             Button(onClick = {
                                 problem = null
                                 val web = webView
-                                if (connector == null || web == null) {
+                                if (connector == null) {
                                     attempt++
+                                } else if (web == null) {
+                                    phase = Phase.Login
+                                    webKey++
                                 } else {
                                     phase = Phase.Login
                                     web.loadUrl(engine.loginUrl(servers.portalUrl, connector!!))

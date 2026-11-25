@@ -35,6 +35,12 @@ class PortalStore(context: Context) {
     )
     val status: StateFlow<PortalStatus> = _status.asStateFlow()
 
+    /**
+     * True while the portal login screen is open. The background refresh stays out of the way
+     * then: one portal browser at a time, so two never fight over the session or the memory.
+     */
+    @Volatile var screenOpen: Boolean = false
+
     fun setBusy(busy: Boolean) = _status.update { it.copy(busy = busy) }
 
     fun recordSuccess(full: Boolean, at: Instant = Instant.now()) {
