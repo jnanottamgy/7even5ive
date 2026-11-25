@@ -44,10 +44,16 @@ def _api(args: argparse.Namespace) -> int:
     import uvicorn
 
     from portmax.api import DevTokens, create_api
+    from portmax.connector import parse_portal_origins, with_portal_origins
     from portmax.store import Store
 
     store = Store(os.environ.get("PORTMAX_DATABASE_URL", "sqlite:///portmax.db"))
-    uvicorn.run(create_api(store, DevTokens()), host=args.host, port=args.port)
+    spec = ",".join([os.environ.get("PORTMAX_PORTAL_ORIGINS", ""), *args.portal_origin])
+    origins = parse_portal_origins(spec)
+    for college, origin in origins.items():
+        print(f"{college}: pages must come from {origin}")
+    connectors = with_portal_origins(origins)
+    uvicorn.run(create_api(store, DevTokens(), connectors), host=args.host, port=args.port)
     return 0
 
 
@@ -150,6 +156,14 @@ def main(argv: list[str] | None = None) -> int:
     api = commands.add_parser("api", help="serve the API the Android app talks to")
     api.add_argument("--host", default="127.0.0.1")
     api.add_argument("--port", type=int, default=8000)
+    api.add_argument(
+        "--portal-origin",
+        action="append",
+        default=[],
+        metavar="COLLEGE=ORIGIN",
+        help="where a college's portal lives on this machine, e.g. "
+        "mockcollege=http://192.168.1.20:8765 (also PORTMAX_PORTAL_ORIGINS)",
+    )
     api.set_defaults(run=_api)
 
     forge = commands.add_parser("forge", help="build a college's connector from a recorded visit")

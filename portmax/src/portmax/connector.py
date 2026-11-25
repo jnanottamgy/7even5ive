@@ -5,6 +5,8 @@ from __future__ import annotations
 import importlib
 import importlib.util
 import json
+import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
@@ -90,3 +92,46 @@ def load_connector(college: str, root: Path | None = None) -> Connector:
         parsers = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(parsers)
     return Connector(manifest=manifest, plan=plan, parsers=parsers, root=folder)
+
+
+def parse_portal_origins(spec: str) -> dict[str, str]:
+    """`college=origin,...` (PORTMAX_PORTAL_ORIGINS or `portmax api --portal-origin`).
+
+    Why: the mock portal's manifest says 127.0.0.1, but a phone on the same Wi-Fi reaches it at
+    the laptop's LAN address, and uploads are refused unless every page came from base_url. The
+    check stays; this only says where the one allowed portal lives on this machine.
+    """
+    origins: dict[str, str] = {}
+    for item in spec.split(","):
+        if not item.strip():
+            continue
+        college, sep, origin = item.partition("=")
+        if not sep or not college.strip() or not origin.strip():
+            raise ValueError(
+                f"portal origin must be college=http://host[:port], got {item.strip()!r}"
+            )
+        origin = origin.strip().rstrip("/")
+        if not re.fullmatch(r"https?://[^/\s]+", origin):
+            raise ValueError(f"portal origin must be scheme and host only, got {origin!r}")
+        origins[college.strip()] = origin
+    return origins
+
+
+def with_portal_origins(
+    origins: dict[str, str],
+    load: Callable[[str], Connector] = load_connector,
+) -> Callable[[str], Connector]:
+    """A connector loader that moves the named colleges' base_url, validated like the manifest."""
+
+    def loader(college: str) -> Connector:
+        connector = load(college)
+        origin = origins.get(college)
+        if origin is None:
+            return connector
+        data = connector.manifest.model_dump() | {"base_url": origin}
+        manifest = Manifest.model_validate(data)  # same pattern as manifest.yaml: scheme+host only
+        return Connector(
+            manifest=manifest, plan=connector.plan, parsers=connector.parsers, root=connector.root
+        )
+
+    return loader

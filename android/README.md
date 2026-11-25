@@ -17,7 +17,10 @@ Every card shows a small `via bot / classroom / jev / jev+llm / llm` badge: what
 ## Run it
 
 1. Start the three backend terminals from [`docs/android.md`](../docs/android.md) section 5
-   (core on 8000 with `HOST=0.0.0.0`, PortMax API on 8002, the mock portal on 8765).
+   (core on 8000 with `HOST=0.0.0.0`, PortMax API on 8002, the mock portal on 8765). Give
+   PortMax the address the phone opens the portal at, or uploads are refused:
+   `PORTMAX_PORTAL_ORIGINS=mockcollege=http://<laptop-ip>:8765` (`http://10.0.2.2:8765` on the
+   emulator).
 2. Open `android/` in Android Studio and run the `app` configuration, or:
    ```bash
    cd android && ./gradlew installDebug
@@ -85,3 +88,6 @@ from the login page, and `session_expired` once the cookies are gone.
 ```bash
 node android/e2e/portal-e2e.js
 ```
+
+To check the phone's case (the portal reached at a LAN address, not 127.0.0.1), start
+PortMax with `PORTMAX_PORTAL_ORIGINS=mockcollege=http://<ip>:8765` and run it with `HOST=<ip>`.
