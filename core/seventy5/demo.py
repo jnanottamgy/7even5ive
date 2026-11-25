@@ -96,14 +96,14 @@ class FixtureLLM:
 def seed(app: Any) -> int:
     db = app.db
     with db.tx() as c:
-        for table in ("audit", "calendar", "pending_approvals", "used_approvals", "items",
+        for table in ("audit", "calendar", "pending_approvals", "used_approvals", "reminders", "items",
                       "events", "subjects", "students"):
             c.execute(f"DELETE FROM {table}")
         cur = c.execute("INSERT INTO students(name, wa_phone, mcp_token, branch, year, interests,"
-                        " portal_id) VALUES (?,?,?,?,?,?,?)",
+                        " portal_id) VALUES (?,?,?,?,?,?,?) RETURNING id",
                         ("Demo Student", PHONE, TOKEN, "CSE", 3, "hackathons, backend, AI",
                          PORTAL_ID))
-        sid = int(cur.lastrowid or 0)
+        sid = int(cur.fetchone()["id"])
         c.executemany("INSERT INTO subjects(student_id, name) VALUES (?,?)",
                       [(sid, s) for s in SUBJECTS])
     seed_portal()

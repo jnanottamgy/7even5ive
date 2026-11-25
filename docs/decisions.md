@@ -18,9 +18,9 @@ decisions are Kartik's. Earlier entries 1–15 are replaced by 29 onwards (git h
 
 | # | Decision | Why |
 |---|---|---|
-| 35 | **The WhatsApp bot is both a trigger and a tool:** it pushes signed events (HMAC over timestamp + body, 300 s window) and serves an MCP server 7even5ive pulls from. Format: [`bot-events.md`](bot-events.md). | Event-driven, nothing polls. |
+| 35 | **The WhatsApp bot is both a trigger and a tool:** it pushes signed events (HMAC over timestamp + body, 300 s window) and serves an MCP server 7even5ive pulls files from. Events carry the raw message and, for an attachment, the bot's file id; **7even5ive classifies everything itself** with its own cascade. Format: [`bot-events.md`](bot-events.md). | Event-driven, nothing polls; one place decides what a message is. |
 | 36 | **No share sheet.** Voice notes come only through the bot (ElevenLabs Scribe). | A share sheet would need its own pipeline, and it can't carry captions. |
-| 37 | **The portal is checked once every morning** (EventBridge); only changes become events, and the briefing runs after the check. The portal comes through PortMax. | The portal has no push. |
+| 37 | **The portal is checked every 3 hours** (PortMax's refresh); only changes become events. The morning briefing uses the freshest saved answers and never waits on a login. | The portal has no push; attendance changes daily. |
 | 38 | **Classroom arrives through its Gmail emails,** plus the Classroom API for `dueDate`. | One push channel instead of two. |
 | 39 | **Gmail is read-only.** | Low risk; no draft or send tool exists. |
 
@@ -29,19 +29,26 @@ decisions are Kartik's. Earlier entries 1–15 are replaced by 29 onwards (git h
 | # | Decision | Why |
 |---|---|---|
 | 40 | **No planner.** 7even5ive organises and presents ("what's due this week"); it never plans study time. | Students can't move classes; the useful job is organising what exists. |
-| 41 | **Notifications are only opt-in deadline reminders and an opt-in urgent call.** Never notify about a deadline the student just forwarded. | |
+| 41 | **Notifications are only opt-in deadline reminders and an opt-in urgent call. 7even5ive notes the reminders and fires them** (the bot does not). Never notify about a deadline the student just forwarded. | One owner, so a student never gets the same reminder twice. |
 | 42 | **Attendance comes from PortMax** (`get_attendance_plan`); 7even5ive keeps no attendance maths of its own. | One implementation, exact fractions, the college's own minimum. |
-| 43 | **Sold to individual students only:** free Basic, Plus, a Pro add-on, partner referrals. No college licence. | |
+| 43 | **No business model.** 7even5ive is a hackathon entry; nothing is priced or sold. | |
 
 ## Infrastructure
 
 | # | Decision | Why |
 |---|---|---|
 | 44 | **AWS Lambda for compute,** with SQS + dead-letter queue between ingress and workers, API Gateway in front. | Costs nothing idle; a slow model call never holds a webhook open; a crash retries instead of losing the message. |
-| 45 | **Neon Postgres for the database.** | No VPC, so no NAT gateway; real SQL; free tier covers the demo. |
-| 46 | **One door for every tool call: AgentCore Gateway** (inbound auth, interceptor Lambda checking provenance and one-time approval tokens, Cedar deny-by-default, Identity vault, observability). | Prompt injection arrives in forwards; control is enforced in infrastructure, not in a prompt. |
+| 45 | **Supabase for the database** (Postgres, row-level security, Realtime, Auth). Lambdas connect through its connection pooler. **Region: Mumbai** (`ap-south-1`), as is the AWS account. | Real SQL; Realtime pushes cards to the phone and Auth signs students in, so we build neither; no VPC, so no NAT gateway; the free tier covers the demo. |
+| 46 | **One door for every tool call.** First our own gateway code (`gateway.py`) on Lambda; **AgentCore Gateway replaces it later** (inbound auth, interceptor Lambda checking provenance and one-time approval tokens, Cedar deny-by-default, Identity vault, observability). | Prompt injection arrives in forwards; control is enforced in infrastructure, not in a prompt. |
 | 47 | **Idempotency on the source's own id** (WhatsApp message id, Gmail message id), enforced by a unique key. | Gmail pushes 2–3 times per mail; redeliveries must cost one run. |
 | 48 | **Logs carry ids and counts only,** never message or mail bodies. | |
+
+## Prototype
+
+| # | Decision | Why |
+|---|---|---|
+| 49 | **No sign-in in the prototype.** One demo student, identified by a fixed token. | Sign-in adds nothing to what the prototype has to show. |
+| 50 | **The prototype's only app is Android.** The web page in `core/` is a development view, not a product. | The Android app has to exist anyway for the portal login (decision 19). |
 
 ## PortMax (16–28, numbered as before)
 

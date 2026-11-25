@@ -7,6 +7,7 @@ high confidence, the LLM is gated, deny by default, one-time approvals, exact at
 from __future__ import annotations
 
 import json
+import os
 import time
 
 import pytest
@@ -27,8 +28,16 @@ def app(tmp_path, monkeypatch):
     from portmax.store import Store
     monkeypatch.setattr(tools, "_portal", Store(f"sqlite:///{tmp_path.as_posix()}/pm.db"))
 
+    # PG_TEST_URL=postgresql://... runs every test against Postgres (Supabase's engine).
+    url = os.environ.get("PG_TEST_URL") or str(tmp_path / "t.db")
+    if url.startswith("postgres"):
+        import psycopg
+        with psycopg.connect(url, autocommit=True) as c:
+            c.execute("DROP TABLE IF EXISTS audit, reminders, calendar, pending_approvals,"
+                      " used_approvals, items, events, subjects, students CASCADE")
+
     def make(jev=None, llm=None):
-        a = build(str(tmp_path / "t.db"), jev=jev or ScriptedDecider({}), llm=llm or ScriptedLLM({}))
+        a = build(url, jev=jev or ScriptedDecider({}), llm=llm or ScriptedLLM({}))
         return a, demo.seed(a)
     return make
 
@@ -64,7 +73,7 @@ def test_webhook_ignores_unknown_numbers_and_bad_signatures(app):
                        headers={"x-75-timestamp": str(ts), "x-75-signature": "bad"}).status_code == 401
     ok = client.post("/bot/webhook", content=body,
                      headers={"x-75-timestamp": str(ts), "x-75-signature": sign(body, ts)})
-    assert ok.status_code == 200 and a.db.conn.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 0
+    assert ok.status_code == 200 and len(a.db.conn.execute("SELECT id FROM events").fetchall()) == 0
 
 
 # --- cascade --------------------------------------------------------------------------
@@ -173,3 +182,78 @@ def test_attendance_says_not_connected_before_a_portal_refresh(app):
     a, sid = app()
     a.db.conn.execute("UPDATE students SET portal_id='nobody' WHERE id=?", (sid,))
     assert a.gateway.call(sid, "attendance")["result"] == {"connected": False, "subjects": []}
+
+
+# --- reminders ------------------------------------------------------------------------
+def test_reminder_is_noted_then_fired_exactly_once(app):
+    from datetime import datetime
+
+    from seventy5 import clock, notify
+
+    a, sid = app()
+    item = _dated_item(a, sid)  # due 2030-01-04 23:59
+    r = a.gateway.call(sid, "set_reminder", {"item_id": item, "before_minutes": 60})["result"]
+    again = a.gateway.call(sid, "set_reminder", {"item_id": item, "before_minutes": 60})["result"]
+    assert r["reminder_id"] == again["reminder_id"]  # asked twice, stored once
+    sender = notify.LogSender()
+    try:
+        clock.freeze(datetime(2030, 1, 4, 22, 0, tzinfo=clock.IST))
+        assert notify.fire_due(a.db, sender) == 0
+        clock.freeze(datetime(2030, 1, 4, 23, 0, tzinfo=clock.IST))
+        assert notify.fire_due(a.db, sender) == 1
+        assert notify.fire_due(a.db, sender) == 0  # never twice
+    finally:
+        clock.freeze(None)
+    assert sender.sent[0]["title"] == "Database Management Systems: DBMS assignment"
+
+
+def test_reminder_needs_a_filed_dated_item(app):
+    a, sid = app()
+    with pytest.raises(Denied):
+        a.gateway.call(sid, "set_reminder", {"item_id": 9999})
+
+
+def test_cancelled_reminder_never_fires(app):
+    from datetime import datetime
+
+    from seventy5 import clock, notify
+
+    a, sid = app()
+    item = _dated_item(a, sid)
+    rid = a.gateway.call(sid, "set_reminder", {"item_id": item})["result"]["reminder_id"]
+    assert a.gateway.call(sid, "cancel_reminder", {"reminder_id": rid})["result"]["cancelled"]
+    try:
+        clock.freeze(datetime(2030, 1, 4, 23, 0, tzinfo=clock.IST))
+        assert notify.fire_due(a.db, notify.LogSender()) == 0
+    finally:
+        clock.freeze(None)
+
+
+# --- Lambda handlers --------------------------------------------------------------------
+def test_cascade_handler_reports_only_the_failed_record(app, monkeypatch):
+    from seventy5 import aws
+
+    a, sid = app(jev=ScriptedDecider({"kind": Picked("chitchat", .99)}))
+    good = a.db.insert_event(sid, "whatsapp:w1", "whatsapp", {"text": "ok"}, "2030-01-01T00:00+05:30")
+    monkeypatch.setattr(aws, "_app", a)
+    out = aws.cascade_handler({"Records": [{"messageId": "m1", "body": str(good)},
+                                           {"messageId": "m2", "body": "999999"}]}, None)
+    assert out == {"batchItemFailures": [{"itemIdentifier": "m2"}]}
+    # SQS redelivers at least once: a done event is skipped, never filed twice
+    assert aws.cascade_handler({"Records": [{"messageId": "m1", "body": str(good)}]}, None) == {
+        "batchItemFailures": []}
+
+
+def test_http_handler_serves_the_api_through_api_gateway(app, monkeypatch):
+    from seventy5 import aws
+
+    a, _ = app()
+    monkeypatch.setattr(aws, "_app", a)
+    monkeypatch.setattr(aws, "_http", None)
+    event = {"version": "2.0", "routeKey": "$default", "rawPath": "/api/cards", "rawQueryString": "",
+             "headers": {"authorization": f"Bearer {demo.TOKEN}"},
+             "requestContext": {"http": {"method": "GET", "path": "/api/cards", "sourceIp": "1.1.1.1",
+                                         "protocol": "HTTP/1.1", "userAgent": "t"}, "stage": "$default"},
+             "isBase64Encoded": False}
+    resp = aws.http_handler(event, None)
+    assert resp["statusCode"] == 200 and "due_this_week" in resp["body"]

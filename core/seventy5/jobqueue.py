@@ -39,3 +39,21 @@ class Queue:
                     if attempt == MAX_ATTEMPTS:
                         on_dead(event_id, type(err).__name__)
         return done
+
+
+class SqsQueue:
+    """On AWS: send() puts the event id on SQS, and the cascade Lambda is the consumer.
+    Retries and the dead-letter queue are SQS's (maxReceiveCount 3 in template.yaml), so
+    drain() has nothing to do here."""
+
+    def __init__(self, url: str) -> None:
+        import boto3  # in the Lambda runtime; never needed locally
+
+        self.url = url
+        self._sqs = boto3.client("sqs")
+
+    def send(self, event_id: int) -> None:
+        self._sqs.send_message(QueueUrl=self.url, MessageBody=str(event_id))
+
+    def drain(self, handle: Callable[[int], None], on_dead: Callable[[int, str], None]) -> int:
+        return 0

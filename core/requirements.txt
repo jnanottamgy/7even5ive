@@ -8,3 +8,6 @@ pytest>=8
 
 # PortMax supplies attendance and the portal tools; installed from this repository.
 -e ../portmax
+# Supabase Postgres (production); SQLite needs nothing.
+psycopg[binary]>=3.2
+mangum>=0.19              # runs the FastAPI app inside Lambda

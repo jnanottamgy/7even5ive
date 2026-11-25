@@ -62,6 +62,22 @@ def opportunities() -> Any:
     return _call("opportunities")
 
 
+@server.tool(description="Remind the student before a filed deadline or exam (by its id). "
+                         "before_minutes defaults to a day. The reminder arrives on their phone.")
+def set_reminder(item_id: int, before_minutes: int = 1440) -> Any:
+    return _call("set_reminder", item_id=item_id, before_minutes=before_minutes)
+
+
+@server.tool(description="The student's pending reminders, soonest first.")
+def list_reminders() -> Any:
+    return _call("list_reminders")
+
+
+@server.tool(description="Cancel one pending reminder by its reminder_id.")
+def cancel_reminder(reminder_id: int) -> Any:
+    return _call("cancel_reminder", reminder_id=reminder_id)
+
+
 @server.tool(description="Ask to add a filed deadline or exam (by its id) to Google Calendar. "
                          "Needs the student's approval on their phone; returns approval_needed until then.")
 def add_to_calendar(item_id: int) -> Any:

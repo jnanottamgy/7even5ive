@@ -22,7 +22,7 @@ import secrets
 import time
 from typing import Any, Callable
 
-from . import clock, tools
+from . import clock, notify, tools
 from .config import settings
 from .db import Database
 
@@ -33,16 +33,24 @@ POLICY: dict[str, str] = {
     "materials": "allow",
     "attendance": "allow",
     "opportunities": "allow",
+    # Reminders only touch the student's own rows inside 7even5ive, so they need no tap.
+    "set_reminder": "allow",
+    "list_reminders": "allow",
+    "cancel_reminder": "allow",
     "add_to_calendar": "ask",
     "send_email": "deny",  # Gmail is read-only for 75
     "submit_on_portal": "deny",
 }
 
-READS: dict[str, Callable[..., Any]] = {
+# Tools that stay inside 7even5ive: reads, and writes to the student's own reminders.
+OWN: dict[str, Callable[..., Any]] = {
     "due_this_week": tools.due_this_week,
     "materials": tools.materials,
     "attendance": tools.attendance,
     "opportunities": tools.opportunities,
+    "set_reminder": notify.set_reminder,
+    "list_reminders": notify.list_reminders,
+    "cancel_reminder": notify.cancel_reminder,
 }
 WRITES: dict[str, Callable[..., Any]] = {"add_to_calendar": tools.add_to_calendar}
 
@@ -98,7 +106,7 @@ class Gateway:
     def _provenance(self, student_id: int, tool: str, args: dict[str, Any]) -> None:
         # A write may only use values 75 filed from a real event -- never text the model
         # (or a poisoned email) typed into the call.
-        if tool == "add_to_calendar":
+        if tool in ("add_to_calendar", "set_reminder"):
             item = self.db.item(student_id, int(args.get("item_id", -1)))
             if item is None or item["event_id"] is None or item["status"] != "filed":
                 raise Denied("item_id is not a filed item of this student")
@@ -112,8 +120,14 @@ class Gateway:
             raise Denied(f"{tool} is not allowed")
 
         if rule == "allow":
+            try:
+                self._provenance(student_id, tool, args)
+                result = OWN[tool](self.db, student_id, **args)
+            except (Denied, ValueError, TypeError) as err:
+                self._log(student_id, tool, "deny", str(err))
+                raise Denied(str(err)) from err
             self._log(student_id, tool, "allow", "policy")
-            return {"status": "ok", "result": READS[tool](self.db, student_id, **args)}
+            return {"status": "ok", "result": result}
 
         # rule == "ask"
         try:

@@ -16,7 +16,7 @@ diagrams in the repository are earlier snapshots and are superseded wherever the
 ```bash
 cd core
 python -m venv .venv && .venv/Scripts/pip install -r requirements.txt    # Windows; bin/ elsewhere
-python -m seventy5.demo        # a morning's messages end to end, then the web app on :8000
+python -m seventy5.demo        # a morning's messages end to end, then a dev web view on :8000
 python -m pytest -q
 ```
 
@@ -60,9 +60,9 @@ WhatsApp bot  ──>  bot-webhook λ ──┐
 Gmail push    ──>  gmail-webhook λ ┼──>  SQS + DLQ ──> cascade λ ─┐                          Gmail · Classroom (read)
 Classroom     ──>  (via Gmail)     │                  approve λ   ├─> AgentCore Gateway ──>  Google Calendar
 EventBridge   ──>  portal-check λ ─┘                  briefing λ  │   auth · interceptor     WhatsApp bot API / MCP
-  (every morning)                                     notify λ  ──┘   Cedar · Identity ·     agent tools (DB)
+  (every 3 hours)                                     notify λ  ──┘   Cedar · Identity ·     agent tools (DB)
 Phone · Claude · ChatGPT · ElevenLabs agent ─────────────────────────> observability          PortMax (portal)
-                                                                                             Neon Postgres · Bedrock
+                                                                                             Supabase · Bedrock    
 ```
 
 Full components and flows: [`docs/architecture.md`](docs/architecture.md). The gateway's rules:
@@ -72,8 +72,8 @@ Full components and flows: [`docs/architecture.md`](docs/architecture.md). The g
 
 | | |
 |---|---|
-| **AWS** | Lambda workers, SQS with a dead-letter queue, API Gateway, EventBridge (morning portal check, reminders), AgentCore Gateway (inbound auth, interceptor Lambda, Cedar, Identity vault, observability), Bedrock (Claude Haiku 5.5), S3 + CloudFront (files, web app), SSM (keys), CloudWatch. Nothing runs while nobody is using it. |
-| **Database** | Neon Postgres. No VPC, so the Lambdas need no NAT gateway. |
+| **AWS** | Lambda workers, SQS with a dead-letter queue, API Gateway, EventBridge (portal check every 3 hours, morning briefing, reminders), AgentCore Gateway (inbound auth, interceptor Lambda, Cedar, Identity vault, observability), Bedrock (Claude Haiku 5.5), S3 + CloudFront (files, web app), SSM (keys), CloudWatch. Nothing runs while nobody is using it. |
+| **Database** | Supabase (Mumbai): Postgres with row-level security, Realtime (live cards) and Auth. Lambdas use its connection pooler, so no VPC and no NAT gateway. |
 | **Jev** | TypeSafe's decision model via OpenRouter: about $0.00003 a call, output free. |
 | **ElevenLabs** | Morning briefing (TTS), the voice agent and the urgent call (an MCP client like any other), Scribe for voice notes. |
 
@@ -94,7 +94,6 @@ own. Plan: [`docs/portmax.md`](docs/portmax.md).
 | [`docs/decisions.md`](docs/decisions.md) | Decision log: the source of truth when anything disagrees |
 | [`docs/architecture.md`](docs/architecture.md) | Components and flows |
 | [`docs/policy.md`](docs/policy.md) | The control model enforced at the gateway |
-| [`docs/business.md`](docs/business.md) | Pricing, market |
 | `ppt/` · `video/` · `brand/` · `diagrams/` | Deck, film, brand kit, diagrams |
 
 All demo data is invented. We never sell student data, and Gmail data is never used for ads.

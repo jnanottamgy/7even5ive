@@ -30,7 +30,7 @@ SEVENTY5_TOKEN=demo-student-token python -m seventy5.mcp_server          # stdio
 python -m seventy5.mcp_server --http                                     # :8001, Bearer token
 ```
 
-Tools: `due_this_week`, `materials`, `attendance`, `opportunities`, `add_to_calendar`.
+Tools: `due_this_week`, `materials`, `attendance`, `opportunities`, `set_reminder`, `list_reminders`, `cancel_reminder`, `add_to_calendar`.
 
 ## How it works
 
@@ -59,6 +59,8 @@ Portal (every morning) ────┘                                         �
 | `seventy5/gateway.py` | policy, approvals, provenance, audit |
 | `seventy5/tools.py` | what every client can ask |
 | `seventy5/mcp_server.py` · `api.py` | MCP and HTTP faces of the same tools |
+| `seventy5/notify.py` | opt-in reminders: noted, then fired once |
+| `seventy5/aws.py` · `template.yaml` | Lambda handlers and the SAM template ([`../docs/deploy.md`](../docs/deploy.md)) |
 | [`../docs/bot-events.md`](../docs/bot-events.md) | the event format the WhatsApp bot posts |
 
 All demo data is invented.

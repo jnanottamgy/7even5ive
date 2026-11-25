@@ -52,4 +52,4 @@ permit (
 - **Source text is data, never instructions.** Messages, mail and portal pages reach the model as
   quoted content.
 - **Every decision is logged:** tool, level, outcome, source.
-- **Per-student scoping** in Neon Postgres: every query is filtered to one student, so a student only ever sees their own rows.
+- **Row-level security** in Supabase, on top of per-student queries: a student only ever sees their own rows.

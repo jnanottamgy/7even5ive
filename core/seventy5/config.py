@@ -30,7 +30,8 @@ _load_dotenv(ROOT / ".env")
 
 @dataclass(frozen=True)
 class Settings:
-    db_path: str = os.environ.get("DB_PATH", str(ROOT / "data" / "75.db"))
+    # A file path means SQLite (local); postgresql://... means Supabase, through its pooler.
+    database_url: str = os.environ.get("DATABASE_URL", str(ROOT / "data" / "75.db"))
 
     # Signed events from the WhatsApp bot. Dev default only; preflight refuses it in prod.
     bot_secret: str = os.environ.get("BOT_WEBHOOK_SECRET", "dev-bot-secret")
@@ -62,6 +63,8 @@ class Settings:
     portmax_database_url: str = os.environ.get(
         "PORTMAX_DATABASE_URL", f"sqlite:///{ROOT / 'data' / 'portmax.db'}".replace("\\", "/"))
     timezone: str = "Asia/Kolkata"
+    # Set on AWS only: the SQS queue between ingress and the cascade Lambda.
+    queue_url: str = os.environ.get("QUEUE_URL", "")
 
 
 settings = Settings()

@@ -1,6 +1,8 @@
-# WhatsApp bot → 75: event format
+# WhatsApp bot → 7even5ive: event format
 
-The bot pushes every message a student sends it to 75. 75 never polls the bot.
+The bot pushes every message a student sends it to 7even5ive, which never polls the bot.
+Send the raw message only: 7even5ive decides what it is (deadline, notes, notice…) with its own
+cascade. The file itself stays with the bot; 7even5ive fetches it over the bot's MCP tool by `file_id`.
 
 ## Request
 
@@ -14,9 +16,10 @@ X-75-Signature: <hex>                 # see below
 ```json
 {
   "from": "919900000001",             // student's number: 91 + 10 digits, no +
-  "message_id": "wamid.HBgM...",      // WhatsApp's id; 75 dedupes on it
+  "message_id": "wamid.HBgM...",      // WhatsApp's id; 7even5ive dedupes on it
   "text": "DBMS Assignment 3 due Fri 11:59 pm",
   "attachment": "DBMS_Unit3_notes.pdf", // optional: file name only
+  "file_id": "f_8812",                // optional: the bot's id for that file, fetched later over MCP
   "group": "CSE 3B Announcements"      // optional: where it was forwarded from
 }
 ```
@@ -28,7 +31,7 @@ signature = hex( HMAC_SHA256( BOT_WEBHOOK_SECRET, f"{timestamp}." + raw_body_byt
 ```
 
 - Sign the **exact bytes** you send. Re-serialising the JSON changes them.
-- 75 rejects a timestamp more than 300 s away from its clock, so a captured request
+- 7even5ive rejects a timestamp more than 300 s away from its clock, so a captured request
   cannot be replayed later.
 - `BOT_WEBHOOK_SECRET` is shared out of band, never committed.
 
@@ -48,8 +51,8 @@ httpx.post(URL, content=body, headers={"X-75-Timestamp": str(ts), "X-75-Signatur
 |---|---|---|
 | 200 `{"ok": true, "duplicate": false}` | queued | nothing |
 | 200 `{"ok": true, "duplicate": true}` | already seen this `message_id` | nothing (safe to retry) |
-| 200 `{"ok": true}` | number is not a 75 student | nothing; 75 stores no row |
+| 200 `{"ok": true}` | number is not a 7even5ive student | nothing; 7even5ive stores no row |
 | 401 | bad or stale signature | check the secret and clock |
 
-75 answers within milliseconds and does the work afterwards, so retries on a timeout are
+7even5ive answers within milliseconds and does the work afterwards, so retries on a timeout are
 safe: the `message_id` makes the second one a no-op.

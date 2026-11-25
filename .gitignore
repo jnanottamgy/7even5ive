@@ -15,3 +15,5 @@ core/data/
 .env
 *.db
 .pytest_cache/
+core/.build/
+core/.aws-sam/

@@ -9,8 +9,8 @@ box below lives in [`core/seventy5/`](../core/seventy5) unless it says PortMax.
 |---|---|---|
 | Triggers | **WhatsApp bot** | Pushes a signed event for every message a student forwards ([`bot-events.md`](bot-events.md)). |
 | | **Gmail push** (Pub/Sub) | New mail, including Classroom's own notification mails. |
-| | **EventBridge** | Every morning: the portal check, then the briefing. Also opt-in reminders. |
-| | **Phone · Claude · ChatGPT · ElevenLabs agent** | Ask questions and tap Approve; all go through the gateway. |
+| | **EventBridge** | Every 3 hours: the portal check. Every morning: the briefing. Every minute: due reminders. |
+| | **Android app · Claude · ChatGPT · ElevenLabs agent** | Ask questions and tap Approve; all go through the gateway. |
 | Ingress | **bot-webhook λ** | HMAC + timestamp check (`ingress.py`), unknown numbers dropped with no reply and no row. |
 | | **gmail-webhook λ** | Verifies Pub/Sub's JWT, fetches the new mail ids. |
 | | **portal-check λ** | Asks PortMax for fresh answers; only a change becomes an event. |
@@ -19,14 +19,14 @@ box below lives in [`core/seventy5/`](../core/seventy5) unless it says PortMax.
 | Workers | **cascade λ** | Classroom date → Jev → LLM → gate → card (`cascade.py`). |
 | | **approve λ** | Runs an approved write exactly once (`gateway.approve`). |
 | | **briefing λ** | Template filled from the day's data (no model writes it) → ElevenLabs TTS, generated on first tap and cached. |
-| | **notify λ** | Opt-in deadline reminders and the opt-in urgent call. |
-| Gateway | **AgentCore Gateway** | 1 inbound auth · 2 interceptor λ (provenance + one-time approval token) · 3 Cedar, deny by default · 4 Identity vault (the student's Google tokens) · 5 observability. Locally: `gateway.py`. |
+| | **notify λ** | Fires the opt-in deadline reminders 7even5ive has noted, and the opt-in urgent call. |
+| Gateway | **Gateway** (our code first, AgentCore later) | 1 inbound auth · 2 interceptor λ (provenance + one-time approval token) · 3 Cedar, deny by default · 4 Identity vault (the student's Google tokens) · 5 observability. Locally: `gateway.py`. |
 | Tools | **Gmail + Classroom API** | Read-only. |
 | | **Google Calendar** | The only write; needs the student's Approve. The event id is fixed per item, so a retry rewrites the same event. |
 | | **WhatsApp bot API / MCP server** | Files and their links stay in the bot's storage; 7even5ive keeps references. |
 | | **Agent tools** | `due_this_week`, `materials`, `attendance`, `opportunities`, read from the database (`tools.py`, `mcp_server.py`). |
 | | **PortMax** | The portal's five tools and `get_attendance_plan` ([`portmax/`](../portmax)). |
-| Data | **Neon Postgres** | Every query scoped to one student. |
+| Data | **Supabase** (Postgres) | Every query scoped to one student, with row-level security as the backstop; Realtime pushes new cards to the phone. Lambdas connect through Supabase's connection pooler. |
 | | **Bedrock** | Claude Haiku 5.5 for the LLM step. |
 | | **S3 + CloudFront · CloudWatch · SSM** | Files and the web app · logs with ids and counts only · keys. |
 
@@ -54,7 +54,7 @@ event ──> Classroom dueDate?  ── yes ──> Jev names the subject ─�
    notification: the student sent it.
 2. **Mail, filtered.** Gmail push → gmail-webhook λ → cascade: Jev rules out spam and fakes, and
    scores relevance to the student's branch, year and interests → opportunities, most relevant first.
-3. **Attendance.** Every morning portal-check λ refreshes PortMax; a changed answer is an event;
+3. **Attendance.** Every 3 hours portal-check λ refreshes PortMax; a changed answer is an event;
    `attendance` returns PortMax's plan, worst subject first ("attend the next 2 DBMS classes").
 4. **Your own AI.** Claude asks `due_this_week` over MCP → gateway allows the read. "Add it to my
    calendar" → `add_to_calendar` is an *ask* rule: the gateway mints a one-time token bound to that
@@ -65,5 +65,5 @@ event ──> Classroom dueDate?  ── yes ──> Jev names the subject ─�
 
 ## Cost traps we design around
 
-No NAT gateway (Neon needs no VPC) · no mail bodies in logs · Gmail's 2–3 pushes per mail
-deduplicated · no WebSocket connection-minutes (the phone polls) · voice capped and sold only in Plus.
+No NAT gateway (Supabase is reached over the internet, so the Lambdas need no VPC) · no mail bodies in logs · Gmail's 2–3 pushes per mail
+deduplicated · no WebSocket bill of our own (Supabase Realtime carries the live cards) · voice capped.
