@@ -56,6 +56,22 @@ class Upload(BaseModel):
     pages: list[Page] = Field(min_length=1, max_length=60)
 
 
+def phone_settings(connector: Connector) -> dict[str, Any]:
+    """Everything the phone needs to run the plan and keep the login alive; nothing secret."""
+    manifest = connector.manifest
+    return {
+        "college": manifest.college,
+        "name": manifest.name,
+        "connector_version": manifest.connector_version,
+        "login_path": manifest.login_path,
+        "markers": manifest.markers.model_dump(),
+        "keepalive_minutes": keepalive_interval_minutes(manifest.session),
+        "push_wakeup": needs_push_wakeup(manifest.session),
+        "refresh_minutes": manifest.refresh_minutes,
+        "plan": connector.plan.model_dump(by_alias=True),
+    }
+
+
 def create_api(
     store: Store,
     auth: Authenticator,
@@ -78,19 +94,7 @@ def create_api(
 
     @app.get("/v1/connectors/{college}")
     def connector_settings(college: str, _: Annotated[str, Depends(student)]) -> dict[str, Any]:
-        connector = connector_for(college)
-        manifest = connector.manifest
-        return {
-            "college": manifest.college,
-            "name": manifest.name,
-            "connector_version": manifest.connector_version,
-            "login_path": manifest.login_path,
-            "markers": manifest.markers.model_dump(),
-            "keepalive_minutes": keepalive_interval_minutes(manifest.session),
-            "push_wakeup": needs_push_wakeup(manifest.session),
-            "refresh_minutes": manifest.refresh_minutes,
-            "plan": connector.plan.model_dump(by_alias=True),
-        }
+        return phone_settings(connector_for(college))
 
     @app.get("/v1/runner.js")
     def runner() -> Response:
