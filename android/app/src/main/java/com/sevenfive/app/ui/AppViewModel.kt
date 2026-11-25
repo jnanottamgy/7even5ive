@@ -97,6 +97,11 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
 
     fun findLaptop() = viewModelScope.launch { container.finder.find(userAsked = true) }
 
+    /** "https://…" for the online server, or a laptop's IP. */
+    fun connectTo(input: String) = saveServers(ServerConfig.parse(input))
+
+    fun useOnline() = saveServers(container.servers.buildDefault)
+
     fun saveServers(config: ServerConfig) {
         container.servers.save(config)
         container.portmax.forget()

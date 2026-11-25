@@ -26,7 +26,7 @@ class SevenFiveApp : Application() {
 /** Hand-wired dependencies: a prototype doesn't need a DI framework. */
 class AppContainer(context: Context) {
     val appContext: Context = context.applicationContext
-    val servers = ServerSettings(context, BuildConfig.DEFAULT_HOST)
+    val servers = ServerSettings(context, BuildConfig.DEFAULT_HOST, BuildConfig.DEFAULT_SERVER)
     private val http = Http(BuildConfig.STUDENT_TOKEN)
     val core = CoreApi(http) { servers.config.value.coreUrl }
     val portmax = PortMaxApi(http) { servers.config.value.portmaxUrl }

@@ -18,6 +18,7 @@ android {
         versionCode = 1
         versionName = "0.1.0"
 
+        buildConfigField("String", "DEFAULT_SERVER", "\"${prop("sevenfive.defaultServer", "")}\"")
         buildConfigField("String", "DEFAULT_HOST", "\"${prop("sevenfive.defaultHost", "10.0.2.2")}\"")
         buildConfigField("String", "STUDENT_TOKEN", "\"${prop("sevenfive.studentToken", "demo-student-token")}\"")
         buildConfigField("String", "COLLEGE", "\"${prop("sevenfive.college", "mockcollege")}\"")

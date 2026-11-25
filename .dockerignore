@@ -1,0 +1,15 @@
+.git
+**/__pycache__
+**/.pytest_cache
+**/.venv
+core/data
+core/.build
+core/.aws-sam
+android
+video
+ppt
+brand
+diagrams
+*.pdf
+*.db
+.env

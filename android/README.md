@@ -16,6 +16,12 @@ Every card shows a small `via bot / classroom / jev / jev+llm / llm` badge: what
 
 ## Run it
 
+**Online (no laptop):** once the online server is up ([`docs/online.md`](../docs/online.md))
+and its address is in `android/gradle.properties` (`sevenfive.defaultServer`), just install
+the APK: it opens straight onto the server.
+
+**Laptop:**
+
 1. On the laptop, double-click **`start-demo.bat`** in the repository root (macOS/Linux:
    `./start-demo.sh`). One window runs the core, PortMax and the mock portal, with the portal
    address set and kept current. The separate terminals are in

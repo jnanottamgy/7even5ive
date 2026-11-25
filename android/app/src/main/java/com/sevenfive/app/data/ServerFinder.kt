@@ -37,7 +37,9 @@ class ServerFinder(
             delay(CHECK_MILLIS)
             val state = cards.state.value
             val due = System.currentTimeMillis() - lastSearch > RETRY_MILLIS
-            if (state.unreachable && due) find(userAsked = false)
+            // Only a laptop setup is searched for: an online server that is briefly down (or
+            // waking up) must not be swapped for whatever answers on the local Wi-Fi.
+            if (state.unreachable && due && !servers.config.value.isOnline) find(userAsked = false)
         }
     }
 

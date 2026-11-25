@@ -68,46 +68,44 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             val searching by vm.searching.collectAsStateWithLifecycle()
-            Text("Laptop on the same Wi-Fi", style = MaterialTheme.typography.titleMedium)
+            val online = vm.container.servers.buildDefault.takeIf { it.isOnline }
+            Text("Where the app gets its data", style = MaterialTheme.typography.titleMedium)
             Text(
-                "The app finds the laptop by itself when it runs start-demo and the phone is on " +
-                    "its Wi-Fi or hotspot. Type an address only if that doesn't work.",
+                if (current.isOnline) "Online server: ${current.coreUrl}" else "Laptop: ${current.coreUrl}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Button(
-                onClick = { vm.findLaptop() },
-                enabled = !searching,
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text(if (searching) "Looking…" else "Find the laptop") }
-            Text(
-                "Or type the laptop's IPv4 address (ipconfig on Windows). On the Android emulator, use 10.0.2.2.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (online != null && !current.isOnline) {
+                Button(
+                    onClick = { vm.useOnline(); onBack() },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Use the online server") }
+            }
             Row {
                 OutlinedTextField(
                     value = host,
                     onValueChange = { host = it.trim() },
-                    label = { Text("Laptop IP") },
-                    placeholder = { Text("192.168.1.20") },
+                    label = { Text("Online address or laptop IP") },
+                    placeholder = { Text("https://… or 192.168.1.20") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                     modifier = Modifier.weight(1f),
                 )
                 Spacer(Modifier.width(8.dp))
-                OutlinedButton(
-                    onClick = {
-                        val c = ServerConfig.forHost(host)
-                        core = c.coreUrl; portmax = c.portmaxUrl; portal = c.portalUrl
-                    },
+                Button(
+                    onClick = { vm.connectTo(host); onBack() },
                     enabled = host.isNotBlank(),
                     modifier = Modifier.padding(top = 8.dp),
-                ) { Text("Fill in") }
+                ) { Text("Connect") }
             }
+            OutlinedButton(
+                onClick = { vm.findLaptop() },
+                enabled = !searching,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text(if (searching) "Looking…" else "Find a laptop on this Wi-Fi") }
 
             HorizontalDivider()
-            Text("Addresses", style = MaterialTheme.typography.titleMedium)
+            Text("Addresses (advanced)", style = MaterialTheme.typography.titleMedium)
             UrlField("7even5ive core (cards, approvals)", core) { core = it }
             UrlField("PortMax (portal settings, upload)", portmax) { portmax = it }
             UrlField("College portal", portal) { portal = it }
