@@ -17,6 +17,8 @@ Full plan: [`portmax.md`](portmax.md).
 | 22 | **No evasion:** no CAPTCHA solving, WebView spoofing, fingerprint cloaking or IP rotation. Real students only after MSRIT agrees in writing; we ask for an official read-only feed. | MSRIT's portal says it "cannot be used from third-party apps", and IT Act s.43 turns on the owner's permission. |
 | 23 | **Adapter: Lambda behind AgentCore Gateway** for the product; the MCP server only for development and the demo; HTTP/OpenAPI only if the app ever needs its own API. | Every tool call then goes through the gateway's checks (decision 12), with no public endpoint, and it costs nothing when idle. |
 | 24 | **Renamed Portal Forge to PortMax.** | Team decision, 25 Nov. |
+| 25 | **A connector's fetch plan is data (`fetch_plan.json`), not code.** | The same file runs in the Android WebView (JavaScript) and on a server (Python); GET-only by construction, with every path and followed link checked. |
+| 26 | **A keep-alive reads one page; every `refresh_minutes` (3 hours by default, per college) it runs the whole plan.** The interval is the idle timeout minus a fifth (at least two minutes); 15 minutes until measured. | One light ping keeps the login at the least load on the portal, while attendance stays a few hours fresh. |
 
 ### Still open (PortMax)
 

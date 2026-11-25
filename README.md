@@ -6,8 +6,10 @@ deadlines, notes, attendance and placement mail.**
 > wHACKiest 2026 · Track 1: *Make MCP Matter. Less Magic, More Utility.*
 > Team: Jnanottam GY · Kartik · Mohammed Zaid
 
-**Status: Round 1 blueprint.** The ideathon round is plans only, so this repository holds the
-design, the deck and the film, not the build. Code lands on hack day (1–2 Dec, RIT).
+**Status: Round 1 blueprint, with PortMax being built.** The ideathon round is plans only, so this
+repository holds the design, the deck and the film. PortMax, the portal connector, is being built
+ahead of hack day in [`portmax/`](portmax) (declare it as prior work if the rules require); the
+rest of the code lands on hack day (1–2 Dec, RIT).
 
 > **The current plan is this README and [`docs/`](docs).** Read
 > [`docs/decisions.md`](docs/decisions.md) first: it records every decision and why. The PDFs in the

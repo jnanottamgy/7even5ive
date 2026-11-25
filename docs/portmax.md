@@ -68,8 +68,11 @@ built only if the app ever needs its own API.
 
 ## Build status
 
-Built on 25 Nov in [`portmax/`](../portmax): Python 3.12, ruff and strict mypy clean, 64 tests
-passing, all against a mock college portal (`portmax mock serve`), never a real one.
+Built on 25 Nov in [`portmax/`](../portmax): Python 3.12, ruff and strict mypy clean, 77 tests
+passing, all against a mock college portal (`portmax mock serve`), never a real one. Phase 1 is
+done: with the repository's `.mcp.json`, Claude Code answers "what's my DBMS attendance?" from the
+mock. Phase 2 is done except one live run of the engineer with a model (needs an API key or
+Bedrock access).
 
 | Part | Status | Code |
 | --- | --- | --- |
@@ -79,11 +82,12 @@ passing, all against a mock college portal (`portmax mock serve`), never a real 
 | Mock connector, fixtures, golden answers | Built; replays offline | `connectors/mockcollege/` |
 | Store, ingest (pages parsed, then dropped), the five tools | Built | `store.py`, `ingest.py`, `tools.py` |
 | Lambda adapter for AgentCore Gateway, tool schema | Built; check the event shape against AWS docs before deploying | `adapters/lambda_handler.py`, `adapters/gateway.py` |
-| MCP server (development, demo) | Built | `adapters/mcp_server.py` |
+| MCP server (development, demo) | Built; Claude Code connects through `.mcp.json` | `adapters/mcp_server.py` |
 | Phone API: `GET /v1/connectors/{college}`, `GET /v1/runner.js`, `POST /v1/pages` | Built; dev sign-in tokens until hack day's Supabase login | `api.py` |
 | JS runner for the WebView | Built; real-Chromium tests: reads every tool, keeps the login past the idle timeout, refuses unsafe plans | `runner/portmax-runner.js` |
 | Wake-ups for overdue pings | Built with a logging stand-in for Firebase | `wakeups.py` |
-| Forge pipeline: capture, sanitise, engineer, verify, publish | Next | `forge/` |
+| Forge: capture, sanitise, fixtures, verify, accept, publish | Built; end to end on the mock in a real browser; verify catches hardcoded answers, impure parsers, leaked cookies | `forge/` |
+| Forge: engineer (RAE with our prompt) | Wired; one live run with a model still to do | `forge/engineer.py` |
 | MSRIT connector | Waits for the idle-timeout test and MSRIT's permission | |
 | Android app: WebView login, WorkManager keep-alive, push wake-up | Hack day | |
 
