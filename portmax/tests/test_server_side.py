@@ -259,6 +259,11 @@ def test_a_phone_on_the_lan_uploads_once_the_portal_origin_is_set(
         "pages": [{**pages[0], "url": pages[0]["url"].replace(lan, "http://10.0.0.9:8765")}],
     }
     assert moved.post("/v1/pages", json=elsewhere, headers=auth).json()["code"] == "unsafe_plan"
+    # Moving the portal changes nothing else the phone receives, byte for byte.
+    assert (
+        moved.get("/v1/connectors/mockcollege", headers=auth).content
+        == as_shipped.get("/v1/connectors/mockcollege", headers=auth).content
+    )
     # Colleges not named keep their manifest's base_url.
     assert with_portal_origins(origins)("mockcollege").manifest.base_url == lan
     assert load_connector("mockcollege").manifest.base_url == "http://127.0.0.1:8765"

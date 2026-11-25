@@ -141,7 +141,8 @@ data class ConnectorInfo(
     @SerialName("login_path") val loginPath: String = "/",
     val markers: JsonObject = JsonObject(emptyMap()),
     @SerialName("keepalive_minutes") val keepaliveMinutes: Double = 15.0,
-    @SerialName("refresh_minutes") val refreshMinutes: Int = 180,
+    /** A float in PortMax's manifest: 180 or 180.0 must both read. */
+    @SerialName("refresh_minutes") val refreshMinutes: Double = 180.0,
 )
 
 /** A connector's settings: the typed view plus the exact JSON to hand the runner unchanged. */

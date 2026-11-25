@@ -50,4 +50,18 @@ class CardsParsingTest {
         assertEquals("exam", cards.dueThisWeek.single().kind)
         assertNotNull(cards.reminders)
     }
+
+    @Test
+    fun `connector settings read whether minutes come as whole or decimal numbers`() {
+        for (minutes in listOf("180", "180.0")) {
+            val info = AppJson.decodeFromString<com.sevenfive.app.data.ConnectorInfo>(
+                """{"college":"mockcollege","login_path":"/index.php",
+                   "markers":{"logged_in":"a#pm-logout","login_page":"form#pm-login"},
+                   "keepalive_minutes":16.0,"push_wakeup":false,"refresh_minutes":$minutes,
+                   "plan":{"steps":[],"keepalive_step":"dashboard","pace_ms":400}}"""
+            )
+            assertEquals(180.0, info.refreshMinutes, 0.0)
+            assertEquals(16.0, info.keepaliveMinutes, 0.0)
+        }
+    }
 }

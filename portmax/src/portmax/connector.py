@@ -128,8 +128,9 @@ def with_portal_origins(
         origin = origins.get(college)
         if origin is None:
             return connector
-        data = connector.manifest.model_dump() | {"base_url": origin}
-        manifest = Manifest.model_validate(data)  # same pattern as manifest.yaml: scheme+host only
+        # model_copy changes only base_url. A dump-and-validate round trip would also turn
+        # refresh_minutes 180 into 180.0 and change the settings the phone receives.
+        manifest = connector.manifest.model_copy(update={"base_url": origin})
         return Connector(
             manifest=manifest, plan=connector.plan, parsers=connector.parsers, root=connector.root
         )
