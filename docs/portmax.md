@@ -92,13 +92,13 @@ Bedrock access).
 | Bunk math (`get_attendance_plan`): exact at the minimum, capped at the classes left, next classes in India time, semester outlook, worst first | Built; served by the Lambda, the MCP server and the gateway schema | `bunk.py`, `tools.py` |
 | Lambda adapter for AgentCore Gateway, tool schema | Built; check the event shape against AWS docs before deploying | `adapters/lambda_handler.py`, `adapters/gateway.py` |
 | MCP server (development, demo) | Built; Claude Code connects through `.mcp.json` | `adapters/mcp_server.py` |
-| Phone API: `GET /v1/connectors/{college}`, `GET /v1/runner.js`, `POST /v1/pages` | Built; dev sign-in tokens until hack day's Supabase login | `api.py` |
+| Phone API: `GET /v1/connectors/{college}`, `GET /v1/runner.js`, `POST /v1/pages` | Built; dev sign-in tokens until real sign-in | `api.py` |
 | JS runner for the WebView | Built; real-Chromium tests: reads every tool, keeps the login past the idle timeout, refuses unsafe plans | `runner/portmax-runner.js` |
 | Wake-ups for overdue pings | Built with a logging stand-in for Firebase | `wakeups.py` |
 | Forge: capture, sanitise, fixtures, verify, accept, publish | Built; end to end on the mock in a real browser; verify catches hardcoded answers, impure parsers, leaked cookies | `forge/` |
 | Forge: engineer (RAE with our prompt) | Wired; one live run with a model still to do | `forge/engineer.py` |
 | MSRIT connector | Waits for the idle-timeout test and MSRIT's permission | |
-| Android app: WebView login, WorkManager keep-alive, push wake-up | Hack day | |
+| Android app: WebView login, WorkManager keep-alive, push wake-up | To build | |
 
 ## Run time: Android app login and keep-alive
 
@@ -147,7 +147,7 @@ attendance is updated daily with the percentage shown, and **a login inside an a
    connector with no hand edits, and we know the cost of one forge.
 3. **MSRIT through the app login** (~2 days). Done when attendance and CIE marks match the screen
    for one team member and the login stays alive 24 hours on pings alone.
-4. **Android login, keep-alive and the Lambda adapter** (hack day). Done when a second team member
+4. **Android login, keep-alive and the Lambda adapter**. Done when a second team member
    connects in under two minutes and stays fresh for 24 hours with no second login.
 
 ## Tests before building
@@ -160,4 +160,3 @@ attendance is updated daily with the percentage shown, and **a login inside an a
 ## Open
 
 - Who asks MSRIT's CSE department for permission or an official read-only feed.
-- Whether wHACKiest allows building before hack day (README says code lands on 1–2 Dec).

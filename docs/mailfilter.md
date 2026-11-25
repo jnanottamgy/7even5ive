@@ -79,13 +79,23 @@ Built on 25 Nov in [`mailfilter/`](../mailfilter): Python 3.12+, ruff and strict
 | Production Google tokens in AgentCore Identity | Not wired: the check Lambda refuses until it is | |
 | Live run on a demo account, and the real-model eval | Needs the Google OAuth client and Bedrock access | |
 
+## How it relates to the core
+
+The core (`core/seventy5/`, merged the same day) has its own mail path: Gmail push into the
+cascade, where Jev rules out spam and fakes and scores relevance, then the LLM reads dates
+(decisions 30, 38). The mail filter was built alongside it and differs in three ways: it checks
+twice a day instead of by push; it code-checks every quote, date and link Claude copies out of a
+mail; and it merges reminders and forwards into one card. Which path ships, or how the two
+combine, is Kartik's call (decisions 51–58).
+
 ## Decisions
 
-Recorded in [`decisions.md`](decisions.md), 29–36.
+Recorded in [`decisions.md`](decisions.md), 51–58.
 
 ## Still open
 
 - MSRIT's mail: is it Google Workspace, and will its IT allow outside apps to read it?
+- Push or twice-daily, and whether the mail filter's checks fold into the core's cascade.
 - Who owns the mail filter on hack day.
 - The team's Google Cloud OAuth client and the demo accounts as test users.
 - Bedrock access to Haiku 5.5 in `ap-south-1`, then one run of `mailfilter eval`.

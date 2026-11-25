@@ -228,3 +228,52 @@ def test_the_phone_api_takes_pages_and_hands_out_the_plan(
         "/v1/pages", json={"college": "mockcollege", "pages": elsewhere}, headers=auth
     )
     assert refused.status_code == 400 and refused.json()["code"] == "unsafe_plan"
+
+
+def test_a_phone_on_the_lan_uploads_once_the_portal_origin_is_set(
+    portal: TestClient, connector: Connector, store: Store
+) -> None:
+    """The phone reaches the mock portal at the laptop's LAN address, not 127.0.0.1."""
+    from portmax.connector import load_connector, parse_portal_origins, with_portal_origins
+
+    lan = "http://10.235.227.15:8765"
+    login(portal)
+    pages = [
+        {**p.model_dump(mode="json"), "url": p.url.replace("http://testserver", lan)}
+        for p in refresh(connector, portal)
+    ]
+    auth = {"authorization": "Bearer tok"}
+    upload = {"college": "mockcollege", "pages": pages}
+
+    as_shipped = TestClient(create_api(store, DevTokens("tok:" + STUDENT)))
+    refused = as_shipped.post("/v1/pages", json=upload, headers=auth)
+    assert refused.status_code == 400
+    assert refused.json()["detail"] == "dashboard: not from http://127.0.0.1:8765"
+
+    origins = parse_portal_origins(f" mockcollege={lan}/ ,")
+    moved = TestClient(create_api(store, DevTokens("tok:" + STUDENT), with_portal_origins(origins)))
+    assert moved.post("/v1/pages", json=upload, headers=auth).status_code == 200
+    # The check still holds: one portal, and it is the one named.
+    elsewhere = {
+        **upload,
+        "pages": [{**pages[0], "url": pages[0]["url"].replace(lan, "http://10.0.0.9:8765")}],
+    }
+    assert moved.post("/v1/pages", json=elsewhere, headers=auth).json()["code"] == "unsafe_plan"
+    # Moving the portal changes nothing else the phone receives, byte for byte.
+    assert (
+        moved.get("/v1/connectors/mockcollege", headers=auth).content
+        == as_shipped.get("/v1/connectors/mockcollege", headers=auth).content
+    )
+    # Colleges not named keep their manifest's base_url.
+    assert with_portal_origins(origins)("mockcollege").manifest.base_url == lan
+    assert load_connector("mockcollege").manifest.base_url == "http://127.0.0.1:8765"
+
+
+@pytest.mark.parametrize(
+    "spec", ["mockcollege", "=http://x:1", "mockcollege=http://x:1/index.php", "m=ftp://x"]
+)
+def test_a_bad_portal_origin_is_refused_at_startup(spec: str) -> None:
+    from portmax.connector import parse_portal_origins
+
+    with pytest.raises(ValueError):
+        parse_portal_origins(spec)

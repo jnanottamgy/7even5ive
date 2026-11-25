@@ -1,0 +1,85 @@
+# 7even5ive on AWS (SAM). Deploy from core/:
+#   python build_lambda.py           # gathers seventy5 + portmax into .build/
+#   sam build --use-container        # Linux wheels, built in Docker
+#   sam deploy --guided              # region ap-south-1 (Mumbai)
+# Keys live in SSM Parameter Store under /7even5ive/ (see docs/deploy.md), never here.
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: 7even5ive core - webhook, queue, cascade and reminders
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Architectures: [arm64]     # cheaper per ms than x86 for the same work
+    MemorySize: 512
+    Timeout: 30
+    CodeUri: .build          # made by build_lambda.py: seventy5 + portmax + deps list
+    Environment:
+      Variables:
+        SSM_PREFIX: /7even5ive
+        QUEUE_URL: !Ref EventQueue
+    # No VpcConfig on purpose: Supabase is reached over TLS through its pooler, so there
+    # is no NAT gateway to pay for.
+
+Resources:
+  DeadLetters:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: 1209600   # 14 days to look at what failed
+
+  EventQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 180            # 6x the cascade timeout, as AWS recommends
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt DeadLetters.Arn
+        maxReceiveCount: 3
+
+  HttpFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: seventy5.aws.http_handler
+      Policies:
+        - SQSSendMessagePolicy: { QueueName: !GetAtt EventQueue.QueueName }
+        - SSMParameterReadPolicy: { ParameterName: "7even5ive/*" }
+      Events:
+        Api:
+          Type: HttpApi
+          Properties: { Path: "/{proxy+}", Method: ANY }
+
+  CascadeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: seventy5.aws.cascade_handler
+      Policies:
+        - SSMParameterReadPolicy: { ParameterName: "7even5ive/*" }
+        - Statement:
+            - Effect: Allow
+              Action: bedrock:InvokeModel
+              Resource: "*"
+      Events:
+        Queue:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt EventQueue.Arn
+            BatchSize: 5
+            FunctionResponseTypes: [ReportBatchItemFailures]
+
+  NotifyFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: seventy5.aws.notify_handler
+      Timeout: 50
+      Policies:
+        - SSMParameterReadPolicy: { ParameterName: "7even5ive/*" }
+      Events:
+        EveryMinute:
+          Type: ScheduleV2
+          Properties: { ScheduleExpression: rate(1 minute) }
+
+Outputs:
+  ApiUrl:
+    Description: Give this to the bot as its webhook base URL (append /bot/webhook)
+    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+  DeadLetterQueue:
+    Value: !Ref DeadLetters

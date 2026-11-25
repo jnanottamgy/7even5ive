@@ -1,0 +1,81 @@
+<!doctype html>
+<!-- The student's phone view. Plain HTML + fetch, polling every 4 s.
+     Why no framework: one page, no build step, loads instantly on a cheap phone.
+     The sign-in token sits in the URL fragment, which browsers never send to servers or logs. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>75</title>
+<style>
+  :root { --bg:#F6F4EF; --card:#FFFFFF; --ink:#14202B; --mute:#6B6459; --navy:#1B1F6B;
+          --orange:#FD9B36; --soft:#FFF1E0; --red:#B4232C; --green:#1E7A3C; --line:#E6E1D8; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg:#12141C; --card:#1C1F2A; --ink:#EEF0F5; --mute:#A3A9B8;
+      --navy:#AEB4FF; --soft:#2E2618; --line:#2C3040; --red:#FF7B84; --green:#6FD08C; }
+  }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--bg); color:var(--ink); font:16px/1.4 system-ui, sans-serif; }
+  main { max-width:560px; margin:0 auto; padding:20px 16px 60px; }
+  header { display:flex; align-items:baseline; gap:10px; margin-bottom:18px; }
+  header h1 { font-size:34px; color:var(--orange); letter-spacing:-1px; }
+  header p { color:var(--mute); font-size:14px; }
+  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.08em; color:var(--mute); margin:22px 0 8px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px 14px; margin-bottom:8px; }
+  .row { display:flex; justify-content:space-between; gap:12px; align-items:center; }
+  .t { font-weight:600; }
+  .s { color:var(--mute); font-size:13px; }
+  .pill { font-size:11px; padding:2px 8px; border-radius:99px; background:var(--soft); color:var(--ink); white-space:nowrap; }
+  .ask { border-color:var(--orange); background:var(--soft); }
+  button { background:var(--navy); color:var(--bg); border:0; border-radius:10px; padding:8px 14px; font-weight:600; cursor:pointer; }
+  .bad { color:var(--red); font-weight:600; } .ok { color:var(--green); font-weight:600; }
+  .empty { color:var(--mute); font-size:14px; padding:4px 2px; }
+  .audit { font:12px ui-monospace, monospace; color:var(--mute); }
+</style>
+</head>
+<body>
+<main>
+  <header><h1>75</h1><p id="who">Everything at your fingertips</p></header>
+  <div id="approvals"></div>
+  <h2>Due this week</h2><div id="due"></div>
+  <h2>Attendance</h2><div id="att"></div>
+  <h2>Materials</h2><div id="mat"></div>
+  <h2>From your inbox</h2><div id="opp"></div>
+  <h2>Gateway log</h2><div id="audit" class="card audit"></div>
+</main>
+<script>
+const token = location.hash.slice(1);
+const H = { Authorization: "Bearer " + token, "Content-Type": "application/json" };
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const when = iso => iso ? new Date(iso).toLocaleString("en-IN", {weekday:"short", day:"numeric", month:"short", hour:"numeric", minute:"2-digit"}) : "";
+const list = (el, rows, f, none) => document.getElementById(el).innerHTML = rows.length ? rows.map(f).join("") : `<p class="empty">${none}</p>`;
+
+async function approve(t) {
+  const r = await fetch("/api/approve", { method:"POST", headers:H, body:JSON.stringify({token:t}) });
+  if (!r.ok) alert((await r.json()).detail);
+  load();
+}
+
+async function load() {
+  const r = await fetch("/api/cards", { headers:H });
+  if (!r.ok) { document.getElementById("who").textContent = "Open the link with your token after #"; return; }
+  const d = await r.json();
+  document.getElementById("who").textContent = `${d.student.name} · ${d.student.branch} year ${d.student.year}`;
+  document.getElementById("approvals").innerHTML = d.approvals.map(a =>
+    `<div class="card ask row"><div><p class="t">Add to Google Calendar?</p><p class="s">Asked by your agent · item #${esc(a.args.item_id)}</p></div>
+     <button onclick="approve('${esc(a.token)}')">Approve</button></div>`).join("");
+  list("due", d.due_this_week, x => `<div class="card row"><div><p class="t">${esc(x.title)}</p>
+     <p class="s">${esc(x.subject)} · ${when(x.due_at)}</p></div><span class="pill">${esc(x.kind)}</span></div>`, "Nothing due this week.");
+  list("att", d.attendance.subjects, x => `<div class="card row"><div><p class="t">${esc(x.subject_name)}</p><p class="s">${x.attended}/${x.held} classes · ${x.percent}%</p></div>
+     ${x.must_attend ? `<span class="bad">Attend next ${x.must_attend}</span>` : `<span class="ok">Can skip ${x.can_skip_now}</span>`}</div>`,
+     d.attendance.connected ? "No attendance yet." : "Connect the portal in the app.");
+  list("mat", d.materials, x => `<div class="card row"><div><p class="t">${esc(x.title)}</p><p class="s">${esc(x.subject)}</p></div><span class="pill">via ${esc(x.route)}</span></div>`, "No materials yet.");
+  list("opp", d.opportunities, x => `<div class="card row"><div><p class="t">${esc(x.title)}</p><p class="s">${when(x.due_at)}</p></div><span class="pill">${Math.round((x.relevance||0)*100)}% match</span></div>`,
+       "No opportunities yet.");
+  document.getElementById("opp").insertAdjacentHTML("beforeend", `<p class="empty">${d.filtered} spam or fake mails filtered out.</p>`);
+  document.getElementById("audit").innerHTML = d.audit.map(a => `${esc(a.at.slice(11,16))} ${esc(a.decision.padEnd(5))} ${esc(a.tool)} · ${esc(a.reason)}`).join("<br>") || "No calls yet.";
+}
+load(); setInterval(load, 4000);
+</script>
+</body>
+</html>

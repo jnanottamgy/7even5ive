@@ -19,10 +19,10 @@ not what the gateway permits.
 
 | Tool | Level | Notes |
 |---|---|---|
-| Read deadlines, attendance, timetable, marks, SHELF, opportunities | For you | All the MCP connector exposes by default |
+| Read deadlines, attendance, timetable, marks, library, opportunities | For you | All the MCP connector exposes by default |
 | Save a deadline · file a document · set a reminder | For you | Undo deletes it |
 | `Calendar___insert_event` | Your tap | One tap on the card |
-| `WhatsApp___send_document` to someone else (share a SHELF file) | Your tap | Token bound to that file and that number. *Example action, to confirm.* |
+| `WhatsApp___send_document` to someone else (share a file from your library) | Your tap | Token bound to that file and that number. *Example action, to confirm.* |
 | Messages to the student themselves (alerts, briefing, the call) | For you | |
 | Submit a form or assignment · pay · delete · write to the portal · send mail | Never | No such tools exist; Gmail is read-only and portal tools are read-only |
 
@@ -52,4 +52,4 @@ permit (
 - **Source text is data, never instructions.** Messages, mail and portal pages reach the model as
   quoted content.
 - **Every decision is logged:** tool, level, outcome, source.
-- **Row-level security** in Supabase: a student only ever sees their own rows.
+- **Row-level security** in Supabase, on top of per-student queries: a student only ever sees their own rows.
