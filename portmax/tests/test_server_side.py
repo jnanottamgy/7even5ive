@@ -13,14 +13,14 @@ from portmax.adapters.lambda_handler import handle
 from portmax.adapters.mcp_server import build_server
 from portmax.api import DevTokens, create_api
 from portmax.connector import Connector
-from portmax.contract import TOOLS, AttendanceAnswer, utc_now
+from portmax.contract import ALL_TOOLS, DERIVED_TOOLS, TOOLS, AttendanceAnswer, utc_now
 from portmax.errors import NotConnected, SessionExpired, UnsafePlan
 from portmax.ingest import ingest
 from portmax.manifest import Manifest
 from portmax.mock_portal.data import MockState, expected_attendance, expected_profile
 from portmax.pages import Page
 from portmax.store import Store
-from portmax.tools import answer
+from portmax.tools import answer, attendance_plan_answer, college_minimum
 from portmax.wakeups import LogNotifier, wake_overdue
 from tests.conftest import FakeClock, login, refresh
 
@@ -117,6 +117,29 @@ def test_answers_say_when_they_are_stale(connected: list[Page], store: Store) ->
         answer(store, "someone-else", "get_attendance", utc_now())
 
 
+def test_bunk_math_comes_from_the_saved_answers(connected: list[Page], store: Store) -> None:
+    plan = attendance_plan_answer(store, STUDENT, utc_now())
+    codes = [p.subject_code for p in plan.data]
+    assert codes == ["CS52", "MA51", "CS54", "CS51", "CSL57", "CS53"]  # worst first
+    dbms = plan.data[0]
+    assert (dbms.status, dbms.must_attend, dbms.minimum_percent) == ("short", 2, 75)
+    assert len(dbms.next_classes) == 2  # dates from the saved timetable
+    assert not plan.stale and plan.college == "mockcollege"
+
+
+def test_bunk_math_without_a_timetable_gives_no_dates(store: Store, state: MockState) -> None:
+    rows = [r.model_dump(mode="json") for r in expected_attendance(state.student("1MC24CS042"))]
+    day_old = utc_now() - timedelta(hours=30)
+    store.save_answers("msrit-like", "nocollege", "0.1.0", day_old, {"get_attendance": rows})
+    plan = attendance_plan_answer(store, "msrit-like", utc_now())
+    assert plan.stale and all(p.next_classes == [] for p in plan.data)
+    assert college_minimum("nocollege") == 75 == plan.data[0].minimum_percent
+    at_85 = attendance_plan_answer(store, "msrit-like", utc_now(), minimum_for=lambda _: 85.0)
+    assert at_85.data[0].minimum_percent == 85
+    with pytest.raises(NotConnected):
+        attendance_plan_answer(store, "nobody", utc_now())
+
+
 def test_overdue_phones_are_woken(
     connected: list[Page], connector: Connector, store: Store
 ) -> None:
@@ -149,28 +172,35 @@ def test_the_lambda_answers_the_student_the_gateway_names(
     )
     unknown = gateway_call("get_marks", {"student_id": "nobody"}, store)
     assert unknown["error"]["code"] == "not_connected"
+    plan = gateway_call("get_attendance_plan", {"student_id": STUDENT}, store)
+    assert plan["tool"] == "get_attendance_plan" and plan["data"][0]["status"] == "short"
+    nobody = gateway_call("get_attendance_plan", {"student_id": "nobody"}, store)
+    assert nobody["error"]["code"] == "not_connected"
 
 
-def test_the_gateway_schema_lists_the_five_tools_with_no_inputs() -> None:
+def test_the_gateway_schema_lists_the_five_portal_tools_then_bunk_math_with_no_inputs() -> None:
     schemas = tool_schemas()
-    assert [s["name"] for s in schemas] == list(TOOLS)
+    assert DERIVED_TOOLS == ("get_attendance_plan",)
+    assert [s["name"] for s in schemas] == [*TOOLS, *DERIVED_TOOLS]
     assert all(s["inputSchema"]["properties"] == {} for s in schemas)
 
 
 def test_the_mcp_server_serves_the_same_answers(connected: list[Page], store: Store) -> None:
     server = build_server(store, STUDENT)
 
-    async def call() -> tuple[list[str], Any]:
+    async def call() -> tuple[list[str], Any, Any]:
         tools = [tool.name for tool in await server.list_tools()]
         result = await server.call_tool("get_attendance", {})
-        return tools, result
+        plan = await server.call_tool("get_attendance_plan", {})
+        return tools, result, plan
 
-    tools, result = asyncio.run(call())
-    assert sorted(tools) == sorted(TOOLS)
-    structured = result.structured_content
-    assert structured is not None
-    payload = structured.get("result", structured)
-    assert payload["tool"] == "get_attendance" and len(payload["data"]) == 6
+    tools, result, plan = asyncio.run(call())
+    assert sorted(tools) == sorted(ALL_TOOLS)
+    for called, tool in ((result, "get_attendance"), (plan, "get_attendance_plan")):
+        structured = called.structured_content
+        assert structured is not None
+        payload = structured.get("result", structured)
+        assert payload["tool"] == tool and len(payload["data"]) == 6
 
 
 def test_the_phone_api_takes_pages_and_hands_out_the_plan(

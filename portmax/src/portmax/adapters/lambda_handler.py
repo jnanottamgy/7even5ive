@@ -15,10 +15,10 @@ import os
 from functools import cache
 from typing import Any
 
-from portmax.contract import TOOLS, ToolName, utc_now
+from portmax.contract import ALL_TOOLS, AnyToolName, utc_now
 from portmax.errors import PortMaxError
 from portmax.store import Store
-from portmax.tools import answer
+from portmax.tools import answer, attendance_plan_answer
 
 TOOL_NAME_KEY = "bedrockAgentCoreToolName"
 
@@ -29,11 +29,11 @@ def _store() -> Store:
     return Store(os.environ["PORTMAX_DATABASE_URL"], create=False)
 
 
-def tool_name(event: dict[str, Any], context: Any) -> ToolName | None:
+def tool_name(event: dict[str, Any], context: Any) -> AnyToolName | None:
     custom = getattr(getattr(context, "client_context", None), "custom", None) or {}
     raw = custom.get(TOOL_NAME_KEY) or event.get("tool") or ""
     name = str(raw).split("___")[-1]
-    for tool in TOOLS:
+    for tool in ALL_TOOLS:
         if tool == name:
             return tool
     return None
@@ -47,6 +47,8 @@ def handle(event: dict[str, Any], context: Any, store: Store) -> dict[str, Any]:
     if not isinstance(student_id, str) or not student_id:
         return {"error": {"code": "unauthenticated", "detail": "no student on this call"}}
     try:
+        if tool == "get_attendance_plan":
+            return attendance_plan_answer(store, student_id, utc_now()).model_dump(mode="json")
         return answer(store, student_id, tool, utc_now()).model_dump(mode="json")
     except PortMaxError as error:
         return {"error": {"code": error.code, "detail": error.detail}}

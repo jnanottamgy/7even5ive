@@ -19,11 +19,16 @@ Full plan: [`portmax.md`](portmax.md).
 | 24 | **Renamed Portal Forge to PortMax.** | Team decision, 25 Nov. |
 | 25 | **A connector's fetch plan is data (`fetch_plan.json`), not code.** | The same file runs in the Android WebView (JavaScript) and on a server (Python); GET-only by construction, with every path and followed link checked. |
 | 26 | **A keep-alive reads one page; every `refresh_minutes` (3 hours by default, per college) it runs the whole plan.** The interval is the idle timeout minus a fifth (at least two minutes); 15 minutes until measured. | One light ping keeps the login at the least load on the portal, while attendance stays a few hours fresh. |
+| 27 | **Bunk math is a sixth tool, `get_attendance_plan`, computed from the saved answers; the five portal tools stay the connector contract.** Each college's minimum lives in its manifest (`attendance_minimum_percent`, 75 by default). | A connector never parses anything new for it, so every college gets it the day its attendance tool works. Exact fractions, so a student at exactly the minimum is never told they are short; no model writes the sentences. |
+| 28 | **The Android app moves from Cut to Must in the build plan;** iOS takes its place in Cut. | Team decision (25 Nov): the hackathon app is Android (decision 18), and decisions 19–20 put the portal login and keep-alive inside it, but the build plan still listed it as cut. |
 
 ### Still open (PortMax)
 
 - The portal's idle timeout, which sets the ping interval (team test, today).
 - Who approaches MSRIT's CSE department, and whether wHACKiest allows building before hack day.
+- MSRIT's attendance minimum, for its manifest: bunk math assumes 75% until someone checks the
+  college's regulations.
+- Who builds the Android app, and whether it also takes over the web app's screens.
 
 ## 2026-11-24: the direction for Round 1 and hack day
 

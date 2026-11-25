@@ -33,19 +33,29 @@ webinars and promotions are ignored. The student fills forms themselves.
 
 ## 4. Attendance and bunk math
 
-Pure arithmetic per subject, at the college's minimum (75% by default):
+Pure arithmetic per subject, at the college's minimum (75% unless its manifest says otherwise),
+in exact fractions so a student at exactly the minimum is never told they are short. It is
+PortMax's `get_attendance_plan` tool ([`bunk.py`](../portmax/src/portmax/bunk.py)).
 
 - Can still skip: `floor(attended / minimum − held)`
 - Must attend to get back: `ceil((minimum × held − attended) / (1 − minimum))`
 
 Example: 33 of 45 classes (73%) → attend the next 3 to reach 75%.
-With the timetable, the projection runs to the end of the semester.
+
+When the portal shows the classes planned for the semester (MSRIT's does), the rest of the
+semester is counted too: how many of the remaining classes can be missed, never more than remain,
+and when even attending every one cannot reach the minimum, it says so and points to condonation.
+Next class dates come from the timetable, in India time, skipping a class that has already
+started; with no timetable (MSRIT's portal has none) no dates are given. Holidays are not known,
+so the dates are a guide. Subjects come worst first, each with one sentence no model writes.
 
 ## 5. Change detection
 
-The portal is synced on app open and once each morning; a changed hash of the result (new marks,
-attendance moved) fires an event. No polling every few minutes, so the portal sees one student's
-normal traffic.
+The Android app keeps the portal login alive with one light page at the longest interval the
+portal allows, and reads everything every 3 hours (`refresh_minutes`, per college), so attendance
+is never more than a few hours old (decisions 20 and 26). A changed hash of a result (new marks,
+attendance moved) fires an event. One page at a time, at the longest gaps the portal allows, so
+the portal sees one student's normal traffic.
 
 ## 6. Morning briefing
 

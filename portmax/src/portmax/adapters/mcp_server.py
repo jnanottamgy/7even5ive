@@ -17,7 +17,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from portmax.contract import TOOL_DESCRIPTIONS, ToolName, utc_now
 from portmax.errors import PortMaxError
 from portmax.store import Store
-from portmax.tools import answer
+from portmax.tools import answer, attendance_plan_answer
 
 
 def build_server(store: Store, student_id: str) -> MCPServer:
@@ -25,7 +25,8 @@ def build_server(store: Store, student_id: str) -> MCPServer:
         name="portmax",
         instructions=(
             "Read-only tools over the student's college portal data: attendance, timetable, "
-            "internal marks, results and profile. Each answer says when it was last refreshed."
+            "internal marks, results, profile, and bunk math for attendance. Each answer says "
+            "when it was last refreshed."
         ),
     )
 
@@ -54,6 +55,14 @@ def build_server(store: Store, student_id: str) -> MCPServer:
     @server.tool(description=TOOL_DESCRIPTIONS["get_profile"])
     def get_profile() -> dict[str, Any]:
         return respond("get_profile")
+
+    @server.tool(description=TOOL_DESCRIPTIONS["get_attendance_plan"])
+    def get_attendance_plan() -> dict[str, Any]:
+        try:
+            plan = attendance_plan_answer(store, student_id, utc_now())
+        except PortMaxError as error:
+            raise ToolError(f"{error.code}: {error.detail}") from error
+        return plan.model_dump(mode="json")
 
     return server
 

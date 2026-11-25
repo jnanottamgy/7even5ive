@@ -27,6 +27,14 @@ so the work does not wait on the final architecture.
 | `get_results` | semester, subject, credits, grade, grade points, SGPA, CGPA | Target CGPA |
 | `get_profile` | USN, branch, semester, section (no name, DOB or photo) | Matching subjects |
 
+**Bunk math is a sixth tool, computed on our side:** `get_attendance_plan` reads the saved
+attendance (and the timetable, where the portal has one) and returns, per subject and worst first,
+how many classes the student can miss and stay at the college's minimum, or how many they must
+attend in a row to get back, the dates of their next classes, the outlook for the rest of the
+semester, and one ready sentence no model writes. It never fetches a page, so every college gets it
+the day its attendance tool works. The minimum is per college (`attendance_minimum_percent` in the
+manifest, 75 by default). The math is in [`brain.md`](brain.md#4-attendance-and-bunk-math).
+
 A connector is a **fetch plan** (the read-only pages to request, in order, and what each step reads
 from the one before) plus **parsers** (pure functions, HTML or JSON to our models). Every result
 carries `fetched_at` and the connector version. Failures are named: `SessionExpired`,
@@ -68,10 +76,10 @@ built only if the app ever needs its own API.
 
 ## Build status
 
-Built on 25 Nov in [`portmax/`](../portmax): Python 3.12, ruff and strict mypy clean, 77 tests
+Built on 25 Nov in [`portmax/`](../portmax): Python 3.12, ruff and strict mypy clean, 95 tests
 passing, all against a mock college portal (`portmax mock serve`), never a real one. Phase 1 is
 done: with the repository's `.mcp.json`, Claude Code answers "what's my DBMS attendance?" from the
-mock. Phase 2 is done except one live run of the engineer with a model (needs an API key or
+mock, and "can I skip DBMS?" from the same data. Phase 2 is done except one live run of the engineer with a model (needs an API key or
 Bedrock access).
 
 | Part | Status | Code |
@@ -81,6 +89,7 @@ Bedrock access).
 | Fetch plan (GET-only data) and Python executor | Built | `plan.py`, `executor.py` |
 | Mock connector, fixtures, golden answers | Built; replays offline | `connectors/mockcollege/` |
 | Store, ingest (pages parsed, then dropped), the five tools | Built | `store.py`, `ingest.py`, `tools.py` |
+| Bunk math (`get_attendance_plan`): exact at the minimum, capped at the classes left, next classes in India time, semester outlook, worst first | Built; served by the Lambda, the MCP server and the gateway schema | `bunk.py`, `tools.py` |
 | Lambda adapter for AgentCore Gateway, tool schema | Built; check the event shape against AWS docs before deploying | `adapters/lambda_handler.py`, `adapters/gateway.py` |
 | MCP server (development, demo) | Built; Claude Code connects through `.mcp.json` | `adapters/mcp_server.py` |
 | Phone API: `GET /v1/connectors/{college}`, `GET /v1/runner.js`, `POST /v1/pages` | Built; dev sign-in tokens until hack day's Supabase login | `api.py` |

@@ -13,6 +13,8 @@ session:
   idle_timeout_minutes: 20
   one_session_per_student: true
 tools: [get_attendance, get_timetable, get_marks, get_results, get_profile]
+# The college's own rule for exam eligibility; bunk math (get_attendance_plan) counts against it.
+attendance_minimum_percent: 75
 connector_version: 1.0.0
 verified_at: 2026-11-25
 made_by:

@@ -51,6 +51,9 @@ class Manifest(_Model):
     markers: Markers
     session: SessionRules
     tools: list[ToolName] = Field(min_length=1)
+    attendance_minimum_percent: float = Field(
+        default=75, ge=50, le=100, description="The college's attendance minimum for exams"
+    )
     refresh_minutes: float = Field(
         default=180,
         ge=15,

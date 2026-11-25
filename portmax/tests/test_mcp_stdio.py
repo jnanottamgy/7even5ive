@@ -15,7 +15,7 @@ from mcp.client.stdio import stdio_client
 from portmax.mock_portal.scripted import seed_demo
 
 
-def test_claude_code_can_ask_for_dbms_attendance(tmp_path: Path) -> None:
+def test_claude_code_can_ask_for_dbms_attendance_and_what_it_means(tmp_path: Path) -> None:
     database = f"sqlite:///{tmp_path / 'demo.db'}"
     seed_demo(database, "demo")
     server = StdioServerParameters(
@@ -28,11 +28,18 @@ def test_claude_code_can_ask_for_dbms_attendance(tmp_path: Path) -> None:
         async with stdio_client(server) as (read, write), ClientSession(read, write) as session:
             await session.initialize()
             tools = await session.list_tools()
-            assert {t.name for t in tools.tools} >= {"get_attendance", "get_timetable"}
-            return await session.call_tool("get_attendance", {})
+            assert {t.name for t in tools.tools} >= {"get_attendance", "get_attendance_plan"}
+            attendance = await session.call_tool("get_attendance", {})
+            return attendance, await session.call_tool("get_attendance_plan", {})
 
-    result = asyncio.run(ask())
-    payload = result.structured_content or json.loads(result.content[0].text)
-    payload = payload.get("result", payload)
-    dbms = next(row for row in payload["data"] if row["subject_code"] == "CS52")
+    def payload(result: Any) -> Any:
+        found = result.structured_content or json.loads(result.content[0].text)
+        return found.get("result", found)
+
+    attendance, plan = asyncio.run(ask())
+    dbms = next(row for row in payload(attendance)["data"] if row["subject_code"] == "CS52")
     assert (dbms["attended"], dbms["held"], dbms["percent"]) == (22, 30, 73.33)
+    worst = payload(plan)["data"][0]
+    assert worst["subject_code"] == "CS52" and worst["message"].startswith(
+        "CS52 73.33%: attend the next 2 classes in a row"
+    )

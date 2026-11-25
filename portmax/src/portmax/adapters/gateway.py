@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from portmax.contract import TOOL_DESCRIPTIONS, TOOLS
+from portmax.contract import ALL_TOOLS, TOOL_DESCRIPTIONS
 
 
 def tool_schemas() -> list[dict[str, Any]]:
@@ -18,5 +18,5 @@ def tool_schemas() -> list[dict[str, Any]]:
             "description": TOOL_DESCRIPTIONS[tool],
             "inputSchema": {"type": "object", "properties": {}, "required": []},
         }
-        for tool in TOOLS
+        for tool in ALL_TOOLS
     ]

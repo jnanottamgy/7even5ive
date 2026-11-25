@@ -27,6 +27,13 @@ TOOLS: tuple[ToolName, ...] = (
     "get_profile",
 )
 
+# Tools computed from saved portal answers rather than read from the portal. The five portal
+# tools above stay the whole contract with portals; a derived tool never adds a page to fetch.
+DerivedToolName = Literal["get_attendance_plan"]
+DERIVED_TOOLS: tuple[DerivedToolName, ...] = ("get_attendance_plan",)
+AnyToolName = ToolName | DerivedToolName
+ALL_TOOLS: tuple[AnyToolName, ...] = (*TOOLS, *DERIVED_TOOLS)
+
 SubjectCode = Annotated[str, Field(min_length=2, max_length=20, pattern=r"^[A-Z0-9][A-Z0-9 _-]*$")]
 
 
@@ -172,7 +179,7 @@ ANSWER_MODELS: dict[ToolName, type[Answer]] = {
     "get_profile": ProfileAnswer,
 }
 
-TOOL_DESCRIPTIONS: dict[ToolName, str] = {
+TOOL_DESCRIPTIONS: dict[AnyToolName, str] = {
     "get_attendance": (
         "The student's attendance per subject from their college portal: classes attended, "
         "classes held, the percentage, and classes planned for the semester where the portal "
@@ -182,6 +189,12 @@ TOOL_DESCRIPTIONS: dict[ToolName, str] = {
     "get_marks": "Internal marks per subject and component (CIE-1, CIE-2, quizzes, lab).",
     "get_results": "Semester results: grades and credits per subject, with SGPA and CGPA.",
     "get_profile": "USN, branch, semester and section. Never the student's name or birth date.",
+    "get_attendance_plan": (
+        "Bunk math for every subject, worst first: how many classes the student can miss and "
+        "stay at the college's minimum (75% unless the college says otherwise), or how many they "
+        "must attend in a row to get back, with the dates of their next classes and the outlook "
+        "for the rest of the semester. Each subject comes with a ready sentence for the student."
+    ),
 }
 
 

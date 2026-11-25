@@ -76,7 +76,9 @@ College portals have no API, and every college's portal is different. **PortMax*
 on the open-source [reverse-api-engineer](https://github.com/kalil0321/reverse-api-engineer) (MIT):
 it records the portal being used once and builds a connector that gives every college the same five
 **read-only, replay-verified** tools (`get_attendance`, `get_timetable`, `get_marks`,
-`get_results`, `get_profile`). The student logs in once inside our Android app, CAPTCHA and all, and
+`get_results`, `get_profile`), and a sixth, `get_attendance_plan`, does the bunk math from them:
+per subject, how many classes the student can miss or must attend in a row, in sentences no model
+writes. The student logs in once inside our Android app, CAPTCHA and all, and
 the app keeps that login alive so attendance stays fresh every day. For the demo a mock portal
 stands in, so the demo never depends on a real portal. Plan: [`docs/portmax.md`](docs/portmax.md).
 
