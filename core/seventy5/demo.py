@@ -187,7 +187,8 @@ def main() -> None:
     if "--no-serve" not in sys.argv:
         import uvicorn
 
-        uvicorn.run(api, host="127.0.0.1", port=int(os.environ.get("PORT", "8000")))
+        # HOST=0.0.0.0 lets a phone on the same Wi-Fi (or the emulator at 10.0.2.2) reach it.
+        uvicorn.run(api, host=os.environ.get("HOST", "127.0.0.1"), port=int(os.environ.get("PORT", "8000")))
 
 
 if __name__ == "__main__":
