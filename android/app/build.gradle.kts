@@ -23,6 +23,17 @@ android {
         buildConfigField("String", "COLLEGE", "\"${prop("sevenfive.college", "mockcollege")}\"")
     }
 
+    // One committed debug key, so every CI build signs the same way and installs as an update
+    // over the last one. It only signs test builds; it is not a release key and holds no secret.
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false

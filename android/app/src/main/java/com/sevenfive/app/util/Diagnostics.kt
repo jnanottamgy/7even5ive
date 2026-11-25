@@ -17,6 +17,22 @@ import java.time.Instant
 object Diagnostics {
     private const val CRASH_FILE = "last_crash.txt"
     private const val SEEN_PREFS = "diagnostics"
+    private const val TRAIL_FILE = "trail.txt"
+    private const val TRAIL_LINES = 40
+
+    /**
+     * One line per step of risky work (opening the portal WebView), written before the next
+     * step starts. A native crash inside WebView skips every Java handler, so the last line
+     * here is the only record of how far the app got.
+     */
+    @Synchronized
+    fun step(context: Context, what: String) {
+        runCatching {
+            val file = File(context.applicationContext.filesDir, TRAIL_FILE)
+            val kept = if (file.exists()) file.readLines().takeLast(TRAIL_LINES - 1) else emptyList()
+            file.writeText((kept + "${Instant.now()}  $what").joinToString("\n") + "\n")
+        }
+    }
 
     fun install(context: Context) {
         val app = context.applicationContext
@@ -37,12 +53,17 @@ object Diagnostics {
         val parts = mutableListOf<String>()
         File(context.filesDir, CRASH_FILE).takeIf { it.exists() }?.let { parts += it.readText() }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) parts += exitReasons(context)
-        return parts.joinToString("\n\n").ifBlank { null }
+        val problems = parts.joinToString("\n\n")
+        val trail = File(context.filesDir, TRAIL_FILE).takeIf { it.exists() }?.readText().orEmpty()
+        return listOf(
+            problems,
+            if (trail.isBlank()) "" else "Last steps:\n$trail",
+        ).filter { it.isNotBlank() }.joinToString("\n\n").ifBlank { null }
     }
 
     /** True once per new problem, so the app can say "it closed last time" exactly once. */
     fun hasUnseen(context: Context): Boolean {
-        val report = report(context) ?: return false
+        val report = problems(context) ?: return false
         val prefs = context.getSharedPreferences(SEEN_PREFS, Context.MODE_PRIVATE)
         val hash = report.hashCode()
         if (prefs.getInt("seen", 0) == hash) return false
@@ -50,8 +71,16 @@ object Diagnostics {
         return true
     }
 
+    private fun problems(context: Context): String? {
+        val parts = mutableListOf<String>()
+        File(context.filesDir, CRASH_FILE).takeIf { it.exists() }?.let { parts += it.readText() }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) parts += exitReasons(context)
+        return parts.joinToString("\n\n").ifBlank { null }
+    }
+
     fun clear(context: Context) {
         File(context.filesDir, CRASH_FILE).delete()
+        File(context.filesDir, TRAIL_FILE).delete()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             context.getSharedPreferences(SEEN_PREFS, Context.MODE_PRIVATE).edit()
                 .putLong("cleared_at", System.currentTimeMillis()).apply()
