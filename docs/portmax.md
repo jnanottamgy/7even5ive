@@ -1,8 +1,8 @@
 # PortMax
 
-**Status: planned, not built (25 Nov 2026).** The live, commented version of this plan is the
-"PortMax: Build Plan" doc (named Portal Forge until 25 Nov); this file is its copy in the repository. Where they disagree, the
-newer one wins and both get fixed.
+**Status: being built (25 Nov 2026), code in [`portmax/`](../portmax).** The live, commented
+version of this plan is the "PortMax: Build Plan" doc (named Portal Forge until 25 Nov); this file
+is its copy in the repository. Where they disagree, the newer one wins and both get fixed.
 
 ## Conclusion
 
@@ -13,8 +13,8 @@ library under our own prompts, safety rules and tests.
 
 At run time the student **logs in once inside our Android app** (the portal's own page in a
 WebView, CAPTCHA and all), and the app **keeps that login alive** by requesting one light portal
-page at the longest interval the portal allows. Each keep-alive also refreshes attendance. Data is
-saved with its time, so the 7 AM briefing never waits on a login. The output is a fixed contract,
+page at the longest interval the portal allows. Every few hours a ping runs the whole plan instead,
+so attendance is never more than a few hours old. Data is saved with its time, so the 7 AM briefing never waits on a login. The output is a fixed contract,
 so the work does not wait on the final architecture.
 
 ## The five tools
@@ -32,8 +32,9 @@ from the one before) plus **parsers** (pure functions, HTML or JSON to our model
 carries `fetched_at` and the connector version. Failures are named: `SessionExpired`,
 `PortalUnavailable`, `PortalChanged`, `NotSupported`.
 
-Per college, Forge outputs `manifest.yaml`, `connector.py`, `parsers.py`, `raw_openapi.json`
-(reference only), `fixtures/` and `golden/`. Three small adapters can wrap any connector. **Chosen (25 Nov): the
+Per college, the forge outputs `manifest.yaml`, `fetch_plan.json` (data, so the same file runs in
+the Android WebView and on a server), `parsers.py`, `raw_openapi.json` (reference only), `fixtures/`
+and `golden/`. Three small adapters can wrap any connector. **Chosen (25 Nov): the
 Lambda adapter behind AgentCore Gateway** for the product, so every tool call passes the gateway's
 checks. The MCP server (FastMCP) is for development and the stage demo; the HTTP/OpenAPI service is
 built only if the app ever needs its own API.
@@ -46,7 +47,7 @@ built only if the app ever needs its own API.
    cookies, tokens and auth headers with placeholders, redact USN, name, DOB, phone and email,
    strip assets and third-party hosts. The raw HAR is deleted. (Our own ~100-line scrubber; no
    maintained Python one exists.)
-3. **Engineer.** RAE as a library writes `connector.py` and `parsers.py` against the recorded
+3. **Engineer.** RAE as a library writes `fetch_plan.json` and `parsers.py` against the recorded
    responses; a second run in its docs mode writes `raw_openapi.json`.
 4. **Review.** A person checks the code and every value against the screenshots; checked outputs
    become golden files.
@@ -65,6 +66,27 @@ built only if the app ever needs its own API.
 | Prompt tells the model to beat bot detection (`httpcloak`) | Forbidden; a block is a stop |
 | Verification is the model's own report | Deterministic replay and mock-portal tests |
 
+## Build status
+
+Built on 25 Nov in [`portmax/`](../portmax): Python 3.12, ruff and strict mypy clean, 64 tests
+passing, all against a mock college portal (`portmax mock serve`), never a real one.
+
+| Part | Status | Code |
+| --- | --- | --- |
+| Contract: five tools, sanity rules, named errors | Built | `contract.py`, `errors.py` |
+| Mock portal: two-step login with CAPTCHA, one session per student, idle timeout, Referer and User-Agent checks | Built | `mock_portal/` |
+| Fetch plan (GET-only data) and Python executor | Built | `plan.py`, `executor.py` |
+| Mock connector, fixtures, golden answers | Built; replays offline | `connectors/mockcollege/` |
+| Store, ingest (pages parsed, then dropped), the five tools | Built | `store.py`, `ingest.py`, `tools.py` |
+| Lambda adapter for AgentCore Gateway, tool schema | Built; check the event shape against AWS docs before deploying | `adapters/lambda_handler.py`, `adapters/gateway.py` |
+| MCP server (development, demo) | Built | `adapters/mcp_server.py` |
+| Phone API: `GET /v1/connectors/{college}`, `GET /v1/runner.js`, `POST /v1/pages` | Built; dev sign-in tokens until hack day's Supabase login | `api.py` |
+| JS runner for the WebView | Built; real-Chromium tests: reads every tool, keeps the login past the idle timeout, refuses unsafe plans | `runner/portmax-runner.js` |
+| Wake-ups for overdue pings | Built with a logging stand-in for Firebase | `wakeups.py` |
+| Forge pipeline: capture, sanitise, engineer, verify, publish | Next | `forge/` |
+| MSRIT connector | Waits for the idle-timeout test and MSRIT's permission | |
+| Android app: WebView login, WorkManager keep-alive, push wake-up | Hack day | |
+
 ## Run time: Android app login and keep-alive
 
 1. The student taps **Connect portal**; the app opens the portal's own login page in an Android
@@ -73,9 +95,11 @@ built only if the app ever needs its own API.
 2. When the dashboard appears, the cookies stay in the phone's secure storage and the fetch plan
    collects everything once. The app sends the pages to our server, which parses them with the
    verified parsers, keeps only the five tools' fields and discards the pages.
-3. **Keep-alive:** one light page at the longest interval that keeps the login valid (set in the
-   manifest from the measured idle timeout; hourly or longer if allowed). It runs on the phone only,
-   from the same WebView cookies, device and network. WorkManager schedules it; if Android defers it
+3. **Keep-alive:** one light page at the longest interval that keeps the login valid: the measured
+   idle timeout minus a fifth (at least two minutes), 15 minutes until it is measured. Every
+   `refresh_minutes` (3 hours by default) the ping runs the whole plan instead. It runs on the phone
+   only, from the same WebView cookies, device and network. WorkManager schedules it, running the
+   ping in a headless WebView with the login's own cookies and User-Agent; if Android defers it
    while the phone is idle, a Firebase Cloud Messaging push from our server wakes the app on time.
    Our server never holds the student's cookies. Cost is effectively zero.
 4. If the session ends anyway (the student or a parent logged in elsewhere: MSRIT reportedly allows
