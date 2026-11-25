@@ -91,6 +91,7 @@ own. Plan: [`docs/portmax.md`](docs/portmax.md).
 |---|---|
 | [`core/`](core) | 7even5ive itself: ingress, cascade, gateway, tools, MCP server, web app |
 | [`portmax/`](portmax) | The portal connector and bunk math |
+| [`mailfilter/`](mailfilter) | A twice-daily college-mail check, built 25 Nov; overlaps the core's Gmail path, which one ships is open ([plan](docs/mailfilter.md)) |
 | [`docs/decisions.md`](docs/decisions.md) | Decision log: the source of truth when anything disagrees |
 | [`docs/architecture.md`](docs/architecture.md) | Components and flows |
 | [`docs/policy.md`](docs/policy.md) | The control model enforced at the gateway |

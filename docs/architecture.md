@@ -57,6 +57,9 @@ event ──> bot's decision passes the check? ── yes ──> card          
    and no notification: the student sent it. Had the bot been unsure, Jev and the LLM decide.
 2. **Mail, filtered.** Gmail push → gmail-webhook λ → cascade: Jev rules out spam and fakes, and
    scores relevance to the student's branch, year and interests → opportunities, most relevant first.
+   A separate, fully tested mail filter was also built on 25 Nov ([`mailfilter/`](../mailfilter),
+   [`mailfilter.md`](mailfilter.md)): it checks Gmail at 1 PM and 9 PM instead of by push, and code
+   checks every date and link Claude copies out of a mail. Which path ships is open (decisions 51–58).
 3. **Attendance.** Every 3 hours portal-check λ refreshes PortMax; a changed answer is an event;
    `attendance` returns PortMax's plan, worst subject first ("attend the next 2 DBMS classes").
 4. **Your own AI.** Claude asks `due_this_week` over MCP → gateway allows the read. "Add it to my
