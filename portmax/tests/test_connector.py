@@ -3,10 +3,9 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from portmax.connector import Connector, load_connector
+from portmax.connector import Connector
 from portmax.errors import NotSupported, PortalChanged, SessionExpired
-from portmax.executor import run_plan
-from portmax.mock_portal.app import DASHBOARD, MockPortal
+from portmax.mock_portal.app import MockPortal
 from portmax.mock_portal.data import (
     MockState,
     expected_attendance,
@@ -15,27 +14,8 @@ from portmax.mock_portal.data import (
     expected_results,
     expected_timetable,
 )
-from portmax.pages import Page, by_step
-from tests.conftest import PORTAL, FakeClock, login
-
-
-@pytest.fixture
-def connector() -> Connector:
-    mock = load_connector("mockcollege")
-    # Tests serve the mock portal at TestClient's host, not the manifest's local-demo address.
-    manifest = mock.manifest.model_copy(update={"base_url": PORTAL})
-    return Connector(manifest=manifest, plan=mock.plan, parsers=mock.parsers, root=mock.root)
-
-
-def refresh(connector: Connector, client: TestClient, steps: list[str] | None = None) -> list[Page]:
-    return run_plan(
-        connector.plan,
-        connector.manifest,
-        client,
-        landing_url=f"{PORTAL}/{DASHBOARD}",
-        steps=steps,
-        sleep=lambda _: None,
-    )
+from portmax.pages import by_step
+from tests.conftest import FakeClock, login, refresh
 
 
 def test_one_refresh_reads_every_page_once_and_nothing_else(

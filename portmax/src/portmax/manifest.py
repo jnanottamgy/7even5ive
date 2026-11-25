@@ -51,6 +51,11 @@ class Manifest(_Model):
     markers: Markers
     session: SessionRules
     tools: list[ToolName] = Field(min_length=1)
+    refresh_minutes: float = Field(
+        default=180,
+        ge=15,
+        description="How often a keep-alive runs the whole plan; other pings read one page",
+    )
     connector_version: str = Field(pattern=r"^\d+\.\d+\.\d+$")
     verified_at: date | None = None
     made_by: MadeBy

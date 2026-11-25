@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
+from portmax.connector import Connector, load_connector
+from portmax.executor import run_plan
 from portmax.mock_portal.app import DASHBOARD, PortalConfig, create_app
 from portmax.mock_portal.data import MockState, default_state
+from portmax.pages import Page
+from portmax.store import Store
 
 PHONE_UA = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/131.0 Mobile"
 PORTAL = "http://testserver"
@@ -67,3 +72,29 @@ def portal_get(client: TestClient, path: str) -> str:
     """A logged-in page view, sent the way a browser sends it: with a Referer from the portal."""
     response = client.get(path, headers={"referer": f"{PORTAL}/{DASHBOARD}"})
     return response.text
+
+
+@pytest.fixture
+def connector() -> Connector:
+    mock = load_connector("mockcollege")
+    # Tests serve the mock portal at TestClient's host, not the manifest's local-demo address.
+    manifest = mock.manifest.model_copy(update={"base_url": PORTAL})
+    return Connector(manifest=manifest, plan=mock.plan, parsers=mock.parsers, root=mock.root)
+
+
+def refresh(connector: Connector, client: TestClient, steps: list[str] | None = None) -> list[Page]:
+    """What the phone does after login or on a keep-alive: run the plan in the student's session."""
+    return run_plan(
+        connector.plan,
+        connector.manifest,
+        client,
+        landing_url=f"{PORTAL}/{DASHBOARD}",
+        steps=steps,
+        sleep=lambda _: None,
+    )
+
+
+@pytest.fixture
+def store(tmp_path: Path) -> Store:
+    # A file, not ":memory:": the API test serves requests from another thread.
+    return Store(f"sqlite:///{tmp_path / 'portmax.db'}")
