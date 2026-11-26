@@ -175,10 +175,14 @@ def fake(monkeypatch):
     return g
 
 
-def _connect(client: TestClient) -> httpx.Response:
+def _connect(client: TestClient, headers: dict | None = None) -> httpx.Response:
+    """Start, come back from Google, and let the app finish, as the real flow does."""
     url = client.post("/api/google/start", headers=AUTH).json()["url"]
     state = parse_qs(urlsplit(url).query)["state"][0]
-    done = client.get(f"/api/google/callback?code=4/abc&state={state}")
+    page = client.get(f"/api/google/callback?code=4/abc&state={state}")
+    assert page.status_code == 200 and "sevenfive://google?" in page.text
+    done = client.post("/api/google/finish", json={"code": "4/abc", "state": state},
+                       headers=headers or AUTH)
     done.state = state  # type: ignore[attr-defined]
     return done
 
@@ -207,7 +211,7 @@ def test_the_sign_in_stores_an_encrypted_grant_once(make_app, fake):
     clock.freeze(NOW)
     mail.startup(a.db, sid)
     done = _connect(client)
-    assert done.status_code == 200 and "Connected" in done.text
+    assert done.status_code == 200 and done.json()["google"]["connected"]
     row = a.db.google_account(sid)
     assert row["email"] == "student@college.edu" and row["refresh_token"] != "1//refresh"
     assert google.unseal(row["refresh_token"]) == "1//refresh"
@@ -218,8 +222,36 @@ def test_the_sign_in_stores_an_encrypted_grant_once(make_app, fake):
     assert status["connected"] and status["gmail"] and status["calendar"] and status["classroom"]
     assert mail_items(a, sid) == {}  # the invented demo mail left the Inbox at once
     assert len(mail_items(a, sid, "cancelled")) == 3
-    reused = client.get(f"/api/google/callback?code=4/abc&state={done.state}")
-    assert reused.status_code == 400 and "already used" in reused.text
+    reused = client.post("/api/google/finish", json={"code": "4/abc", "state": done.state},
+                         headers=AUTH)
+    assert reused.status_code == 409 and "already used" in reused.json()["detail"]
+    assert client.get(f"/api/google/callback?code=4/abc&state={done.state}").status_code == 400
+
+
+def test_only_the_student_who_started_a_sign_in_can_finish_it(make_app, fake):
+    a, sid = make_app()
+    with a.db.tx() as c:
+        c.execute("INSERT INTO students(name, mcp_token) VALUES ('B', 'tok-b')")
+    client = TestClient(create(a))
+    url = client.post("/api/google/start", headers=AUTH).json()["url"]
+    state = parse_qs(urlsplit(url).query)["state"][0]
+    # The consent link went to someone else, who agreed and finished it in their own app.
+    theirs = client.post("/api/google/finish", json={"code": "4/abc", "state": state},
+                         headers={"authorization": "Bearer tok-b"})
+    assert theirs.status_code == 409 and "another account" in theirs.json()["detail"]
+    assert a.db.google_account(sid) is None and not fake.sent(google.TOKEN_URL)
+    mine = client.post("/api/google/finish", json={"code": "4/abc", "state": state}, headers=AUTH)
+    assert mine.status_code == 200  # not spent by the refusal
+
+
+def test_the_hand_off_page_carries_only_the_code_and_state_escaped(make_app, fake):
+    a, sid = make_app()
+    client = TestClient(create(a))
+    url = client.post("/api/google/start", headers=AUTH).json()["url"]
+    state = parse_qs(urlsplit(url).query)["state"][0]
+    page = client.get(f"/api/google/callback?code=<script>x</script>&state={state}").text
+    assert "<script>x</script>" not in page and "package=com.sevenfive.app" in page
+    assert demo.TOKEN not in page
 
 
 def test_a_spent_expired_or_refused_sign_in_shows_why(make_app, fake):
@@ -231,6 +263,9 @@ def test_a_spent_expired_or_refused_sign_in_shows_why(make_app, fake):
     clock.freeze(clock.now() + timedelta(minutes=11))
     late = client.get(f"/api/google/callback?code=4/abc&state={state}")
     assert late.status_code == 400 and "expired" in late.text
+    finished_late = client.post("/api/google/finish", json={"code": "4/abc", "state": state},
+                                headers=AUTH)
+    assert finished_late.status_code == 409
     clock.freeze(None)
     assert client.get("/api/google/callback?code=4/abc&state=made-up").status_code == 400
     assert a.db.google_account(sid) is None
@@ -371,3 +406,79 @@ def test_a_check_cut_short_goes_on_at_the_next_turn(make_app, monkeypatch):
         a.continue_mail()
     assert len(mail_items(a, sid)) == 3
     assert not mail.unfinished(mail.mailbox_key(sid, "demo")) and a.continue_mail() == 0
+
+
+def test_reconnecting_google_revives_a_mailbox_google_cut_off(make_app, fake, monkeypatch):
+    from mailfilter.fake import FakeMailbox
+    from mailfilter.judge import ScriptedJudge
+
+    from seventy5 import mail_demo
+
+    a, sid = make_app()
+    client = TestClient(create(a))
+    _connect(client)
+    clock.freeze(NOW)
+    key = mail.mailbox_key(sid, "gmail")
+    assert mail.store().connection(key).status == "connected"  # connected at sign-in, not later
+    mail.store().mark(key, "needs_reconnect", "invalid_grant")  # a Testing-mode week passed
+    _connect(client)
+    assert mail.store().connection(key).status == "connected"
+    inbox = mail_demo.first_batch(NOW)
+    monkeypatch.setattr(google, "gmail_mailbox", lambda db, s: FakeMailbox(
+        [m.mail for m in inbox], address="student@college.edu", now=clock.now))
+    monkeypatch.setattr(mail, "live_judge", lambda: ScriptedJudge({m.marker: m.answer
+                                                                     for m in inbox}))
+    assert mail.check(a.db, sid)["cards"] == 3
+
+
+def test_disconnect_then_reconnect_shows_the_new_cards(make_app, fake, monkeypatch):
+    from mailfilter.fake import FakeMailbox
+    from mailfilter.judge import ScriptedJudge
+
+    from seventy5 import mail_demo
+
+    a, sid = make_app()
+    client = TestClient(create(a))
+    clock.freeze(NOW)
+    mail.startup(a.db, sid)  # the demo mailbox first
+    inbox = mail_demo.first_batch(NOW)
+    monkeypatch.setattr(google, "gmail_mailbox", lambda db, s: FakeMailbox(
+        [m.mail for m in inbox], address="student@college.edu", now=clock.now))
+    monkeypatch.setattr(mail, "live_judge", lambda: ScriptedJudge({m.marker: m.answer
+                                                                     for m in inbox}))
+    _connect(client)
+    mail.check(a.db, sid)
+    assert len(mail_items(a, sid)) == 3
+    client.post("/api/google/disconnect", headers=AUTH)
+    assert len(mail_items(a, sid)) == 3  # the demo mailbox's cards are back
+    assert not [r for r in mail_items(a, sid).values() if ":gmail-" in r["external_id"]]
+    assert a.db.conn.execute("SELECT COUNT(*) AS n FROM items WHERE external_id LIKE"
+                             " 'mail:gmail-%'").fetchone()["n"] == 0  # read from Gmail: gone
+    _connect(client)
+    mail.check(a.db, sid)
+    shown = mail_items(a, sid)
+    assert len(shown) == 3 and all(":gmail-" in r["external_id"] for r in shown.values())
+
+
+
+def test_check_now_stays_inside_its_deadline_and_the_rest_goes_on_later(make_app, monkeypatch):
+    a, sid = make_app()
+    clock.freeze(NOW)
+    monkeypatch.setattr(mail, "CHECK_NOW_SECONDS", 0.0)  # no time at all: nothing is judged
+    out = TestClient(create(a)).post("/api/mail/check", headers=AUTH).json()
+    assert out["judged"] == 0 and out["more"]
+    assert mail.unfinished(mail.mailbox_key(sid, "demo"))
+    a.continue_mail()  # the background loop finishes it, the Check now's new mail included
+    assert len(mail_items(a, sid)) == 4
+
+
+def test_a_tick_that_used_its_time_leaves_the_rest_for_the_next(make_app, monkeypatch):
+    import time as clock_time
+
+    a, sid = make_app()
+    clock.freeze(NOW)
+    a.deadline = clock_time.monotonic() + 5  # less than one mail's reserve left
+    assert a.check_mail() == 0  # no mailbox started
+    assert a.continue_mail() == 0
+    a.deadline = None
+    assert a.check_mail() == 1

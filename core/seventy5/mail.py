@@ -20,6 +20,7 @@ and once at startup so the Inbox is never empty on a fresh demo.
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -33,7 +34,7 @@ from mailfilter.errors import (CheckInProgress, MailFilterError, NeedsReconnect,
                                TooSoon)
 from mailfilter.fake import FakeMailbox
 from mailfilter.judge import ClaudeJudge, Judge, ScriptedJudge
-from mailfilter.run import RunResult, check_mailbox, check_now
+from mailfilter.run import RunResult, check_mailbox
 from mailfilter.store import Store
 
 from . import clock, mail_demo
@@ -43,6 +44,13 @@ from .db import Database
 log = logging.getLogger(__name__)
 DEMO_ADDRESS = "student@mockcollege.edu.in"
 DATE_ONLY_HOUR = 9  # an exam notice that names a day but no time is shown at 9 AM, as the LLM does
+# One mail, at worst: Gmail's fetch plus one Claude answer (JUDGE_TIMEOUT, no retry). A check only
+# starts a mail while this much time is left before its deadline.
+JUDGE_TIMEOUT = 9.0
+MAIL_RESERVE = 12.0
+# "Check now" answers within this, then the rest goes on in the background (mail-continue).
+CHECK_NOW_SECONDS = 20.0
+_sync_lock = threading.Lock()
 
 
 class MailUnavailable(RuntimeError):
@@ -117,15 +125,18 @@ def mailbox_key(sid: int, which: str) -> str:
 
 
 def live_judge() -> Judge | None:
-    """Claude for real mail: Bedrock when the team configured it, else the Anthropic API."""
-    if settings.bedrock_model_id:
-        return ClaudeJudge.from_settings(mail_settings())
-    if settings.anthropic_api_key:
-        import anthropic
+    """Claude for real mail: Bedrock when the team configured it, else the Anthropic API. One
+    try with a short timeout: a mail that times out is simply judged at the next check."""
+    import anthropic
 
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key, timeout=30.0,
-                                     max_retries=2)
-        return ClaudeJudge(client, settings.llm_model)  # type: ignore[arg-type]
+    if settings.bedrock_model_id:
+        client: Any = anthropic.AnthropicBedrockMantle(aws_region=settings.bedrock_region,
+                                                        timeout=JUDGE_TIMEOUT, max_retries=0)
+        return ClaudeJudge(client, settings.mail_model)
+    if settings.anthropic_api_key:
+        client = anthropic.Anthropic(api_key=settings.anthropic_api_key, timeout=JUDGE_TIMEOUT,
+                                     max_retries=0)
+        return ClaudeJudge(client, settings.llm_model)
     return None
 
 
@@ -156,28 +167,31 @@ def _parts(db: Database, sid: int, now: datetime,
 
 # --- checks ------------------------------------------------------------------------------------
 def check(db: Database, sid: int, trigger: str = "scheduled", *, force: bool = False,
-          budget_seconds: float | None = None) -> dict[str, Any]:
+          deadline: float | None = None) -> dict[str, Any]:
     """One check of this student's mailbox, then its cards copied into 7even5ive's items.
 
     trigger "check_now" is the app's button: refused within 5 minutes of the last check. A
-    budget stops the check in time (Lambda answers within 30 s); the rest waits for the next."""
+    deadline (time.monotonic()) stops the check in time, one whole mail before it, so Lambda
+    always answers within its limit; what is left goes on at the next turn (mail-continue)."""
     now = clock.now()
     key, mailbox, judge, first_demo_check = _parts(db, sid, now, trigger == "check_now")
     if first_demo_check:
         # The demo's first "Check now" always runs and finds the new mail, even right after
         # the startup check; from then on (and always for real Gmail) the cooldown holds.
         force = True
-    deadline = time.monotonic() + budget_seconds if budget_seconds else None
-    # The mail filter stops when fewer than 60 seconds are left; give it our budget on top.
+    if trigger == "check_now" and not force:
+        # The mail filter's own check_now has this rule but no deadline, so it is applied here.
+        connection = store().connection(key)
+        last = connection.last_run_at if connection else None
+        if last is not None and now - last < mail_settings().check_now_cooldown:
+            raise MailUnavailable("Checked a moment ago: try again in a few minutes.", 429)
+    # The mail filter stops when fewer than 60 seconds are left: shift our deadline into that.
     time_left: Callable[[], float] | None = (
-        (lambda: 60.0 + deadline - time.monotonic()) if deadline is not None else None)
+        (lambda: 60.0 + deadline - MAIL_RESERVE - time.monotonic())
+        if deadline is not None else None)
     try:
-        if trigger == "check_now":
-            run = check_now(store(), mailbox, judge, key, mail_settings(), now=clock.now,
-                            force=force)
-        else:
-            run = check_mailbox(store(), mailbox, judge, key, mail_settings(), trigger=trigger,
-                                now=clock.now, time_left=time_left)
+        run = check_mailbox(store(), mailbox, judge, key, mail_settings(), trigger=trigger,
+                            now=clock.now, time_left=time_left)
     except TooSoon as err:
         raise MailUnavailable("Checked a moment ago: try again in a few minutes.", 429) from err
     except CheckInProgress as err:
@@ -198,14 +212,20 @@ def _summary(run: RunResult, which: str, copied: int) -> dict[str, Any]:
             "more": run.more, "error": run.error, "status": run.status, "cards": copied}
 
 
-def check_all(db: Database, budget_seconds: float | None = None) -> int:
+def _room(deadline: float | None) -> bool:
+    return deadline is None or deadline - time.monotonic() >= MAIL_RESERVE
+
+
+def check_all(db: Database, deadline: float | None = None) -> int:
     """The 1 PM and 9 PM job: every student's mailbox. One student's failure never stops the
     rest. Returns how many were checked."""
     done = 0
     rows = db.conn.execute("SELECT id FROM students ORDER BY id").fetchall()
     for row in rows:
+        if not _room(deadline):
+            break  # mail-continue picks up whoever is left
         try:
-            check(db, int(row["id"]), "scheduled", budget_seconds=budget_seconds)
+            check(db, int(row["id"]), "scheduled", deadline=deadline)
             done += 1
         except MailUnavailable as err:
             log.info("mail check skipped", extra={"student": row["id"], "status": err.status})
@@ -227,16 +247,19 @@ def unfinished(sid_key: str) -> bool:
     return bool(last is not None and last.more)
 
 
-def continue_unfinished(db: Database, budget_seconds: float | None = None) -> int:
+def continue_unfinished(db: Database, deadline: float | None = None) -> int:
     """A check cut short goes on at the next turn of the loop, not at the next 1 PM or 9 PM.
-    On Lambda each turn has 20 seconds, so a big first Gmail check finishes over a few minutes."""
+    On Lambda each turn has about 20 seconds, so a big first Gmail check finishes over a few
+    minutes."""
     done = 0
     for row in db.conn.execute("SELECT id FROM students ORDER BY id").fetchall():
         sid = int(row["id"])
         if not unfinished(mailbox_key(sid, mode(db, sid))):
             continue
+        if not _room(deadline):
+            break
         try:
-            check(db, sid, "continue", budget_seconds=budget_seconds)
+            check(db, sid, "continue", deadline=deadline)
             done += 1
         except MailUnavailable as err:
             log.info("mail continue skipped", extra={"student": sid, "status": err.status})
@@ -273,7 +296,13 @@ def item_fields(card: Card) -> dict[str, Any]:
 
 
 def sync_cards(db: Database, sid: int) -> int:
-    """Copies this student's current mailbox's cards into items. Returns how many it holds."""
+    """Copies this student's current mailbox's cards into items. Returns how many it holds.
+    One copy at a time: a check and a sign-in finishing together never insert a card twice."""
+    with _sync_lock:
+        return _sync_cards(db, sid)
+
+
+def _sync_cards(db: Database, sid: int) -> int:
     now = clock.now()
     key = mailbox_key(sid, mode(db, sid))
     connection = store().connection(key)
@@ -304,13 +333,16 @@ def _upsert(db: Database, sid: int, external: str, fields: dict[str, Any], now: 
                        status="filed", **fields)
         return
     changed = {k: v for k, v in fields.items() if item[k] != v}
+    if item["status"] == "cancelled":
+        # Retired when the student switched mailboxes, and current again (switched back).
+        changed["status"] = "filed"
     if not changed:
         return
     if "due_at" in changed:
         # Reminders keep their distance from the new date (and a passed one is skipped).
         db.move_item_due(sid, item["id"], changed.pop("due_at"), clock.iso(now))
     if changed:
-        db.update_item(sid, item["id"], **changed)  # status is never touched: done stays done
+        db.update_item(sid, item["id"], **changed)  # done stays done; only retired comes back
 
 
 def _retire_others(db: Database, sid: int, keep: set[str], now: datetime) -> None:
@@ -330,8 +362,20 @@ def reset_demo(sid: int) -> None:
 
 
 def forget(db: Database, sid: int) -> None:
-    """Disconnecting Gmail removes everything the mail filter kept for that mailbox."""
-    store().forget(mailbox_key(sid, "gmail"))
+    """Disconnecting Gmail removes everything read from it: the mail filter's records and the
+    cards copied from them, with their reminders. The demo mailbox's cards come back."""
+    key = mailbox_key(sid, "gmail")
+    store().forget(key)
+    prefix = f"mail:{key}:"
+    with _sync_lock, db.tx() as c:
+        rows = c.execute("SELECT id, external_id FROM items WHERE student_id=? AND route='mail'",
+                         (sid,)).fetchall()
+        for row in rows:
+            if str(row["external_id"] or "").startswith(prefix):
+                c.execute("DELETE FROM reminders WHERE item_id=?", (row["id"],))
+                c.execute("DELETE FROM items WHERE id=?", (row["id"],))
+                c.execute("DELETE FROM events WHERE idempotency_key=? AND student_id=?",
+                          (row["external_id"], sid))
     sync_cards(db, sid)
 
 
@@ -369,7 +413,7 @@ def status(db: Database, sid: int) -> dict[str, Any]:
 def check_mail_now(db: Database, sid: int) -> dict[str, Any]:
     """The gateway tool: "check my mail now" from the app, Claude or the voice assistant."""
     try:
-        return check(db, sid, "check_now", budget_seconds=20)
+        return check(db, sid, "check_now", deadline=time.monotonic() + CHECK_NOW_SECONDS)
     except MailUnavailable as err:
         raise ValueError(str(err)) from err
 
@@ -377,7 +421,7 @@ def check_mail_now(db: Database, sid: int) -> dict[str, Any]:
 def startup(db: Database, sid: int) -> list[str]:
     """Fills the Inbox on a fresh start (the demo morning). Log lines, counts only."""
     try:
-        out = check(db, sid, "startup", budget_seconds=20)
+        out = check(db, sid, "startup", deadline=time.monotonic() + CHECK_NOW_SECONDS)
     except MailUnavailable as err:
         return [f"mail      startup check skipped: {err}"]
     return [f"mail      {out['mode']} mailbox: {out['cards']} cards, {out['left_out']} left out"]

@@ -9,6 +9,7 @@ connection-minutes cost money and the demo does not need them.
 from __future__ import annotations
 
 import json
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, AsyncIterator
@@ -94,7 +95,8 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
         sid = student_from(authorization)
         db = state.db
         return {
-            "student": dict(db.student(sid)) | {"mcp_token": None},
+            # The token and the phone number stay on the server; the app needs neither.
+            "student": dict(db.student(sid)) | {"mcp_token": None, "wa_phone": None},
             "due_this_week": tools.due_this_week(db, sid),
             "attendance": tools.attendance(db, sid),
             "materials": tools.materials(db, sid),
@@ -250,20 +252,29 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
 
     @api.get("/api/google/callback")
     def google_callback(request: Request) -> HTMLResponse:
-        # No token here: Google sends the browser back; the one-time state names the student.
+        """Google sends the browser back here. Nothing is exchanged yet: the page hands the code
+        to the app, which finishes the sign-in with the student's own token."""
         query = request.query_params
+        if query.get("error"):
+            return HTMLResponse(_page("Not connected", "You didn't allow access at Google. "
+                                      "Nothing was connected."), status_code=400)
+        code, given = query.get("code"), query.get("state")
+        if not code or not google.pending(state.db, given):
+            return HTMLResponse(_page("Not connected", "This sign-in link was already used or "
+                                      "has expired. Start again in the app."), status_code=400)
+        return HTMLResponse(_handoff(code, str(given)))
+
+    @api.post("/api/google/finish")
+    def google_finish(body: dict[str, Any], authorization: str | None = Header(None)) -> dict[str, Any]:
+        """The app, signed in as the student who started the sign-in, hands back Google's code."""
+        sid = student_from(authorization)
         try:
-            if query.get("error"):
-                raise google.GoogleUnavailable("You didn't allow access at Google. Nothing was "
-                                               "connected.")
-            sid = google.finish(state.db, query.get("code"), query.get("state"))
+            google.finish(state.db, str(body.get("code") or ""), str(body.get("state") or ""), sid)
         except google.GoogleUnavailable as err:
-            return HTMLResponse(_page("Not connected", str(err)), status_code=400)
+            raise HTTPException(409, str(err)) from err
         mail.sync_cards(state.db, sid)  # invented demo mail leaves the Inbox at once
         state.db.audit(sid, "google_connect", "allow", "student", clock.iso(clock.now()))
-        return HTMLResponse(_page("Connected", "Google is connected to 7even5ive. Go back to "
-                                  "the app: your college mail is checked at 1 PM and 9 PM, or "
-                                  "tap Check now."))
+        return {"connected": True, "google": google.status(state.db, sid)}
 
     @api.post("/api/google/disconnect")
     def google_disconnect(authorization: str | None = Header(None)) -> dict[str, Any]:
@@ -282,7 +293,8 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
         """The Inbox's "Check now": refused within 5 minutes of the last check."""
         sid = student_from(authorization)
         try:
-            out = mail.check(state.db, sid, "check_now", budget_seconds=20)
+            out = mail.check(state.db, sid, "check_now",
+                             deadline=time.monotonic() + mail.CHECK_NOW_SECONDS)
         except mail.MailUnavailable as err:
             raise HTTPException(err.status, str(err)) from err
         state.db.audit(sid, "check_mail_now", "allow", "student", clock.iso(clock.now()))
@@ -315,13 +327,33 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
     return api
 
 
-def _page(title: str, message: str) -> str:
-    """The small page the browser shows after Google's sign-in. Text only, escaped."""
+_STYLE = ("body{font:17px/1.5 system-ui,sans-serif;background:#F4F1EA;color:#0B0C10;"
+          "display:grid;place-items:center;min-height:90vh;margin:0;padding:16px}"
+          "main{max-width:420px}h1{color:#FF8A1F;font-size:28px;margin:0 0 8px}"
+          "a.go{display:inline-block;margin-top:12px;padding:12px 20px;border-radius:999px;"
+          "background:#FF8A1F;color:#fff;text-decoration:none;font-weight:600}")
+
+
+def _page(title: str, message: str, extra: str = "") -> str:
+    """The small page the browser shows around Google's sign-in. Text only, escaped."""
     from html import escape
 
     return ("<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' "
-            "content='width=device-width, initial-scale=1'><title>7even5ive</title><style>"
-            "body{font:17px/1.5 system-ui,sans-serif;background:#F4F1EA;color:#0B0C10;"
-            "display:grid;place-items:center;min-height:90vh;margin:0;padding:16px}"
-            "main{max-width:420px}h1{color:#FF8A1F;font-size:28px;margin:0 0 8px}</style></head>"
-            f"<body><main><h1>{escape(title)}</h1><p>{escape(message)}</p></main></body></html>")
+            f"content='width=device-width, initial-scale=1'><title>7even5ive</title><style>{_STYLE}"
+            f"</style></head><body><main><h1>{escape(title)}</h1><p>{escape(message)}</p>{extra}"
+            "</main></body></html>")
+
+
+def _handoff(code: str, given: str) -> str:
+    """Back to the app with Google's code: Chrome's intent link (a tap), tried at once too."""
+    from html import escape
+    from urllib.parse import urlencode
+
+    query = urlencode({"code": code, "state": given})
+    intent = f"intent://google?{query}#Intent;scheme=sevenfive;package=com.sevenfive.app;end"
+    plain = f"sevenfive://google?{query}"
+    extra = (f"<a class='go' id='go' href='{escape(intent, quote=True)}'>Back to 7even5ive</a>"
+             f"<p><small>Not opening? <a href='{escape(plain, quote=True)}'>Try this link</a>."
+             "</small></p><script>setTimeout(function(){location.href="
+             "document.getElementById('go').href;},300);</script>")
+    return _page("Almost done", "Go back to 7even5ive to finish connecting Google.", extra)

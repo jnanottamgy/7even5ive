@@ -34,8 +34,14 @@ class App:
     # Where messages for the student go (the outbox), and who rings for an urgent call.
     sender: notify.Sender = field(default_factory=notify.LogSender)
     caller: Any = None
-    # Seconds one background job may take (Lambda answers within 30 s); None: no limit.
-    job_budget: float | None = None
+    # When the current turn of the background loop must be done (time.monotonic()), shared by
+    # every job in it; set by the Lambda tick, None on a long-running server (no limit).
+    deadline: float | None = None
+
+    def time_left(self) -> float | None:
+        import time
+
+        return None if self.deadline is None else self.deadline - time.monotonic()
 
     def process(self, event_id: int) -> Outcome | None:
         """One event through the cascade. Shared by the local drain and the cascade Lambda.
@@ -78,16 +84,23 @@ class App:
     def continue_mail(self) -> int:
         from . import mail
 
-        return mail.continue_unfinished(self.db, self.job_budget)
+        left = self.time_left()
+        if left is not None and left < mail.MAIL_RESERVE + 2:
+            return 0  # the mail job used this turn; the next one carries on
+        return mail.continue_unfinished(self.db, self.deadline)
 
     def check_mail(self) -> int:
-        """College mail for every student, then Classroom for those who connected it."""
+        """College mail for every student, then Classroom for those who connected it, each
+        only while the turn has time for it."""
         from . import google, mail
 
-        checked = mail.check_all(self.db, self.job_budget)
+        checked = mail.check_all(self.db, self.deadline)
         for sid in self.db.google_students():
+            left = self.time_left()
+            if left is not None and left < google.CLASSROOM_RESERVE:
+                break  # Classroom waits for the next check rather than overrun Lambda's limit
             try:
-                google.classroom_sync(self, sid)
+                google.classroom_sync(self, sid, deadline=self.deadline)
             except Exception as err:  # noqa: BLE001 - one student's Classroom never stops another
                 log.warning("classroom sync failed", extra={"student": sid,
                                                             "error": type(err).__name__})

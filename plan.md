@@ -23,6 +23,8 @@ log at the bottom, and record every default chosen on the team's behalf under "D
 - Branch `claude/busy-pasteur-lake3c` only; push there; no pull requests unless asked.
 - Commit as `git -c user.name=jnanottamgy -c user.email=jnanottamgy@users.noreply.github.com`,
   message ending with the two attribution lines (Co-Authored-By Claude, Claude-Session).
+  (From 27 Nov, Claude sessions in the cloud environment commit as `Claude
+  <noreply@anthropic.com>` instead: its hook requires that so GitHub shows them Verified.)
 - Never commit: `.env`, keys, tokens, `core/data/`, databases, raw HAR captures, the MP4s,
   `android/local.properties`.
 - Never automate a real portal login, solve CAPTCHAs, spoof the WebView or rotate IPs; never
@@ -168,13 +170,15 @@ Status: `[ ]` to do, `[~]` in progress, `[x]` done and tested, `[-]` decided not
 | P9 | The demo mailbox is invented mail dated from today, judged by recorded answers; the first Check now always delivers one new mail, later ones keep the 5-minute cooldown. | The mail filter's samples have fixed 2026 dates; the demo needs "Check now finds something". |
 | P10 | A mail card's `due_at` is its deadline to register (kind deadline), else the exam or event day (a date with no time shows at 9 AM, as the LLM does); the event's own date is kept beside it. Mail deadlines also appear in "due this week". | One table drives the list, reminders and calls; a registration deadline is something due. |
 | P11 | The mail judge uses Bedrock when `BEDROCK_MODEL_ID` is set, else the Anthropic API key. | Either key the team has works. |
-| P12 | Google's own OAuth `state` is the one-time code (10 minutes, single use, PKCE). Scopes: `openid email`, `gmail.readonly`, `calendar.events`, Classroom courses and own coursework read-only. A student may grant a subset; each feature checks its scope. | No student token in any URL, nothing else to invent. |
+| P12 | Google's own OAuth `state` is the one-time code (10 minutes, single use, PKCE). The callback page only hands the code back to the app (`sevenfive://google`), which finishes the sign-in with the student's own token, so a forwarded consent link can't attach someone else's account. Scopes: `openid email`, `gmail.readonly`, `calendar.events`, Classroom courses and own coursework read-only. A student may grant a subset; each feature checks its scope. | No student token in any URL; an independent review found the account-injection risk of finishing in the browser. |
 | P13 | The voice assistant is a second ElevenLabs agent (Claude Haiku 5.5) whose tools are client tools the phone runs through `/api/tools`; signed URLs only; 5 minutes; nothing stored. | Same rules as a tap; no standing credential at ElevenLabs. |
 | P14 | Calls add Exotel (now native in ElevenLabs) beside Twilio and SIP; the call agent's only tools are ElevenLabs' hang-up and voicemail detection. | An Indian caller id without a SIP trunk; voicemail never gets a message. |
 | P15 | A demo reset keeps the student's setup (Google account, registered phones, call consent and quiet hours) and resets only the demo data and demo mailbox. | Reconnecting Google before every rehearsal would break the demo. |
 | P16 | Firebase is started from four build settings, without google-services.json or its plugin; absent, the app pulls every 15 minutes. | The APK builds and runs with no Firebase project. |
 | P17 | The briefing voice defaults to ElevenLabs' premade "George", mp3 at 64 kbps, cached per student, day and text. | Small enough for Lambda; a second tap is free. |
 | P18 | The demo morning's weekdays ("due Fri") mean the next such weekday after now. | On Fridays the old rule put "Fri" just outside "due this week". |
+| P19 | Every Lambda tick shares one 22 s deadline; a mail is only started with 12 s left, Classroom with 15 s; Check now answers within 20 s and the rest goes on in the background. Claude has one 9 s try per mail and one 12 s try per message (no retries). | A tick or request that overran 29 s would reset the instance and its /tmp data, the Google connection with it. |
+| P20 | The invented demo morning always replays its recorded answers (`DEMO_LIVE_REPLAY=1` replays it live on a laptop); real events use the live models whenever the keys are set. | A cold start with keys would otherwise spend its 29 s and money classifying invented messages. |
 
 ## Keys and accounts the team hands over at the end
 
@@ -204,7 +208,14 @@ commands, the imported phone number's id, `CALL_PROVIDER`, the webhook secret,
   outputs; the zip passes its smoke test (mail, briefing, voice fallback, MCP, tick). App:
   notifications (outbox pull, WorkManager, optional Firebase), call opt-in, briefing, classes,
   Done with Undo, mail cards, Google, voice screen, background portal keep-alive, demo tour
-  steps. Tests: core 127, PortMax 100, mail filter 206; Android 45 unit tests; debug and demo
-  APKs build. Not run here: a phone or emulator (none in this sandbox), and any live account
-  (no keys yet). Found and fixed: the demo's "due Fri" on Fridays (P18).
+  steps. Two independent reviews (server, app) found 16 issues; all fixed: the voice
+  assistant's connect/stop races and server-initiated close, rotation ending a conversation,
+  the keep-alive switch reset by a portal logout, Firebase wake-ups on Android 8-11, the
+  briefing playing twice, audio effects collected mid-call, the notification row's dead end;
+  Lambda time budgets (P19), a cut-off mailbox not revived on reconnect, cards hidden after
+  disconnect and reconnect, the sign-in finishing in the browser (P12), Classroom tagging the
+  wrong card, the phone number in the cards, the live replay on cold starts (P20). Tests:
+  core 134, PortMax 100, mail filter 206; Android 45 unit tests; debug and demo APKs build; the
+  Lambda zip passes its smoke test. Not run here: a phone or emulator (none in this sandbox),
+  and any live account (no keys yet). Found and fixed: the demo's "due Fri" on Fridays (P18).
 

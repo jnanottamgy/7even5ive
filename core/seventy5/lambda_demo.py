@@ -32,8 +32,9 @@ from typing import Any
 log = logging.getLogger(__name__)
 logging.getLogger().setLevel(logging.INFO)
 
-# One tick's jobs together must finish well inside Lambda's 29 s.
-JOB_BUDGET_SECONDS = 20.0
+# One tick's jobs together must finish well inside Lambda's 29 s: they share this deadline, and
+# each job only starts work it can finish before it (mail.MAIL_RESERVE, google.CLASSROOM_RESERVE).
+TICK_BUDGET_SECONDS = 22.0
 
 
 def load_settings(prefix: str | None, client: Any = None) -> list[str]:
@@ -98,12 +99,18 @@ def tick() -> dict[str, Any]:
     from .cloud import current_jobs
     from .scheduler import Scheduler
 
+    import time
+
     if _scheduler is None:
         # Built once per instance: interval jobs remember their last run in memory, daily jobs
         # in the database (a restart never runs the 1 PM check twice).
         _scheduler = Scheduler(lambda: _router.app.db, current_jobs(_router))
-    _router.app.job_budget = JOB_BUDGET_SECONDS  # a demo reset makes a new app: set it each time
-    ran = [job.name for job in _scheduler.jobs if _scheduler.run_once(job)]
+    app = _router.app  # a demo reset makes a new app: set its deadline each time
+    app.deadline = time.monotonic() + TICK_BUDGET_SECONDS
+    try:
+        ran = [job.name for job in _scheduler.jobs if _scheduler.run_once(job)]
+    finally:
+        app.deadline = None
     return {"ran": ran}
 
 

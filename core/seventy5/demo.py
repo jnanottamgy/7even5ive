@@ -188,14 +188,22 @@ def prepare(db_url: str | None = None,
 
     live = bool(settings.jev_api_key and (settings.anthropic_api_key or settings.bedrock_model_id))
     script = messages()
-    app = build(
-        db_url,
-        jev=None if live else FixtureDecider({m["text"]: m["jev"] for m in script}),
-        llm=None if live else FixtureLLM({m["text"]: m["llm"] for m in script if "llm" in m}),
-    )
+    recorded = (FixtureDecider({m["text"]: m["jev"] for m in script}),
+                FixtureLLM({m["text"]: m["llm"] for m in script if "llm" in m}))
+    # Real events get the live models when the keys are there; the invented morning replays its
+    # recorded answers unless DEMO_LIVE_REPLAY=1 (a laptop showing the models at work). On a
+    # cold Lambda start a live replay would spend its 29 s and money on invented messages.
+    app = build(db_url) if live else build(db_url, jev=recorded[0], llm=recorded[1])
+    replay_live = live and os.environ.get("DEMO_LIVE_REPLAY") == "1"
+    kept = (app.cascade.jev, app.cascade.llm)
+    if not replay_live:
+        app.cascade.jev, app.cascade.llm = recorded
     sid = seed(app)
     api = create(app, run_jobs=run_jobs)
-    lines = play(app, TestClient(api), sid)
+    try:
+        lines = play(app, TestClient(api), sid)
+    finally:
+        app.cascade.jev, app.cascade.llm = kept
     from . import mail, sync
 
     lines += sync.backfill(app.db, sid)

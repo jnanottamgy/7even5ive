@@ -133,7 +133,8 @@ def build_router(db_url: str | None = None) -> Router:
     os.environ.setdefault("PORTMAX_DEV_TOKENS", f"{demo.TOKEN}:{demo.PORTAL_ID}")
     app, core, _, live, lines = demo.prepare(db_url)
     # Counts only: logs never carry message or mail text (the hosts' logs may be CloudWatch).
-    mode = "LIVE Jev + Claude" if live else "offline, recorded answers"
+    mode = ("new messages: LIVE Jev + Claude; demo morning: recorded answers" if live
+            else "offline, recorded answers")
     print(f"mode: {mode}; replayed {len(lines)} demo messages", flush=True)
     from .report import lines as report
 

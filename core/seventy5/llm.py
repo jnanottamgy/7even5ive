@@ -18,6 +18,7 @@ from .config import settings
 log = logging.getLogger(__name__)
 
 KINDS = ("deadline", "exam", "material", "event", "notice", "chitchat")
+LLM_TIMEOUT = 12.0
 
 SYSTEM = """You file messages for an Indian college student.
 You get one message (from a WhatsApp class group, college email or Google Classroom),
@@ -81,11 +82,15 @@ class ClaudeLLM:
 
         # Why Bedrock first: the team has AWS credits and no Anthropic key, and it keeps
         # the model inside the AWS account the rest of 75 runs in.
+        # One short try: a slow answer becomes a "needs review" card instead of holding a
+        # webhook (or a Lambda tick, 29 s) open; the SDK's default would wait 10 minutes.
         if settings.bedrock_model_id:
-            self._client = anthropic.AnthropicBedrock(aws_region=settings.bedrock_region)
+            self._client = anthropic.AnthropicBedrock(aws_region=settings.bedrock_region,
+                                                      timeout=LLM_TIMEOUT, max_retries=0)
             self._model = settings.bedrock_model_id
         else:
-            self._client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+            self._client = anthropic.Anthropic(api_key=settings.anthropic_api_key,
+                                               timeout=LLM_TIMEOUT, max_retries=0)
             self._model = settings.llm_model
 
     def propose(self, text: str, subjects: list[str], today: str,

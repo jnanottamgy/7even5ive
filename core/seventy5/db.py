@@ -602,6 +602,11 @@ class Database:
             c.execute("INSERT INTO connect_codes VALUES (?,?,?,?,?)",
                       (code, student_id, verifier, redirect_uri, expires_at))
 
+    def peek_connect_code(self, code: str, now: str) -> Any | None:
+        """The sign-in for this code if it is still waiting, without spending it."""
+        row = self.conn.execute("SELECT * FROM connect_codes WHERE code=?", (code,)).fetchone()
+        return row if row is not None and row["expires_at"] > now else None
+
     def take_connect_code(self, code: str, now: str) -> Any | None:
         """The sign-in for this code, once: the row is deleted as it is read. None when it is
         unknown, already used or expired."""

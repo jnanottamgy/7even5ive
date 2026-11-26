@@ -233,7 +233,7 @@ drive or exam itself when `due_at` is the deadline to register). Reminders add `
 | `GET /api/calls` · `POST /api/calls/test` | Recent calls (ids and outcomes only) · ring now about the soonest item (`409` with the reason when calls are off or there is no number) |
 | `GET /api/briefing` · `GET /api/briefing/audio` | Today: `{day, greeting, sections: [{key, title, lines}], classes, text, audio: {available}}` · ElevenLabs' mp3 (`503` with the reason when there is no voice: read `text` with TextToSpeech) |
 | `GET /api/voice/session` | `{available, signed_url, dynamic_variables, tools, max_seconds}` or `{available: false, reason}` ([`voice.md`](voice.md)) |
-| `POST /api/google/start` · `POST /api/google/disconnect` | Google's consent page to open in the browser · revoke and forget |
+| `POST /api/google/start` · `POST /api/google/finish` `{code, state}` · `POST /api/google/disconnect` | Google's consent page to open in the browser · the app finishes the sign-in when the browser hands back `sevenfive://google?code=…&state=…` (only the student who started it can) · revoke and forget |
 | `GET /api/mail` · `POST /api/mail/check` | The mailbox status · Check now (`429` within 5 minutes of the last check) |
 | `POST /mcp` | MCP over HTTP for Claude or ChatGPT (`Authorization: Bearer <token>`) |
 

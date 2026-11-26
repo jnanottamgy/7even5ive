@@ -5,11 +5,15 @@ The sign-in (decision P6), with no student token in any URL:
    `state`, bound to this student, with a PKCE verifier and ten minutes to live, and answer
    with Google's consent page address.
 2. The app opens that page in the phone's browser; the student signs in at Google and agrees.
-3. Google sends the browser to GET /api/google/callback?code=...&state=.... We spend the state
-   (once), swap the code (with the verifier and our client secret) for a refresh token, encrypt
-   it and store it. The page says to go back to the app.
-The phone never holds a Google token. The student may untick a permission at Google; each
-feature checks the scope it needs and says what is missing.
+3. Google sends the browser to GET /api/google/callback?code=...&state=.... That page only hands
+   the code back to the app (sevenfive://google?...).
+4. The app posts it to POST /api/google/finish with its own token. Only now do we spend the
+   state (once, and only for the student who started it), swap the code (with the verifier and
+   our client secret) for a refresh token, encrypt it and store it.
+Why the app finishes it: a consent link forwarded to someone else would otherwise attach their
+Google account to the student who started it. Their browser can't hand the code to an app
+signed in as that student. The phone never holds a Google token either way. The student may
+untick a permission at Google; each feature checks the scope it needs and says what is missing.
 
 At rest: the refresh token is encrypted with TOKEN_ENCRYPTION_KEY (Fernet). Unset in development:
 a fixed key is used and the startup report says so. Disconnect revokes at Google, then deletes.
@@ -55,6 +59,8 @@ COURSEWORK_SCOPE = "https://www.googleapis.com/auth/classroom.coursework.me.read
 SCOPES = ("openid", "email", GMAIL_SCOPE, CALENDAR_SCOPE, COURSES_SCOPE, COURSEWORK_SCOPE)
 CODE_MINUTES = 10
 EARLY = 60.0  # refresh an access token this long before it expires
+# Classroom only starts a new piece of coursework (it may need the LLM) with this much time left.
+CLASSROOM_RESERVE = 15.0
 # Development only: a fixed key, so a laptop restart can still read what it stored.
 DEV_KEY = base64.urlsafe_b64encode(hashlib.sha256(b"7even5ive-dev-only").digest())
 
@@ -148,11 +154,24 @@ def _email_from(id_token: str | None) -> str | None:
     return str(email) if isinstance(email, str) else None
 
 
-def finish(db: Database, code: str | None, state: str | None,
+def pending(db: Database, state: str | None) -> bool:
+    """Whether this state is a sign-in still waiting to be finished (the callback page asks)."""
+    return bool(state) and db.peek_connect_code(str(state), clock.iso(clock.now())) is not None
+
+
+def finish(db: Database, code: str | None, state: str | None, student_id: int,
            http: httpx.Client | None = None) -> int:
-    """Google sent the browser back. Returns the student id; raises with a reason to show."""
+    """The app hands back Google's code, with its own token. Returns the student id; raises
+    with a reason to show."""
     if not code or not state:
         raise GoogleUnavailable("Google didn't finish the sign-in. Start again in the app.")
+    started = db.peek_connect_code(state, clock.iso(clock.now()))
+    if started is None:
+        raise GoogleUnavailable("This sign-in link was already used or has expired. "
+                                "Start again in the app.")
+    if int(started["student_id"]) != student_id:
+        # Not spent: the student who started it can still finish it.
+        raise GoogleUnavailable("This sign-in was started from another account.")
     row = db.take_connect_code(state, clock.iso(clock.now()))
     if row is None:
         raise GoogleUnavailable("This sign-in link was already used or has expired. "
@@ -173,9 +192,14 @@ def finish(db: Database, code: str | None, state: str | None,
     if not isinstance(refresh, str) or not refresh:
         raise GoogleUnavailable("Google didn't grant lasting access. Start again in the app.")
     sid = int(row["student_id"])
-    db.save_google(sid, _email_from(body.get("id_token")), str(body.get("scope") or ""),
-                   seal(refresh), clock.iso(clock.now()))
+    email = _email_from(body.get("id_token"))
+    db.save_google(sid, email, str(body.get("scope") or ""), seal(refresh), clock.iso(clock.now()))
     _tokens.drop(sid)
+    from . import mail
+
+    # (Re)connect the Gmail mailbox now: a mailbox Google had cut off (a revoked grant, a
+    # Testing-mode week) is checked again, and a different address starts afresh.
+    mail.store().connect(mail.mailbox_key(sid, "gmail"), email, clock.now())
     log.info("google connected", extra={"student": sid})
     return sid
 
@@ -386,10 +410,12 @@ def coursework(db: Database, sid: int, http: httpx.Client | None = None) -> list
     return found
 
 
-def classroom_sync(app: Any, sid: int, http: httpx.Client | None = None) -> int:
+def classroom_sync(app: Any, sid: int, http: httpx.Client | None = None,
+                   deadline: float | None = None) -> int:
     """Coursework into cards. A new piece goes through the cascade (Jev or the LLM names the
     subject); Classroom's own due date always wins. A moved due date moves the card and its
-    reminders. Returns how many pieces were new."""
+    reminders. A new piece is only started with CLASSROOM_RESERVE seconds left before the
+    deadline (the rest waits for the next check). Returns how many pieces were new."""
     db = app.db
     if not (settings.classroom_enabled and has_classroom(db, sid)):
         return 0
@@ -403,16 +429,20 @@ def classroom_sync(app: Any, sid: int, http: httpx.Client | None = None) -> int:
             if item["due_at"] != work["due_at"]:
                 db.move_item_due(sid, item["id"], work["due_at"], clock.iso(clock.now()))
             continue
+        if deadline is not None and deadline - time.monotonic() < CLASSROOM_RESERVE:
+            break
         due_text = datetime.fromisoformat(work["due_at"]).strftime("%A %d %B %Y %I:%M %p")
         payload = {"text": f"{work['course']}: {work['title']} (due {due_text})",
                    "classroom": {"title": work["title"], "due_at": work["due_at"]}}
         event_id = accept(db, app.queue, sid, "classroom", external, payload)
         if event_id is None:
             continue
-        outcomes = app.work()
-        filed = next((o for o in outcomes if o.item_id is not None), None)
-        if filed is not None and filed.status == "filed":
-            db.update_item(sid, filed.item_id, external_id=external)
-            db.move_item_due(sid, filed.item_id, work["due_at"], clock.iso(clock.now()))
+        app.work()
+        # This event's own card, never another one the same drain happened to file.
+        filed = db.conn.execute("SELECT id FROM items WHERE event_id=? AND student_id=? AND"
+                                " status='filed'", (event_id, sid)).fetchone()
+        if filed is not None:
+            db.update_item(sid, filed["id"], external_id=external)
+            db.move_item_due(sid, filed["id"], work["due_at"], clock.iso(clock.now()))
             new += 1
     return new
