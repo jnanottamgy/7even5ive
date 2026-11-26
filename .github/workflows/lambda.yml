@@ -1,0 +1,36 @@
+name: Lambda demo
+
+# Builds the serverless demo's zip (core/build_lambda_zip.py), runs its handler on API Gateway
+# events, and publishes the zip for deploy/aws/7even5ive-serverless.yaml.
+on:
+  push:
+    paths:
+      - "core/**"
+      - "portmax/**"
+      - "deploy/aws/**"
+      - ".github/workflows/lambda.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"   # the Lambda runtime's version
+
+      - name: Build the Lambda zip
+        working-directory: core
+        run: python build_lambda_zip.py
+
+      - name: Smoke test the handler
+        run: python deploy/aws/lambda_smoke.py core/.build-lambda
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: 7even5ive-lambda-zip
+          path: core/dist/7even5ive-lambda.zip
+          if-no-files-found: error
