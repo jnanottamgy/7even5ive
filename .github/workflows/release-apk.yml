@@ -15,6 +15,12 @@ on:
 permissions:
   contents: write
 
+# One APK build at a time: a newer push cancels an in-flight one so they don't race on the
+# shared apk-latest release.
+concurrency:
+  group: release-apk
+  cancel-in-progress: true
+
 jobs:
   release:
     runs-on: ubuntu-latest

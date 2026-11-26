@@ -5,6 +5,7 @@ import android.net.Uri
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
+import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import com.sevenfive.app.data.ApiException
@@ -96,8 +97,15 @@ fun WebView.configureForPortal(bridge: PortalBridge) {
         "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) " +
             "Chrome/158.0.0.0 Mobile Safari/537.36"
     CookieManager.getInstance().setAcceptCookie(true)
-    CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
+    // Third-party cookies on: the invisible Google reCAPTCHA on the login page sets cookies on
+    // google.com and scores poorly (or fails) without them.
+    CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
     addJavascriptInterface(bridge, PortalBridge.NAME)
+    // Android WebView adds an X-Requested-With header carrying the app's package name — a WebView
+    // tell a portal can read server-side. Drop it so requests look like a browser's.
+    if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
+        WebSettingsCompat.setRequestedWithHeaderOriginAllowList(settings, emptySet())
+    }
     // Hide the Android-WebView tell before any portal script runs (see HIDE_WEBVIEW_JS). Needs a
     // recent System WebView; where unavailable the UA fix alone still clears the other checks.
     if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
