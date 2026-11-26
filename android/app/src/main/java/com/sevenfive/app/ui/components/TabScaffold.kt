@@ -118,10 +118,7 @@ fun TabScaffold(
                     Modifier
                         .fillMaxWidth()
                         .height(0.6.dp)
-                        .graphicsLayer {
-                alpha = scroll.state.collapsedFraction
-                inputScale = HazeInputScale.Auto
-            }
+                        .graphicsLayer { alpha = scroll.state.collapsedFraction }
                         .background(app.hairline),
                 )
             }
