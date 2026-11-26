@@ -15,7 +15,57 @@ PortMax accepts portal pages only from the service's own address: `PUBLIC_URL` (
 on every start; there is no real student data. This is the prototype's demo server. The
 production plan (Lambda, SQS, Supabase, AgentCore) is [`deploy.md`](deploy.md).
 
-## Put it online on AWS (about 15 minutes, no command line)
+## Serverless on AWS: Lambda + API Gateway (recommended, about 20 minutes, no command line)
+
+The team's architecture is serverless, so this is the main way to put the demo online.
+[`deploy/aws/7even5ive-serverless.yaml`](../deploy/aws/7even5ive-serverless.yaml) runs the
+same demo (`core/seventy5/lambda_demo.py`, the same routing as above) as **one Lambda function
+behind an API Gateway HTTP API**: no server to keep running, nothing billed while idle.
+
+How it keeps the demo correct on Lambda: the demo's data lives in the function's `/tmp` and
+is reseeded with the demo morning on every cold start, and the mock portal keeps its logins
+in memory. So the function is pinned to **one instance at a time** (`PinToOneInstance`); two
+instances would each have their own copy. The production pipeline, several functions sharing
+Supabase, is [`core/template.yaml`](../core/template.yaml) ([`deploy.md`](deploy.md)).
+
+1. **Get the code zip.** GitHub → **Actions** → **Lambda demo** → the newest green run →
+   **Artifacts** → `7even5ive-lambda-zip`. Unzip the download **once**: inside is
+   `7even5ive-lambda.zip`. Keep that file zipped; it is what Lambda runs.
+2. **Check the Lambda quota.** AWS console → **Service Quotas** → **AWS services** →
+   **AWS Lambda** → **Concurrent executions**. Pinning to one instance needs this above 10 (AWS
+   keeps 10 unreserved). New accounts can start at 10: then **Request increase** (to 1000; it
+   is free), or deploy with `PinToOneInstance` = `false`, which works but lets two instances
+   disagree if they ever run at once.
+3. **Upload the zip to S3**, in the region you deploy to (the Free-plan project's region):
+   **S3** → **Create bucket** (any unique name, e.g. `7even5ive-demo-<your initials>`) →
+   open it → **Upload** → `7even5ive-lambda.zip`.
+4. **Create the stack.** **CloudFormation** → **Create stack** → **With new resources** →
+   **Upload a template file** → `deploy/aws/7even5ive-serverless.yaml` → **Next**. Stack name
+   e.g. `sevenfiveserverless`; **CodeBucket** = the bucket's name → **Next** → **Next** → tick
+   **I acknowledge that AWS CloudFormation might create IAM resources** → **Submit**.
+5. When it says **CREATE_COMPLETE** (a minute or two), open **Outputs** → **HealthCheck**. The
+   first call takes a few seconds (a cold start seeds the demo), then it answers
+   `{"service":"7even5ive","version":1}`.
+6. Put **AppUrl** in `android/gradle.properties` as `sevenfive.defaultServer` and rebuild the APK.
+7. Once the app works on it, **delete the EC2 stack** below, if you made one: it is the
+   always-on server this replaces.
+
+**Update the code:** upload a new `7even5ive-lambda.zip` over the old one in the bucket, then
+**Lambda** → the function → **Code** → **Upload from** → **Amazon S3 location** →
+`s3://<bucket>/7even5ive-lambda.zip` → **Save**.
+**Look inside:** **Lambda** → the function → **Monitor** → **View CloudWatch logs** (counts and
+ids only). **Cost:** Lambda, API Gateway and S3 at demo traffic sit within the free credits;
+nothing runs while nobody uses it.
+**Test it locally first** (what was done before shipping it): `core/build_lambda_zip.py`, then
+the zip in AWS's Lambda base image with the filesystem read-only except `/tmp`, reached through
+[`deploy/aws/local_api_gateway.py`](../deploy/aws/local_api_gateway.py); and
+[`deploy/aws/lambda_smoke.py`](../deploy/aws/lambda_smoke.py), which CI runs on every change.
+
+**Approvals in the online demo:** the server starts with none waiting (they last 15 minutes).
+Ask your AI to add a deadline to the calendar, or call
+`POST <AppUrl>/api/tools/add_to_calendar` with `{"args":{"item_id":1}}`, and the card appears.
+
+## Or one always-on server: EC2 + CloudFront (about 15 minutes, no command line)
 
 [`deploy/aws/7even5ive-demo.yaml`](../deploy/aws/7even5ive-demo.yaml) is one CloudFormation
 stack: an **EC2** server (Amazon Linux 2023, fixed **Elastic IP**) that builds this public

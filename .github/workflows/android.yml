@@ -33,9 +33,19 @@ jobs:
       - name: Build debug APK
         run: ./gradlew --no-daemon assembleDebug
 
+      # The one to install: optimised, so the blur and animations run smoothly.
+      - name: Build demo APK
+        run: ./gradlew --no-daemon assembleDemo
+
       - name: Lint
         run: ./gradlew --no-daemon lintDebug
         continue-on-error: true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: 7even5ive-apk
+          path: android/app/build/outputs/apk/demo/app-demo.apk
+          if-no-files-found: error
 
       - uses: actions/upload-artifact@v4
         with:

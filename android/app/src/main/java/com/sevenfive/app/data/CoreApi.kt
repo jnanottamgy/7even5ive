@@ -33,4 +33,28 @@ class CoreApi(private val http: Http, private val baseUrl: () -> String) {
     suspend fun cancelReminder(reminderId: Int) {
         tool("cancel_reminder", buildJsonObject { put("reminder_id", reminderId) })
     }
+
+    /** Demo server only: a WhatsApp event sent through the real signed webhook (cloud.py). */
+    suspend fun demoForward(kind: String): DemoForward =
+        AppJson.decodeFromString(http.post("${baseUrl()}/demo/forward/$kind", "{}"))
+
+    /** Demo server only: back to the demo morning, with a fresh mock portal. */
+    suspend fun demoReset() {
+        http.post("${baseUrl()}/demo/reset", "{}")
+    }
+
+    /** The status a request with no token gets (the gateway's 401). */
+    suspend fun statusWithoutToken(): Int = try {
+        http.get("${baseUrl()}/api/cards", auth = false)
+        200
+    } catch (e: ApiException) {
+        e.status
+    }
+
+    /** How long the server takes to answer its health check, in milliseconds. */
+    suspend fun healthMillis(): Long {
+        val start = System.nanoTime()
+        http.get("${baseUrl()}/api/health", auth = false)
+        return (System.nanoTime() - start) / 1_000_000
+    }
 }

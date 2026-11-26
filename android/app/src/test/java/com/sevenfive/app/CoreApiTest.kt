@@ -108,4 +108,26 @@ class CoreApiTest {
         assertEquals("http://13.233.1.2", c.portalUrl)
         assertTrue(c.isOnline)
     }
+
+    @Test
+    fun `the demo tour's forward reads the card it became`() = runTest {
+        server.enqueue(MockResponse().setBody(
+            """{"kind":"quiz","webhook_status":200,"webhook_reply":{"ok":true},
+               "filed":{"id":9,"kind":"exam","title":"DAA Quiz 2 (greedy + DP)","route":"bot"}}"""
+        ))
+        val out = api.demoForward("quiz")
+        assertEquals(200, out.webhookStatus)
+        assertEquals("bot", out.filed?.route)
+        val request = server.takeRequest()
+        assertEquals("/demo/forward/quiz", request.path)
+        assertEquals("POST", request.method)
+        assertEquals("Bearer demo-student-token", request.getHeader("Authorization"))
+    }
+
+    @Test
+    fun `a call with no token reports the gateway's refusal`() = runTest {
+        server.enqueue(MockResponse().setResponseCode(401).setBody("""{"detail":"unknown caller"}"""))
+        assertEquals(401, api.statusWithoutToken())
+        assertEquals(null, server.takeRequest().getHeader("Authorization"))
+    }
 }

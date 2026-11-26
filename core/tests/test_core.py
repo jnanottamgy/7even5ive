@@ -373,3 +373,34 @@ def test_the_online_service_knows_the_address_the_phone_used():
     assert origin_of(scope(**{"host": "d1x.cloudfront.net", "x-amz-cf-id": "abc"})) \
         == "https://d1x.cloudfront.net"
     assert origin_of(scope()) is None
+
+
+def test_the_demo_tour_goes_through_the_real_webhook_and_resets(tmp_path, monkeypatch):
+    import dataclasses
+
+    from portmax.store import Store
+    from seventy5 import cloud, config
+
+    monkeypatch.setattr(tools, "_portal", Store(f"sqlite:///{tmp_path.as_posix()}/pm.db"))
+    monkeypatch.setattr(config, "settings", dataclasses.replace(
+        config.settings, portmax_database_url=f"sqlite:///{tmp_path.as_posix()}/pm-api.db"))
+    client = TestClient(cloud.build_router(str(tmp_path / "75.db")))
+    auth = {"authorization": f"Bearer {demo.TOKEN}"}
+
+    assert client.post("/demo/forward/quiz").status_code == 401  # only the demo student
+    quiz = client.post("/demo/forward/quiz", headers=auth).json()
+    assert quiz["webhook_status"] == 200
+    assert quiz["filed"]["title"] == cloud.QUIZ_TITLE and quiz["filed"]["route"] == "bot"
+    due = client.get("/api/cards", headers=auth).json()["due_this_week"]
+    assert any(c["title"] == cloud.QUIZ_TITLE for c in due)
+
+    notes = client.post("/demo/forward/notes", headers=auth).json()
+    assert notes["filed"]["subject"] == "Operating Systems"
+    stranger = client.post("/demo/forward/stranger", headers=auth).json()
+    assert stranger["webhook_status"] == 200 and stranger["filed"] is None  # dropped, no row
+    assert client.post("/demo/forward/forged", headers=auth).json()["webhook_status"] == 401
+    assert client.post("/demo/forward/nope", headers=auth).status_code == 404
+
+    assert client.post("/demo/reset", headers=auth).json()["ok"]
+    due = client.get("/api/cards", headers=auth).json()["due_this_week"]
+    assert len(due) == 4 and not any(c["title"] == cloud.QUIZ_TITLE for c in due)

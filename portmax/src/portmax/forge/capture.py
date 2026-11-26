@@ -46,7 +46,10 @@ def capture(
     """Open the portal, let the person (or, for the mock only, `driver`) browse, save the HAR."""
     from playwright.sync_api import sync_playwright
 
-    os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", "/opt/pw-browsers")
+    # Some Linux machines share one browser install there; everywhere else (Windows, macOS)
+    # Playwright's own default location is the right one.
+    if os.path.isdir("/opt/pw-browsers"):
+        os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", "/opt/pw-browsers")
     out_dir.mkdir(parents=True, exist_ok=True)
     har = out_dir / "raw.har"
     notes = out_dir / "what-i-saw.md"

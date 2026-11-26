@@ -49,14 +49,20 @@ def latest_slot(now: datetime, at: tuple[time, ...]) -> datetime:
 
 
 class Scheduler:
-    def __init__(self, db: Database, jobs: list[Job], *, tick_seconds: float = 15.0,
-                 now: Callable[[], datetime] = clock.now) -> None:
+    def __init__(self, db: Database | Callable[[], Database], jobs: list[Job], *,
+                 tick_seconds: float = 15.0, now: Callable[[], datetime] = clock.now) -> None:
+        """db: the database, or a function returning the current one (the online service's
+        demo reset swaps it)."""
         names = [j.name for j in jobs]
         if len(set(names)) != len(names):
             raise ValueError("job names must be unique")
-        self.db, self.jobs, self.tick, self.now = db, jobs, tick_seconds, now
+        self._db, self.jobs, self.tick, self.now = db, jobs, tick_seconds, now
         self._last: dict[str, datetime] = {}  # interval jobs: in memory is enough
         self._tasks: list[asyncio.Task[None]] = []
+
+    @property
+    def db(self) -> Database:
+        return self._db if isinstance(self._db, Database) else self._db()
 
     def is_due(self, job: Job, now: datetime) -> bool:
         if job.every is not None:

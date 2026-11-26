@@ -16,26 +16,19 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -48,6 +41,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -58,6 +52,11 @@ import com.sevenfive.app.portal.SyncOutcome
 import com.sevenfive.app.portal.configureForPortal
 import com.sevenfive.app.portal.sameOrigin
 import com.sevenfive.app.ui.AppViewModel
+import com.sevenfive.app.ui.components.GlassPill
+import com.sevenfive.app.ui.components.PrimaryPill
+import com.sevenfive.app.ui.components.PushTopBar
+import com.sevenfive.app.ui.theme.LocalStatusColors
+import com.sevenfive.app.ui.theme.glassSurface
 import com.sevenfive.app.util.Diagnostics
 import kotlinx.coroutines.launch
 
@@ -68,7 +67,6 @@ private enum class Phase { Loading, Login, Fetching, Failed }
  * asks for, CAPTCHA included. We never fill in, submit, store or see the password; once the
  * page shows the logged-in marker, the runner GETs the plan's pages and they go to PortMax.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PortalScreen(vm: AppViewModel, onDone: () -> Unit) {
     val engine = vm.container.portal
@@ -142,47 +140,40 @@ fun PortalScreen(vm: AppViewModel, onDone: () -> Unit) {
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("Portal login")
-                        connector?.info?.name?.takeIf { it.isNotBlank() }?.let {
-                            Text(it, style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onDone) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    val web = webView
-                    val c = connector
-                    if (web != null && c != null && phase == Phase.Login) {
-                        TextButton(onClick = { fetch(web, c) }) { Text("I'm logged in") }
-                    }
-                },
-            )
+            PushTopBar("Portal login", connector?.info?.name, onBack = onDone) {
+                val web = webView
+                val c = connector
+                if (web != null && c != null && phase == Phase.Login) {
+                    PrimaryPill("I'm logged in", onClick = { fetch(web, c) }, modifier = Modifier.padding(end = 10.dp))
+                }
+            }
         },
     ) { inner ->
         Column(Modifier.padding(inner).fillMaxSize()) {
-            Surface(color = MaterialTheme.colorScheme.secondaryContainer) {
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Outlined.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        hint ?: "Log in yourself on your portal's own page. 7even5ive never sees your password.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                    .glassSurface(shape = MaterialTheme.shapes.medium, strong = true)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Outlined.Lock, contentDescription = null, tint = LocalStatusColors.current.safe,
+                    modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    hint ?: "Log in yourself on your portal's own page. 7even5ive never sees your password.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Box(Modifier.fillMaxWidth().height(3.dp)) {
+                if (pageLoading && phase == Phase.Login) {
+                    LinearProgressIndicator(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.primary,
+                        trackColor = Color.Transparent)
                 }
             }
-            if (pageLoading && phase == Phase.Login) LinearProgressIndicator(Modifier.fillMaxWidth())
 
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 val c = connector
@@ -247,9 +238,9 @@ fun PortalScreen(vm: AppViewModel, onDone: () -> Unit) {
                 }
 
                 when (phase) {
-                    Phase.Loading -> Centered { CircularProgressIndicator() }
+                    Phase.Loading -> Centered { CircularProgressIndicator(color = MaterialTheme.colorScheme.primary) }
                     Phase.Fetching -> Overlay {
-                        CircularProgressIndicator()
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                         Text("Fetching attendance from your portal…", style = MaterialTheme.typography.titleMedium)
                         Text("Read-only: a few pages, one at a time, with your own session.",
                             style = MaterialTheme.typography.bodySmall,
@@ -260,8 +251,8 @@ fun PortalScreen(vm: AppViewModel, onDone: () -> Unit) {
                             tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(40.dp))
                         Text(problem ?: "Something went wrong", style = MaterialTheme.typography.bodyLarge)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(onClick = onDone) { Text("Close") }
-                            Button(onClick = {
+                            GlassPill("Close", onClick = onDone, tint = MaterialTheme.colorScheme.onSurface)
+                            PrimaryPill("Try again", onClick = {
                                 problem = null
                                 val web = webView
                                 if (connector == null) {
@@ -273,7 +264,7 @@ fun PortalScreen(vm: AppViewModel, onDone: () -> Unit) {
                                     phase = Phase.Login
                                     web.loadUrl(engine.loginUrl(servers.portalUrl, connector!!))
                                 }
-                            }) { Text("Try again") }
+                            })
                         }
                     }
                     Phase.Login -> Unit
@@ -295,7 +286,7 @@ private fun Overlay(content: @Composable () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         Column(
-            Modifier.padding(32.dp),
+            Modifier.padding(24.dp).glassSurface(strong = true).padding(28.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) { content() }
