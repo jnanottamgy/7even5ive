@@ -28,6 +28,10 @@ object Time {
 
     fun dayOnly(date: LocalDate): String = day.format(date)
 
+    /** "14:00" (a timetable slot, India time) -> "2:00 PM". Unreadable input comes back as it is. */
+    fun hourMinute(hhmm: String): String =
+        runCatching { java.time.LocalTime.parse(hhmm).format(clock).uppercase(Locale.ENGLISH) }.getOrDefault(hhmm)
+
     /** "in 2 days", "tomorrow", "in 3 h", "overdue" — how soon, at a glance. */
     fun until(at: OffsetDateTime, now: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()): String {
         val target = at.toInstant()

@@ -29,6 +29,8 @@ import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Switch
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
@@ -284,4 +286,44 @@ fun GroupAction(
             .padding(horizontal = 14.dp, vertical = 13.dp)
             .alpha(if (enabled) 1f else 0.4f),
     )
+}
+
+/** A row with a switch: colour tile, title, optional detail, the switch at the end. */
+@Composable
+fun GroupSwitchRow(
+    title: String,
+    checked: Boolean,
+    onChange: (Boolean) -> Unit,
+    icon: ImageVector? = null,
+    iconColor: Color = MaterialTheme.colorScheme.primary,
+    detail: String? = null,
+    enabled: Boolean = true,
+) {
+    val app = LocalAppColors.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .pressable(enabled = enabled, scaleTo = 0.985f) { onChange(!checked) }
+            .padding(horizontal = 14.dp, vertical = 9.dp)
+            .alpha(if (enabled) 1f else 0.45f),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (icon != null) {
+            IconTile(icon, iconColor, size = 30.dp)
+            Spacer(Modifier.width(14.dp))
+        }
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            if (detail != null) {
+                Text(detail, style = MaterialTheme.typography.bodySmall, color = app.secondaryLabel)
+            }
+        }
+        Spacer(Modifier.width(10.dp))
+        Switch(
+            checked = checked,
+            onCheckedChange = onChange,
+            enabled = enabled,
+            colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary),
+        )
+    }
 }

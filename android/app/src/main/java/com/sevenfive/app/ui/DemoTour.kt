@@ -54,6 +54,9 @@ enum class DemoAction(val label: String) {
     AI_CALENDAR("Let the AI ask"),
     NO_SEND_TOOL("Try to send mail"),
     SERVERLESS("Ping the server"),
+    CHECK_MAIL("Check now"),
+    PLAY_BRIEFING("Play it"),
+    TEST_CALL("Ring me now"),
 }
 
 data class DemoStep(val route: String, val title: String, val say: String, val action: DemoAction? = null)
@@ -91,9 +94,18 @@ object DemoTour {
             DemoAction.SIGNED_ONLY,
         ),
         DemoStep(
-            Routes.INBOX, "College mail, minus the scams",
-            "Real opportunities from college mail, best match first. Spam and fake " +
-                "'placement cell' mails are filtered out before the student sees them.",
+            Routes.HOME, "Your day, read aloud",
+            "The morning briefing: today's classes, what's due, attendance at risk and new mail, " +
+                "written by code from the student's own data and read by ElevenLabs. It lives in the " +
+                "app; it is never a notification.",
+            DemoAction.PLAY_BRIEFING,
+        ),
+        DemoStep(
+            Routes.INBOX, "College mail, read for you",
+            "Placements, internships and exam notices, judged by Claude and checked by code: every " +
+                "date, quote and form link must be in the mail itself. Spam and fake 'placement cell' " +
+                "mails never get here. Check now: a new internship arrives.",
+            DemoAction.CHECK_MAIL,
         ),
         DemoStep(
             Routes.ATTENDANCE, "Attendance with exact bunk math",
@@ -116,8 +128,21 @@ object DemoTour {
         ),
         DemoStep(
             Routes.HOME, "Reminders only on request",
-            "No spam notifications. Tap Remind me on the quiz card, 1 hour before, then open the " +
-                "Reminders tab.",
+            "No spam notifications. Tap Remind me on the quiz card, 1 hour before: it arrives as a " +
+                "notification then. Open the Reminders tab.",
+        ),
+        DemoStep(
+            Routes.REMINDERS, "The urgent call",
+            "For what really matters: Call me, after a one-time consent. ElevenLabs rings shortly " +
+                "before it's due, at most twice a day and never at night; a missed call becomes one " +
+                "notification. Turn calls on in Settings, then ring now.",
+            DemoAction.TEST_CALL,
+        ),
+        DemoStep(
+            Routes.HOME, "Just ask",
+            "Tap the microphone at the top and ask \"what's due this week?\" or \"can I skip DBMS " +
+                "tomorrow?\" ElevenLabs listens and answers; every fact comes from the same gateway " +
+                "as a tap, and adding to the calendar still waits for Approve.",
         ),
         DemoStep(
             Routes.HOME, "Serverless on AWS",

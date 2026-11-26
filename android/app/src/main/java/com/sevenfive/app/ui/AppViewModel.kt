@@ -4,13 +4,19 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sevenfive.app.AppContainer
 import com.sevenfive.app.data.ApiException
+import com.sevenfive.app.data.AppSettings
 import com.sevenfive.app.data.Approval
+import com.sevenfive.app.data.Briefing
+import com.sevenfive.app.data.CallRecord
 import com.sevenfive.app.data.CardsState
 import com.sevenfive.app.data.Item
 import com.sevenfive.app.data.Reminder
 import com.sevenfive.app.data.ServerConfig
+import com.sevenfive.app.notify.Notifications
 import com.sevenfive.app.portal.PortalCheck
+import com.sevenfive.app.portal.PortalKeepAliveWorker
 import com.sevenfive.app.portal.PortalStatus
+import com.sevenfive.app.voice.VoiceAssistant
 import com.sevenfive.app.util.Diagnostics
 import com.sevenfive.app.util.Time
 import kotlinx.coroutines.channels.Channel
@@ -25,6 +31,9 @@ import kotlinx.serialization.json.put
 
 /** An approval the student already tapped this session, kept on screen as proof it ran once. */
 data class DoneApproval(val approval: Approval, val title: String)
+
+/** A snackbar line, optionally with one action ("Undo"). */
+data class UiMessage(val text: String, val action: String? = null, val onAction: (() -> Unit)? = null)
 
 class AppViewModel(val container: AppContainer) : ViewModel() {
     val cards: StateFlow<CardsState> = container.cards.state
@@ -53,9 +62,36 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     private val _approved = MutableStateFlow<List<DoneApproval>>(emptyList())
     val approved: StateFlow<List<DoneApproval>> = _approved.asStateFlow()
 
-    private val _messages = Channel<String>(Channel.BUFFERED)
+    private val _messages = Channel<UiMessage>(Channel.BUFFERED)
     /** One-off messages for the snackbar: the server's own words when it refuses. */
     val messages = _messages.receiveAsFlow()
+
+    private val _settings = MutableStateFlow<AppSettings?>(null)
+    /** Server-side settings (calls, Google, voice), loaded when Settings or a call option opens. */
+    val settings: StateFlow<AppSettings?> = _settings.asStateFlow()
+
+    private val _callHistory = MutableStateFlow<List<CallRecord>>(emptyList())
+    val callHistory: StateFlow<List<CallRecord>> = _callHistory.asStateFlow()
+
+    private val _briefing = MutableStateFlow<Briefing?>(null)
+    val briefing: StateFlow<Briefing?> = _briefing.asStateFlow()
+    val briefingPlayer = container.briefingPlayer.state
+
+    val voice: StateFlow<VoiceAssistant.State> = container.voice.state
+
+    private val _openUrl = Channel<String>(Channel.BUFFERED)
+    /** Addresses to open in the phone's browser (Google's sign-in page). */
+    val openUrl = _openUrl.receiveAsFlow()
+
+    private val _askNotifications = Channel<Unit>(Channel.CONFLATED)
+    /** Ask Android for permission to post notifications (13+), at a moment it makes sense. */
+    val askNotifications = _askNotifications.receiveAsFlow()
+
+    private val _keepAlive = MutableStateFlow(container.keepAlive.enabled)
+    val keepAlive: StateFlow<Boolean> = _keepAlive.asStateFlow()
+
+    private val _checkingMail = MutableStateFlow(false)
+    val checkingMail: StateFlow<Boolean> = _checkingMail.asStateFlow()
 
     val searching: StateFlow<Boolean> = container.finder.searching
 
@@ -136,6 +172,27 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
                 val host = java.net.URI(servers.value.coreUrl).host ?: servers.value.coreUrl
                 "Answered by $host in ${core.healthMillis()} ms."
             }
+            DemoAction.CHECK_MAIL -> {
+                val out = core.checkMail()
+                when {
+                    out.new > 0 -> "${out.new} new card${if (out.new == 1) "" else "s"} from college mail; " +
+                        "${out.leftOut} other mail${if (out.leftOut == 1) "" else "s"} left out."
+                    else -> "Checked: nothing new since the last check."
+                }
+            }
+            DemoAction.PLAY_BRIEFING -> {
+                val today = core.briefing().also { _briefing.value = it }
+                container.briefingPlayer.play(today)
+                if (today.audio.available) "Playing ElevenLabs' voice." else "Playing with the phone's own voice (no ElevenLabs key on the server)."
+            }
+            DemoAction.TEST_CALL -> {
+                val out = core.testCall()
+                when (out.status) {
+                    "placed" -> if (_settings.value?.calls?.live == true) "Ringing your phone now." else "Call recorded: the server has no phone line yet."
+                    "refused" -> "Not rung (${out.reason?.replace('_', ' ')}): it became one notification."
+                    else -> "The call couldn't be placed: ${out.reason ?: out.status}."
+                }
+            }
         }
     }
 
@@ -160,7 +217,11 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     }
 
     fun say(message: String) {
-        _messages.trySend(message)
+        _messages.trySend(UiMessage(message))
+    }
+
+    fun say(message: String, action: String, onAction: () -> Unit) {
+        _messages.trySend(UiMessage(message, action, onAction))
     }
 
     fun titleFor(approval: Approval): String =
@@ -182,16 +243,179 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         container.cards.refresh()
     }
 
-    fun remind(item: Item, beforeMinutes: Int) = action("item:${item.id}") {
+    /** [channel] push (a notification) or call (the urgent call; consent comes first, in the UI). */
+    fun remind(item: Item, beforeMinutes: Int, channel: String = "push") = action("item:${item.id}") {
         try {
-            val r = container.core.setReminder(item.id, beforeMinutes)
+            val r = container.core.setReminder(item.id, beforeMinutes, channel)
             val at = Time.parse(r.firesAt)?.let { Time.dayAndTime(it) } ?: "later"
-            say("Reminder set for $at")
+            say(if (r.channel == "call") "We'll call you $at" else "Reminder set for $at")
+            // The first reminder is when a notification permission makes sense to ask for.
+            if (Notifications.needsAsking(container.appContext)) _askNotifications.trySend(Unit)
         } catch (e: ApiException) {
             say(e.detail)
         }
         container.cards.refresh()
     }
+
+    /** The one-time consent screen said yes: calls on, then this call reminder. */
+    fun enableCallsAndRemind(item: Item, beforeMinutes: Int) = viewModelScope.launch {
+        try {
+            container.core.setCalls(enabled = true)
+            refreshSettings()
+            remind(item, beforeMinutes, "call")
+        } catch (e: ApiException) {
+            say(e.detail)
+        }
+    }
+
+    /** Done, with Undo: it leaves "due this week" and its reminders and calls are skipped. */
+    fun markDone(item: Item) = action("done:${item.id}") {
+        try {
+            container.core.markDone(item.id)
+            container.cards.refresh(wait = true)
+            say("Marked done: ${item.title ?: "item"}", "Undo") { reopen(item) }
+        } catch (e: ApiException) {
+            say(e.detail)
+        }
+    }
+
+    fun reopen(item: Item) = action("done:${item.id}") {
+        try {
+            container.core.reopen(item.id)
+            say("Back on your list")
+        } catch (e: ApiException) {
+            say(e.detail)
+        }
+        container.cards.refresh(wait = true)
+    }
+
+    // --- settings: calls, Google, background ----------------------------------------------------
+    fun refreshSettings() = viewModelScope.launch {
+        try {
+            _settings.value = container.core.settings()
+            _callHistory.value = container.core.callHistory().calls
+        } catch (e: ApiException) {
+            // Settings shows what it has; the offline banner already says why.
+        }
+    }
+
+    fun setCallsEnabled(enabled: Boolean) = action("calls") {
+        try {
+            val calls = container.core.setCalls(enabled = enabled)
+            _settings.value = _settings.value?.copy(calls = calls)
+            say(if (enabled) "Urgent calls are on" else "Urgent calls are off; your call reminders stay, as notifications")
+        } catch (e: ApiException) {
+            say(e.detail)
+        }
+        container.cards.refresh()
+    }
+
+    fun setQuietHours(start: String, end: String) = action("quiet") {
+        try {
+            val calls = container.core.setCalls(quietStart = start, quietEnd = end)
+            _settings.value = _settings.value?.copy(calls = calls)
+            say("Quiet hours: $start to $end")
+        } catch (e: ApiException) {
+            say(e.detail)
+        }
+    }
+
+    fun testCall() = action("testcall") {
+        try {
+            val out = container.core.testCall()
+            say(
+                when (out.status) {
+                    "placed" -> if (_settings.value?.calls?.live == true) "Calling you now" else "Call recorded (the server has no phone line yet)"
+                    "refused" -> "Not called: ${out.reason?.replace('_', ' ')}. You'll get a notification instead."
+                    else -> "The call couldn't be placed: ${out.reason ?: out.status}"
+                },
+            )
+        } catch (e: ApiException) {
+            say(e.detail)
+        }
+        refreshSettings()
+    }
+
+    fun connectGoogle() = action("google") {
+        try {
+            _openUrl.send(container.core.googleStart().url)
+        } catch (e: ApiException) {
+            say(e.detail)
+        }
+    }
+
+    fun disconnectGoogle() = action("google") {
+        try {
+            val out = container.core.googleDisconnect()
+            _settings.value = _settings.value?.copy(google = out.google)
+            say("Google disconnected, and what was read from it is gone")
+        } catch (e: ApiException) {
+            say(e.detail)
+        }
+        container.cards.refresh()
+    }
+
+    fun setKeepAlive(enabled: Boolean) {
+        container.keepAlive.enabled = enabled
+        _keepAlive.value = enabled
+        PortalKeepAliveWorker.apply(container.appContext, enabled)
+    }
+
+    fun askForNotifications() {
+        _askNotifications.trySend(Unit)
+    }
+
+    // --- college mail ---------------------------------------------------------------------------
+    fun checkMail() {
+        if (_checkingMail.value) return
+        _checkingMail.value = true
+        viewModelScope.launch {
+            try {
+                val out = container.core.checkMail()
+                say(
+                    when {
+                        out.new == 1 -> "1 new card from college mail"
+                        out.new > 1 -> "${out.new} new cards from college mail"
+                        out.updated > 0 -> "Updated ${out.updated} card${if (out.updated == 1) "" else "s"}"
+                        else -> "Nothing new in college mail"
+                    },
+                )
+            } catch (e: ApiException) {
+                say(e.detail)
+            } finally {
+                _checkingMail.value = false
+            }
+            container.cards.refresh(wait = true)
+        }
+    }
+
+    // --- the briefing ----------------------------------------------------------------------------
+    fun loadBriefing() = viewModelScope.launch {
+        try {
+            _briefing.value = container.core.briefing()
+        } catch (e: ApiException) {
+            // The card stays as it was; the offline banner says why.
+        }
+    }
+
+    fun playBriefing() = viewModelScope.launch {
+        val today = try {
+            container.core.briefing().also { _briefing.value = it }
+        } catch (e: ApiException) {
+            say(e.detail)
+            return@launch
+        }
+        container.briefingPlayer.play(today)
+    }
+
+    fun stopBriefing() = container.briefingPlayer.stop()
+
+    // --- the voice assistant -----------------------------------------------------------------------
+    fun startVoice() = container.voice.start()
+
+    fun stopVoice() = container.voice.stop()
+
+    fun clearVoice() = container.voice.clear()
 
     fun cancel(reminder: Reminder) = action("rem:${reminder.id}") {
         try {

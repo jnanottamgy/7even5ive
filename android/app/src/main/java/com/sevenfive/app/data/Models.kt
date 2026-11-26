@@ -28,6 +28,10 @@ data class Cards(
     @SerialName("needs_review") val needsReview: List<Item> = emptyList(),
     val approvals: List<Approval> = emptyList(),
     val reminders: List<Reminder> = emptyList(),
+    /** Today's classes from the portal's timetable, in order. */
+    @SerialName("classes_today") val classesToday: List<ClassSlot> = emptyList(),
+    /** The college mailbox: demo or Gmail, when it was checked, how many mails were left out. */
+    val mail: MailStatus = MailStatus(),
 ) {
     /** Approvals only carry `item_id`; the title comes from the cards we already have. */
     fun itemById(id: Int?): Item? =
@@ -56,7 +60,21 @@ data class Item(
     val source: String? = null,
     val route: String? = null,
     val relevance: Double? = null,
-)
+    /** College-mail cards only (route "mail"): placement, internship or exam_notice. */
+    val category: String? = null,
+    val organisation: String? = null,
+    val role: String? = null,
+    /** The form to register or apply (https, checked to be in the mail). */
+    val link: String? = null,
+    /** Opens the mail itself in Gmail. */
+    @SerialName("mail_link") val mailLink: String? = null,
+    /** One plain sentence, written by code. */
+    val summary: String? = null,
+    /** The drive, test or exam itself, when [dueAt] is the deadline to register. */
+    @SerialName("event_at") val eventAt: String? = null,
+) {
+    val fromMail: Boolean get() = route == "mail"
+}
 
 @Serializable
 data class Attendance(
@@ -109,7 +127,12 @@ data class Reminder(
     val title: String? = null,
     val subject: String? = null,
     @SerialName("due_at") val dueAt: String? = null,
-)
+    @SerialName("item_id") val itemId: Int? = null,
+    /** push (a notification) or call (the opt-in urgent call). */
+    val channel: String = "push",
+) {
+    val isCall: Boolean get() = channel == "call"
+}
 
 @Serializable
 data class ToolResponse(
@@ -123,6 +146,7 @@ data class SetReminderResult(
     @SerialName("reminder_id") val id: Int = 0,
     @SerialName("fires_at") val firesAt: String? = null,
     val title: String? = null,
+    val channel: String = "push",
 )
 
 /** The demo server's answer to a tour action (`POST /demo/forward/{kind}`). */

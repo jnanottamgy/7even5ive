@@ -22,8 +22,9 @@ import java.time.Instant
  * It loads the portal's login page (which never touches the session) and lets the runner GET
  * the plan's pages from there, so every request has the portal's own Referer. If the session
  * has lapsed the runner meets the login page, and the student is asked to log in again the next
- * time they look — never with a notification. The brief accepts foreground-only for the
- * prototype; a background WebView is the hard part and is left out on purpose.
+ * time they look — never with a notification. While the app is closed, PortalKeepAliveWorker
+ * runs the same pass every 30 minutes (switchable in Settings), so the session outlives MSRIT's
+ * measured 45-61 minute idle timeout.
  */
 class ForegroundSync(
     private val context: Context,
@@ -39,13 +40,18 @@ class ForegroundSync(
     suspend fun runWhileStarted() {
         var openedNow = true
         while (true) {
-            runCatching { maybeSync(openedNow) }
+            runCatching { syncOnce(openedNow) }
             openedNow = false
             delay(CHECK_EVERY_MILLIS)
         }
     }
 
-    private suspend fun maybeSync(openedNow: Boolean) {
+    /**
+     * One pass: a full run, a keep-alive or nothing, whichever is due. Also what the background
+     * keep-alive (PortalKeepAliveWorker) runs every 30 minutes while the app is closed. Must be
+     * called on the main thread (it makes a WebView).
+     */
+    suspend fun syncOnce(openedNow: Boolean = false) {
         val status = store.status.value
         if (!status.everConnected || status.needsLogin || status.busy || store.screenOpen) return
         val connector = try {

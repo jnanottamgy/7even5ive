@@ -33,6 +33,23 @@ class Http(private val token: String) {
 
     suspend fun get(url: String, auth: Boolean = true): String = send(url, null, auth)
 
+    /** A binary answer (the briefing's mp3). Same errors as [get]. */
+    suspend fun getBytes(url: String): ByteArray = withContext(Dispatchers.IO) {
+        val request = try {
+            Request.Builder().url(url).header("Authorization", "Bearer $token").build()
+        } catch (e: IllegalArgumentException) {
+            throw ApiException(0, "Bad server address: $url")
+        }
+        try {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) throw errorFrom(response.code, response.body?.string().orEmpty())
+                response.body?.bytes() ?: ByteArray(0)
+            }
+        } catch (e: IOException) {
+            throw ApiException(0, "Can't reach ${request.url.host}:${request.url.port}")
+        }
+    }
+
     suspend fun post(url: String, json: String): String = send(url, json, true)
 
     private suspend fun send(url: String, json: String?, auth: Boolean): String =

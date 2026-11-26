@@ -47,7 +47,66 @@ class CoreApiTest {
         assertEquals(4, r.id)
         val request = server.takeRequest()
         assertEquals("/api/tools/set_reminder", request.path)
-        assertEquals("""{"args":{"item_id":1,"before_minutes":60}}""", request.body.readUtf8())
+        assertEquals("""{"args":{"item_id":1,"before_minutes":60,"channel":"push"}}""", request.body.readUtf8())
+    }
+
+    @Test
+    fun `a call reminder says so and comes back as a call`() = runTest {
+        server.enqueue(MockResponse().setBody(
+            """{"status":"ok","result":{"reminder_id":5,"fires_at":"2026-11-27T21:59+05:30","title":"Lab","channel":"call"}}"""
+        ))
+        val r = api.setReminder(itemId = 2, beforeMinutes = 120, channel = "call")
+        assertEquals("call", r.channel)
+        assertEquals("""{"args":{"item_id":2,"before_minutes":120,"channel":"call"}}""", server.takeRequest().body.readUtf8())
+    }
+
+    @Test
+    fun `mark done and reopen are gateway tools`() = runTest {
+        server.enqueue(MockResponse().setBody("""{"status":"ok","result":{"item_id":3,"status":"done"}}"""))
+        server.enqueue(MockResponse().setBody("""{"status":"ok","result":{"item_id":3,"status":"filed"}}"""))
+        api.markDone(3)
+        api.reopen(3)
+        assertEquals("/api/tools/mark_done", server.takeRequest().path)
+        assertEquals("/api/tools/reopen", server.takeRequest().path)
+    }
+
+    @Test
+    fun `the voice assistant's tool answer is the gateway's own text`() = runTest {
+        server.enqueue(MockResponse().setBody("""{"status":"ok","result":[]}"""))
+        val text = api.toolText("due_this_week", kotlinx.serialization.json.JsonObject(emptyMap()))
+        assertEquals("""{"status":"ok","result":[]}""", text)
+        server.enqueue(MockResponse().setResponseCode(403).setBody("""{"detail":"send_email is not allowed"}"""))
+        try {
+            api.toolText("send_email", kotlinx.serialization.json.JsonObject(emptyMap()))
+            fail("expected a refusal")
+        } catch (e: ApiException) {
+            assertEquals("send_email is not allowed", e.detail)
+        }
+    }
+
+    @Test
+    fun `check now's cooldown arrives as the server's words`() = runTest {
+        server.enqueue(MockResponse().setResponseCode(429).setBody("""{"detail":"Checked a moment ago: try again in a few minutes."}"""))
+        try {
+            api.checkMail()
+            fail("expected the cooldown")
+        } catch (e: ApiException) {
+            assertEquals(429, e.status)
+            assertEquals("Checked a moment ago: try again in a few minutes.", e.detail)
+        }
+    }
+
+    @Test
+    fun `the briefing's audio is bytes and its absence a reason`() = runTest {
+        server.enqueue(MockResponse().setBody(okio.Buffer().write(byteArrayOf(73, 68, 51))))
+        assertEquals(3, api.briefingAudio().size)
+        server.enqueue(MockResponse().setResponseCode(503).setBody("""{"detail":"no ElevenLabs key: the phone reads it instead"}"""))
+        try {
+            api.briefingAudio()
+            fail("expected 503")
+        } catch (e: ApiException) {
+            assertEquals(503, e.status)
+        }
     }
 
     @Test

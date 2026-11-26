@@ -52,10 +52,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -91,6 +99,7 @@ import com.sevenfive.app.ui.screens.FilesScreen
 import com.sevenfive.app.ui.screens.PortalScreen
 import com.sevenfive.app.ui.screens.RemindersScreen
 import com.sevenfive.app.ui.screens.SettingsScreen
+import com.sevenfive.app.ui.screens.VoiceScreen
 import com.sevenfive.app.ui.theme.LocalAppColors
 import com.sevenfive.app.ui.theme.LocalBottomInset
 import com.sevenfive.app.ui.theme.Motion
@@ -109,7 +118,11 @@ object Routes {
     const val PORTAL = "portal"
     const val SETTINGS = "settings"
     const val PORTAL_CHECK = "portal-check"
+    const val VOICE = "voice"
 }
+
+/** Opens the voice assistant from any tab's header (null where there is none). */
+val LocalOpenVoice = staticCompositionLocalOf<(() -> Unit)?> { null }
 
 private data class Tab(val route: String, val label: String, val on: ImageVector, val off: ImageVector)
 
@@ -122,7 +135,7 @@ private val tabs = listOf(
 )
 
 /** Screens pushed on top of the tabs: they slide in from the right, like an iOS navigation stack. */
-private val pushed = setOf(Routes.SETTINGS, Routes.PORTAL, Routes.PORTAL_CHECK)
+private val pushed = setOf(Routes.SETTINGS, Routes.PORTAL, Routes.PORTAL_CHECK, Routes.VOICE)
 
 @Composable
 fun SevenFiveRoot(vm: AppViewModel) {
@@ -135,7 +148,28 @@ fun SevenFiveRoot(vm: AppViewModel) {
     val haze = rememberHazeState()
 
     LaunchedEffect(Unit) {
-        vm.messages.collect { snackbar.showSnackbar(it) }
+        vm.messages.collect { m ->
+            val result = snackbar.showSnackbar(
+                m.text,
+                actionLabel = m.action,
+                duration = if (m.action != null) SnackbarDuration.Long else SnackbarDuration.Short,
+            )
+            if (result == SnackbarResult.ActionPerformed) m.onAction?.invoke()
+        }
+    }
+    // Google's sign-in page opens in the phone's browser; the server finishes it there.
+    val uri = LocalUriHandler.current
+    LaunchedEffect(Unit) {
+        vm.openUrl.collect { url -> runCatching { uri.openUri(url) }.onFailure { vm.say("No browser to open the sign-in page") } }
+    }
+    // Android 13+: asked once it makes sense (the first reminder, or from Settings).
+    val askPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (!granted) vm.say("Reminders will stay in the app: notifications are off")
+    }
+    LaunchedEffect(Unit) {
+        vm.askNotifications.collect {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) askPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
 
     val showTabs = route == null || route !in pushed
@@ -200,7 +234,10 @@ fun SevenFiveRoot(vm: AppViewModel) {
             }
         },
     ) { inner ->
-        CompositionLocalProvider(LocalBottomInset provides inner.calculateBottomPadding()) {
+        CompositionLocalProvider(
+            LocalBottomInset provides inner.calculateBottomPadding(),
+            LocalOpenVoice provides { nav.navigate(Routes.VOICE) { launchSingleTop = true } },
+        ) {
             Box(Modifier.fillMaxSize().hazeSource(haze)) {
                 NavHost(
                     nav,
@@ -223,6 +260,7 @@ fun SevenFiveRoot(vm: AppViewModel) {
                     composable(Routes.PORTAL_CHECK) {
                         PortalCheckScreen(vm, vm.portalCheckUrl.value, onBack = { nav.popBackStack() })
                     }
+                    composable(Routes.VOICE) { VoiceScreen(vm, onBack = { nav.popBackStack() }) }
                 }
             }
         }

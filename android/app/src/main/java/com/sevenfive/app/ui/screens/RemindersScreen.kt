@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Alarm
 import androidx.compose.material.icons.outlined.AlarmOff
+import androidx.compose.material.icons.outlined.PhoneInTalk
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -58,7 +59,8 @@ fun RemindersScreen(vm: AppViewModel, onSettings: () -> Unit) {
             if (reminders.isNotEmpty()) {
                 item(key = "note") {
                     Text(
-                        "Phone notifications for reminders are coming; until then they live here.",
+                        "Each one arrives as a notification at that time; a call reminder rings your phone " +
+                            "instead (Settings → Urgent call). Nothing else ever notifies you.",
                         style = MaterialTheme.typography.bodySmall,
                         color = LocalAppColors.current.tertiaryLabel,
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
@@ -76,11 +78,11 @@ private fun ReminderCard(r: Reminder, busy: Boolean, modifier: Modifier = Modifi
     val app = LocalAppColors.current
     AppCard(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconTile(Icons.Outlined.Alarm, app.deadline)
+            IconTile(if (r.isCall) Icons.Outlined.PhoneInTalk else Icons.Outlined.Alarm, if (r.isCall) app.event else app.deadline)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    fires?.let { "${Time.dayAndTime(it)} · ${Time.until(it)}" } ?: "Soon",
+                    (if (r.isCall) "Call · " else "") + (fires?.let { "${Time.dayAndTime(it)} · ${Time.until(it)}" } ?: "Soon"),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary,

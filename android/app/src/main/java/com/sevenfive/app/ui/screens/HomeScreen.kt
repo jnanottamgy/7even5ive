@@ -12,12 +12,19 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.PhoneInTalk
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.outlined.Done
+import androidx.compose.material.icons.outlined.WbSunny
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.EventAvailable
 import androidx.compose.material.icons.outlined.NotificationAdd
@@ -29,6 +36,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,12 +49,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sevenfive.app.data.Approval
+import com.sevenfive.app.data.CallSettings
 import com.sevenfive.app.data.Cards
+import com.sevenfive.app.data.ClassSlot
 import com.sevenfive.app.data.Item
 import com.sevenfive.app.data.Reminder
 import com.sevenfive.app.ui.AppViewModel
+import com.sevenfive.app.ui.BriefingPlayer
 import com.sevenfive.app.ui.DoneApproval
 import com.sevenfive.app.ui.components.AppCard
+import com.sevenfive.app.ui.components.CallConsentDialog
 import com.sevenfive.app.ui.components.EmptyState
 import com.sevenfive.app.ui.components.GlassPill
 import com.sevenfive.app.ui.components.IconTile
@@ -71,7 +83,12 @@ fun HomeScreen(vm: AppViewModel, onSettings: () -> Unit) {
     val state by vm.cards.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
     val approved by vm.approved.collectAsStateWithLifecycle()
+    val settings by vm.settings.collectAsStateWithLifecycle()
     val cards = state.cards
+    LaunchedEffect(Unit) {
+        vm.refreshSettings()
+        vm.loadBriefing()
+    }
     val due = cards?.dueThisWeek.orEmpty()
     val name = cards?.student?.name?.substringBefore(' ')?.takeIf { it.isNotBlank() }
 
@@ -90,6 +107,10 @@ fun HomeScreen(vm: AppViewModel, onSettings: () -> Unit) {
         LazyColumn(contentPadding = padding, verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item(key = "intro") { ScreenIntro(subtitle) }
             item(key = "glance") { Glance(cards, Modifier.animateItem(placementSpec = Motion.item)) }
+            item(key = "briefing") { BriefingCard(vm, Modifier.animateItem(placementSpec = Motion.item)) }
+            if (cards.classesToday.isNotEmpty()) {
+                item(key = "classes") { TodayClasses(cards.classesToday, Modifier.animateItem(placementSpec = Motion.item)) }
+            }
 
             if (cards.approvals.isNotEmpty() || approved.isNotEmpty()) {
                 item(key = "h-approvals") { SectionHeader("Needs your tap", Modifier.animateItem(placementSpec = Motion.item)) }
@@ -117,10 +138,15 @@ fun HomeScreen(vm: AppViewModel, onSettings: () -> Unit) {
                 }
             }
             items(due, key = { "i-${it.id}" }) { item ->
-                val reminder = cards.reminders.firstOrNull { it.title == item.title && it.dueAt == item.dueAt }
-                DueCard(item, reminder, "item:${item.id}" in busy, Modifier.animateItem(placementSpec = Motion.item)) { minutes ->
-                    vm.remind(item, minutes)
-                }
+                val reminder = cards.reminders.firstOrNull { it.itemId == item.id }
+                    ?: cards.reminders.firstOrNull { it.itemId == null && it.title == item.title && it.dueAt == item.dueAt }
+                DueCard(
+                    item, reminder, "item:${item.id}" in busy, "done:${item.id}" in busy, settings?.calls,
+                    Modifier.animateItem(placementSpec = Motion.item),
+                    onRemind = { minutes, channel -> vm.remind(item, minutes, channel) },
+                    onCallConsent = { minutes -> vm.enableCallsAndRemind(item, minutes) },
+                    onDone = { vm.markDone(item) },
+                )
             }
 
             if (cards.needsReview.isNotEmpty()) {
@@ -250,8 +276,83 @@ private fun actionLabel(action: String) = when (action) {
 
 private val reminderChoices = listOf(24 * 60 to "1 day before", 3 * 60 to "3 hours before", 60 to "1 hour before")
 
+/** Today's briefing: a few sentences written by code, read aloud by ElevenLabs or the phone. */
 @Composable
-private fun DueCard(item: Item, reminder: Reminder?, busy: Boolean, modifier: Modifier = Modifier, onRemind: (Int) -> Unit) {
+private fun BriefingCard(vm: AppViewModel, modifier: Modifier = Modifier) {
+    val briefing by vm.briefing.collectAsStateWithLifecycle()
+    val player by vm.briefingPlayer.collectAsStateWithLifecycle()
+    val app = LocalAppColors.current
+    AppCard(modifier) {
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconTile(Icons.Outlined.WbSunny, app.deadline)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Your day", style = MaterialTheme.typography.labelMedium, color = app.secondaryLabel)
+                    Text(briefing?.greeting ?: "Today's briefing", style = MaterialTheme.typography.titleMedium)
+                }
+                Spacer(Modifier.width(8.dp))
+                when (player.phase) {
+                    BriefingPlayer.Phase.PLAYING ->
+                        GlassPill("Stop", onClick = { vm.stopBriefing() }, icon = Icons.Filled.Stop)
+                    BriefingPlayer.Phase.LOADING -> PrimaryPill("Play", onClick = {}, busy = true)
+                    BriefingPlayer.Phase.IDLE ->
+                        PrimaryPill("Play", onClick = { vm.playBriefing() }, icon = Icons.Filled.PlayArrow)
+                }
+            }
+            val lines = briefing?.sections?.flatMap { it.lines }.orEmpty()
+            if (lines.isNotEmpty()) {
+                Spacer(Modifier.height(10.dp))
+                lines.take(4).forEach { line ->
+                    Text("• $line", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 1.dp))
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            val voice = player.voice ?: if (briefing?.audio?.available == true) "ElevenLabs" else "this phone's voice"
+            Text("Read by $voice · in the app only, never a notification",
+                style = MaterialTheme.typography.labelSmall, color = app.tertiaryLabel)
+            player.note?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = app.tertiaryLabel) }
+        }
+    }
+}
+
+/** Today's classes from the portal's timetable, in a row. */
+@Composable
+private fun TodayClasses(classes: List<ClassSlot>, modifier: Modifier = Modifier) {
+    val app = LocalAppColors.current
+    Column(modifier) {
+        SectionHeader("Today's classes")
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(classes, key = { "${it.start}-${it.subjectCode}" }) { c ->
+                Column(
+                    Modifier
+                        .glassSurface(shape = MaterialTheme.shapes.medium)
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                ) {
+                    Text(Time.hourMinute(c.start), style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                    Text(c.subject, style = MaterialTheme.typography.bodyMedium, maxLines = 1,
+                        overflow = TextOverflow.Ellipsis, modifier = Modifier.width(150.dp))
+                    Text(listOfNotNull(c.subjectCode, c.room).joinToString(" · "),
+                        style = MaterialTheme.typography.labelSmall, color = app.secondaryLabel)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DueCard(
+    item: Item,
+    reminder: Reminder?,
+    busy: Boolean,
+    doneBusy: Boolean,
+    calls: CallSettings?,
+    modifier: Modifier = Modifier,
+    onRemind: (Int, String) -> Unit,
+    onCallConsent: (Int) -> Unit,
+    onDone: () -> Unit,
+) {
     val due = Time.parse(item.dueAt)
     val app = LocalAppColors.current
     // Within a day reads red; later reads in the brand colour.
@@ -298,21 +399,41 @@ private fun DueCard(item: Item, reminder: Reminder?, busy: Boolean, modifier: Mo
                 RouteBadge(item.route)
             }
             Spacer(Modifier.height(10.dp))
-            RemindButton(reminder, busy, onRemind)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                RemindButton(reminder, busy, calls, onRemind, onCallConsent)
+                Spacer(Modifier.weight(1f))
+                GlassPill("Done", onClick = onDone, busy = doneBusy, icon = Icons.Outlined.Done,
+                    tint = LocalStatusColors.current.safe)
+            }
         }
     }
 }
 
 @Composable
-private fun RemindButton(reminder: Reminder?, busy: Boolean, onRemind: (Int) -> Unit) {
+private fun RemindButton(
+    reminder: Reminder?,
+    busy: Boolean,
+    calls: CallSettings?,
+    onRemind: (Int, String) -> Unit,
+    onCallConsent: (Int) -> Unit,
+) {
     var open by remember { mutableStateOf(false) }
+    var consentFor by remember { mutableStateOf<Int?>(null) }
+    val callLead = calls?.leadMinutes ?: 120
     Box {
         GlassPill(
-            if (reminder != null) Time.parse(reminder.firesAt)?.let { "Reminder ${Time.dayAndTime(it)}" } ?: "Reminder set"
-            else "Remind me",
+            when {
+                reminder == null -> "Remind me"
+                reminder.isCall -> Time.parse(reminder.firesAt)?.let { "Call ${Time.dayAndTime(it)}" } ?: "Call set"
+                else -> Time.parse(reminder.firesAt)?.let { "Reminder ${Time.dayAndTime(it)}" } ?: "Reminder set"
+            },
             onClick = { open = true },
             busy = busy,
-            icon = if (reminder != null) Icons.Filled.NotificationsActive else Icons.Outlined.NotificationAdd,
+            icon = when {
+                reminder == null -> Icons.Outlined.NotificationAdd
+                reminder.isCall -> Icons.Filled.PhoneInTalk
+                else -> Icons.Filled.NotificationsActive
+            },
         )
         DropdownMenu(
             expanded = open,
@@ -323,11 +444,36 @@ private fun RemindButton(reminder: Reminder?, busy: Boolean, onRemind: (Int) -> 
             reminderChoices.forEach { (minutes, label) ->
                 DropdownMenuItem(text = { Text(label, style = MaterialTheme.typography.bodyLarge) }, onClick = {
                     open = false
-                    onRemind(minutes)
+                    onRemind(minutes, "push")
                 })
             }
+            HorizontalDivider()
+            DropdownMenuItem(
+                text = { Text("Call me ${leadLabel(callLead)} before", style = MaterialTheme.typography.bodyLarge) },
+                leadingIcon = { Icon(Icons.Filled.PhoneInTalk, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                onClick = {
+                    open = false
+                    if (calls?.enabled == true) onRemind(callLead, "call") else consentFor = callLead
+                },
+            )
         }
     }
+    consentFor?.let { minutes ->
+        CallConsentDialog(
+            calls,
+            onAccept = {
+                consentFor = null
+                onCallConsent(minutes)
+            },
+            onDismiss = { consentFor = null },
+        )
+    }
+}
+
+private fun leadLabel(minutes: Int): String = when {
+    minutes % 60 == 0 && minutes >= 120 -> "${minutes / 60} hours"
+    minutes == 60 -> "1 hour"
+    else -> "$minutes minutes"
 }
 
 @Composable

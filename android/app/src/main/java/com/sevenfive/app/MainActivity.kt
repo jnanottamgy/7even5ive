@@ -12,6 +12,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.sevenfive.app.portal.AppVisibility
 import com.sevenfive.app.portal.ForegroundSync
 import com.sevenfive.app.ui.AppViewModel
 import com.sevenfive.app.ui.SevenFiveRoot
@@ -40,6 +41,7 @@ class MainActivity : ComponentActivity() {
                 launch { container.cards.pollForever() }
                 launch { container.finder.runWhileStarted() }
                 launch { sync.runWhileStarted() }
+                launch { container.outbox.pollWhileStarted() }
             }
         }
 
@@ -48,6 +50,16 @@ class MainActivity : ComponentActivity() {
                 SevenFiveRoot(viewModel)
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        AppVisibility.foreground = true
+    }
+
+    override fun onStop() {
+        AppVisibility.foreground = false
+        super.onStop()
     }
 
     override fun onDestroy() {
