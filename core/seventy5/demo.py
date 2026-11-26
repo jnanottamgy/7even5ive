@@ -151,10 +151,11 @@ def play(app: Any, client: Any, sid: int) -> list[str]:
     return lines
 
 
-def prepare() -> tuple[Any, Any, int, bool, list[str]]:
+def prepare(db_url: str | None = None) -> tuple[Any, Any, int, bool, list[str]]:
     """Build the app, seed the student and replay the morning: (app, api, sid, live, lines).
 
     Shared by the local demo and the cloud service, so both start from the same morning.
+    db_url: a fresh database for the cloud service's demo reset; else the configured one.
     """
     from fastapi.testclient import TestClient
 
@@ -164,6 +165,7 @@ def prepare() -> tuple[Any, Any, int, bool, list[str]]:
     live = bool(settings.jev_api_key and (settings.anthropic_api_key or settings.bedrock_model_id))
     script = messages()
     app = build(
+        db_url,
         jev=None if live else FixtureDecider({m["text"]: m["jev"] for m in script}),
         llm=None if live else FixtureLLM({m["text"]: m["llm"] for m in script if "llm" in m}),
     )
