@@ -5,6 +5,7 @@ serves everything the app needs, routed by path:
 
     /api/*, /bot/*  7even5ive core (cards, approvals, tools, health, the bot webhook)
     /v1/*           PortMax's phone API (portal settings, runner.js, page upload)
+    /mcp            MCP over HTTP for the student's own Claude or ChatGPT (Bearer token)
     /demo/*         demo-only actions for the app's demo tour (see demo_api); never in api.py
     /dev            the core's development web page
     everything else the mock college portal the app's WebView logs in to
@@ -51,6 +52,7 @@ class Router:
         self.core, self.portmax, self.portal = core, portmax, portal
         self.demo: Any = None  # the demo-only actions (demo_api), set by build_router
         self.app: Any = None  # the core's App behind `core`; a demo reset replaces both
+        self.mcp: Any = None  # MCP over HTTP (mcp_server.http_app), set by build_router
 
     async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
         if scope["type"] == "lifespan":
@@ -62,6 +64,8 @@ class Router:
             await self.core(scope, receive, send)
         elif path.startswith("/v1/"):
             await self.portmax(scope, receive, send)
+        elif path in ("/mcp", "/mcp/") and self.mcp is not None:
+            await self.mcp(scope, receive, send)
         elif path.startswith("/demo/") and self.demo is not None:
             await self.demo(scope, receive, send)
         elif path == "/dev":
@@ -148,9 +152,12 @@ def build_router(db_url: str | None = None) -> Router:
     portal = create_app(config=PortalConfig(captcha="fixed"))
     where = fixed or "the address each request arrives at"
     print(f"\n7even5ive is serving; portal pages must come from {where}", flush=True)
+    from .mcp_server import http_app
+
     router = Router(core, portmax, portal)
     router.app = app
     router.demo = demo_api(router, db_url or settings.database_url)
+    router.mcp = http_app(lambda: router.app)  # always the current app, across demo resets
     return router
 
 
