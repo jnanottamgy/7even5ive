@@ -1,6 +1,10 @@
 package com.sevenfive.app
 
+import android.Manifest
+import android.os.Build
 import android.os.Bundle
+import androidx.activity.result.contract.ActivityResultContracts
+import com.sevenfive.app.notify.Alerts
 import android.graphics.Color
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -43,11 +47,23 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        askForNotificationsOnce()
+
         setContent {
             SevenFiveTheme {
                 SevenFiveRoot(viewModel)
             }
         }
+    }
+
+    /** Android 13+: reminders and the digest need permission. Asked once, at first launch. */
+    private fun askForNotificationsOnce() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || Alerts.canNotify(this)) return
+        val prefs = getSharedPreferences("alerts", MODE_PRIVATE)
+        if (prefs.getBoolean("asked", false)) return
+        prefs.edit().putBoolean("asked", true).apply()
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+            .launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
     override fun onDestroy() {

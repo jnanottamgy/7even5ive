@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sevenfive.app.AppContainer
 import com.sevenfive.app.data.ApiException
+import com.sevenfive.app.data.AskAnswer
 import com.sevenfive.app.data.Approval
 import com.sevenfive.app.data.CardsState
 import com.sevenfive.app.data.Item
@@ -22,6 +23,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+
+/** One exchange in Ask your semester. [answer] is null while it's on its way. */
+data class ChatTurn(val question: String, val answer: AskAnswer? = null, val error: String? = null)
 
 /** An approval the student already tapped this session, kept on screen as proof it ran once. */
 data class DoneApproval(val approval: Approval, val title: String)
@@ -67,6 +71,40 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     }
 
     fun refresh() = viewModelScope.launch { container.cards.refresh() }
+
+    private val _chat = MutableStateFlow<List<ChatTurn>>(emptyList())
+    /** Ask your semester, this session: kept while the app is open, never stored. */
+    val chat: StateFlow<List<ChatTurn>> = _chat.asStateFlow()
+
+    fun ask(question: String) {
+        val q = question.trim()
+        if (q.isEmpty() || _chat.value.lastOrNull()?.let { it.answer == null && it.error == null } == true) return
+        _chat.update { it + ChatTurn(q) }
+        viewModelScope.launch {
+            val turn = try {
+                ChatTurn(q, answer = container.core.ask(q))
+            } catch (e: ApiException) {
+                ChatTurn(q, error = e.detail)
+            }
+            _chat.update { list -> list.dropLast(1) + turn }
+            // An answer can leave something behind (a reminder, an approval waiting for a tap).
+            container.cards.refresh()
+        }
+    }
+
+    fun clearChat() {
+        _chat.value = emptyList()
+    }
+
+    /** Downloads a material's file and opens it in the phone's app for that type. */
+    fun openFile(item: com.sevenfive.app.data.Item) = action("file:${item.id}") {
+        try {
+            val bytes = container.core.file(item.id)
+            com.sevenfive.app.util.Opener.openFile(container.appContext, item.title ?: "file", bytes)?.let { say(it) }
+        } catch (e: ApiException) {
+            say(if (e.status == 404) "The server didn't keep this file." else e.detail)
+        }
+    }
 
     fun startTour() {
         _tour.value = TourState()

@@ -5,12 +5,19 @@ The full brief is [`docs/android.md`](../docs/android.md).
 
 | Tab | Shows | Actions |
 |---|---|---|
-| **This week** | Approvals waiting for a tap, then deadlines, exams and events due in 7 days, soonest first; cards nobody could read, muted | **Approve** · Remind me (1 day, 3 hours, 1 hour before) |
-| **Attendance** | Each subject worst first: percent, classes, a bar with the 75% tick, and PortMax's exact sentence | Connect portal · Refresh · Log in again |
-| **Materials** | Files by subject (5 subjects + Miscellaneous) | Filter by subject |
+| **This week** | Ask your semester; three numbers at a glance; today's classes; approvals waiting for a tap; deadlines, exams and events due in 7 days, soonest first; AI activity; cards nobody could read, muted | **Approve** · Remind me (1 day, 3 hours, 1 hour before) · Add to the phone's calendar |
+| **Attendance** | Each subject worst first: a ring with the 75% tick, classes, and PortMax's exact sentence; tiles for Planner, Timetable and Grades | Connect portal · Refresh · Log in again |
+| **Materials** | Files by subject (5 subjects + Miscellaneous) | Filter by subject · open the file in the phone's app |
 | **Inbox** | Opportunities from mail, best match first, and "N spam or fake mails filtered out" | |
 | **Reminders** | Pending reminders, soonest first | Cancel |
 | Portal login | The college portal's own page in a WebView | The student logs in themselves |
+| Ask | Questions answered from the student's data through the gateway (`POST /api/ask`): Claude with a key on the server, offline answers without | |
+| Search | Everything at once: due, materials, inbox, reminders, subjects | |
+| AI activity | Every gateway decision: allowed, held for a tap, refused | |
+| Bunk planner · Timetable · Grades | Skip a day and see each subject move; the week's classes; internal marks and results | |
+| Share to 7even5ive | Android's share sheet: a message or a file from any app (`POST /api/share`) | Say what it is, or let 7even5ive read it |
+| Widget | What's due this week and the lowest attendance, on the home screen | |
+| Notifications | Reminders ring on the phone at the chosen time; an optional 8 am digest | Settings → Notifications |
 
 Every card shows a small `via bot / classroom / jev / jev+llm / llm` badge: what decided it.
 
@@ -30,7 +37,9 @@ the APK: it opens straight onto the server.
    ```bash
    cd android && ./gradlew installDebug
    ```
-   Or download `7even5ive-debug-apk` from the latest **Android** workflow run on GitHub.
+   Or download **`7even5ive-apk`** (`app-demo.apk`) from the latest **Android** workflow run
+   on GitHub. Use that one on a phone: it's the optimised build, so the glass and animations run
+   smoothly. (`7even5ive-debug-apk` is the unoptimised debug build, for development only.)
 3. **Real phone:** on the laptop's Wi-Fi, or the laptop on the phone's hotspot. The app finds
    the laptop by itself within a few seconds ("Found the laptop at …"). If it doesn't: gear →
    **Find the laptop**, or type the laptop's IPv4. **Emulator:** works as is (`10.0.2.2`).
@@ -72,9 +81,9 @@ PortalScreen / ForegroundSync ──WebView──> the college portal (student's
 
 ## Not built yet
 
-- Push notifications for reminders (FCM): needs the backend's token-registration endpoint.
-- Opening a material: the file stays with the WhatsApp bot until fetch-by-id exists.
 - Refreshing the portal while the app is closed.
+- Server-sent push (FCM): reminders ring from alarms the phone sets from its last cards, so a
+  reminder set from another device shows up once this phone has polled.
 
 ## Tests
 

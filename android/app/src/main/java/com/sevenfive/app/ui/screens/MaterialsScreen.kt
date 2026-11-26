@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -61,6 +62,7 @@ fun subjectsOf(items: List<Item>): List<String> {
 @Composable
 fun MaterialsScreen(vm: AppViewModel, onSettings: () -> Unit) {
     val state by vm.cards.collectAsStateWithLifecycle()
+    val busy by vm.busy.collectAsStateWithLifecycle()
     var chosen by rememberSaveable { mutableStateOf(ALL) }
     val materials = state.cards?.materials.orEmpty()
     val subjects = subjectsOf(materials)
@@ -96,8 +98,9 @@ fun MaterialsScreen(vm: AppViewModel, onSettings: () -> Unit) {
                 }
             }
             items(shown, key = { it.id }) { item ->
-                MaterialRow(item, Modifier.animateItem(placementSpec = Motion.item)) {
-                    vm.say("Opening files comes next: the file stays with the WhatsApp bot for now.")
+                MaterialRow(item, "file:${item.id}" in busy, Modifier.animateItem(placementSpec = Motion.item)) {
+                    if (item.hasFile) vm.openFile(item)
+                    else vm.say("Only the name came through for this one: the file stayed in WhatsApp.")
                 }
             }
         }
@@ -138,7 +141,7 @@ private fun fileLook(name: String): FileLook {
 }
 
 @Composable
-private fun MaterialRow(item: Item, modifier: Modifier = Modifier, onOpen: () -> Unit) {
+private fun MaterialRow(item: Item, opening: Boolean, modifier: Modifier = Modifier, onOpen: () -> Unit) {
     val name = item.title ?: "Untitled file"
     val look = fileLook(name)
     val app = LocalAppColors.current
@@ -155,12 +158,22 @@ private fun MaterialRow(item: Item, modifier: Modifier = Modifier, onOpen: () ->
                 Text(name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium,
                     maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(item.subject ?: MISC, style = MaterialTheme.typography.bodySmall, color = app.secondaryLabel)
+                    Text(
+                        (item.subject ?: MISC) + if (item.hasFile) "" else " · name only",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = app.secondaryLabel,
+                    )
                     Spacer(Modifier.width(8.dp))
                     RouteBadge(item.route)
                 }
             }
-            Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null, tint = app.tertiaryLabel)
+            if (opening) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary,
+                )
+            } else {
+                Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null, tint = app.tertiaryLabel)
+            }
         }
     }
 }

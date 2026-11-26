@@ -89,6 +89,8 @@ def create(app_state: App | None = None) -> FastAPI:
             "calendar": [dict(r) for r in db.calendar(sid)],
             "reminders": notify.list_reminders(db, sid),
             "audit": [dict(r) for r in db.audit_log(sid)][:40],
+            # The student's subject list: what the phone offers when they file something.
+            "subjects": db.subjects(sid),
             "timetable": tools.timetable(db, sid),
             "marks": tools.marks(db, sid),
             "results": tools.results(db, sid),

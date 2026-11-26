@@ -3,8 +3,9 @@
 This is the whole brief for building the 7even5ive Android app. It is the prototype's **only**
 app. You should not need to read anything else, but the links say where each piece lives.
 
-Contract changes (any field, endpoint or rule below) go through Kartik first, because the
-backend, the MCP server and the WhatsApp bot all depend on the same contracts.
+Contract changes (any field, endpoint or rule below) must keep the backend, the MCP server and
+the WhatsApp bot in step, because they all depend on the same contracts: change all three
+together and say so in the pull request.
 
 ---
 

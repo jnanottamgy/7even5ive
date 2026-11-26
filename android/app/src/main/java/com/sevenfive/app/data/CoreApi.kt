@@ -9,7 +9,23 @@ import kotlinx.serialization.json.put
 /** 7even5ive core (port 8000): cards, approvals, and the gateway's tools. */
 class CoreApi(private val http: Http, private val baseUrl: () -> String) {
 
-    suspend fun cards(): Cards = AppJson.decodeFromString(http.get("${baseUrl()}/api/cards"))
+    suspend fun cards(): Cards = AppJson.decodeFromString(cardsJson())
+
+    /** The cards as the server sent them, so the last good answer can be kept on disk. */
+    suspend fun cardsJson(): String = http.get("${baseUrl()}/api/cards")
+
+    /** A material's file, as kept by the server. 404: none kept for this item. */
+    suspend fun file(itemId: Int): ByteArray = http.bytes("${baseUrl()}/api/files/$itemId")
+
+    /** Ask your semester: answered from the student's data through the gateway. */
+    suspend fun ask(question: String): AskAnswer {
+        val body = buildJsonObject { put("question", question) }
+        return AppJson.decodeFromString(http.post("${baseUrl()}/api/ask", body.toString()))
+    }
+
+    /** Something shared into the app: filed as the student said, or by the cascade. */
+    suspend fun share(body: JsonObject): ShareResult =
+        AppJson.decodeFromString(http.post("${baseUrl()}/api/share", body.toString()))
 
     /** Runs one approval, once. A second tap answers 403 "approval already used". */
     suspend fun approve(token: String) {

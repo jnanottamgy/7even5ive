@@ -22,6 +22,16 @@ import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.EventAvailable
 import androidx.compose.material.icons.outlined.NotificationAdd
 import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
+import com.sevenfive.app.ui.LocalNav
+import com.sevenfive.app.ui.Routes
+import com.sevenfive.app.util.Opener
+import com.sevenfive.app.util.Week
+import com.sevenfive.app.ui.theme.pressable
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -89,7 +99,9 @@ fun HomeScreen(vm: AppViewModel, onSettings: () -> Unit) {
         }
         LazyColumn(contentPadding = padding, verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item(key = "intro") { ScreenIntro(subtitle) }
+            item(key = "ask") { AskBar(Modifier.animateItem(placementSpec = Motion.item)) }
             item(key = "glance") { Glance(cards, Modifier.animateItem(placementSpec = Motion.item)) }
+            item(key = "today") { Today(cards, Modifier.animateItem(placementSpec = Motion.item)) }
 
             if (cards.approvals.isNotEmpty() || approved.isNotEmpty()) {
                 item(key = "h-approvals") { SectionHeader("Needs your tap", Modifier.animateItem(placementSpec = Motion.item)) }
@@ -123,6 +135,10 @@ fun HomeScreen(vm: AppViewModel, onSettings: () -> Unit) {
                 }
             }
 
+            if (cards.audit.isNotEmpty()) {
+                item(key = "ai") { YourAi(cards, Modifier.animateItem(placementSpec = Motion.item)) }
+            }
+
             if (cards.needsReview.isNotEmpty()) {
                 item(key = "h-review") { SectionHeader("Couldn't read these", Modifier.animateItem(placementSpec = Motion.item)) }
                 items(cards.needsReview, key = { "r-${it.id}" }) { item ->
@@ -130,6 +146,85 @@ fun HomeScreen(vm: AppViewModel, onSettings: () -> Unit) {
                 }
             }
         }
+    }
+}
+
+/** The way into Ask your semester: looks like a search field, opens the conversation. */
+@Composable
+private fun AskBar(modifier: Modifier = Modifier) {
+    val nav = LocalNav.current
+    val app = LocalAppColors.current
+    Row(
+        modifier
+            .fillMaxWidth()
+            .pressable(scaleTo = 0.98f, haptic = true) { nav(Routes.ASK) }
+            .glassSurface(shape = CircleShape, strong = true)
+            .padding(horizontal = 16.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Outlined.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(10.dp))
+        Text("Ask your semester… “Can I skip Friday?”", style = MaterialTheme.typography.bodyLarge,
+            color = app.secondaryLabel, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** Today's remaining classes from the timetable; nothing when the portal has none. */
+@Composable
+private fun Today(cards: Cards, modifier: Modifier = Modifier) {
+    if (!cards.timetable.connected) return
+    val nav = LocalNav.current
+    val now = java.time.LocalTime.now()
+    val left = Week.on(cards.timetable.data, java.time.LocalDate.now().dayOfWeek)
+        .filter { s -> Week.time(s.end)?.isAfter(now) ?: true }
+    Column(modifier.pressable(scaleTo = 0.985f) { nav(Routes.TIMETABLE) }) {
+        SectionHeader("Today", trailing = {
+            Text("Timetable", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+        })
+        if (left.isEmpty()) {
+            Text(
+                "No more classes today.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = LocalAppColors.current.secondaryLabel,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .glassSurface(shape = MaterialTheme.shapes.medium)
+                    .padding(14.dp),
+            )
+        } else {
+            DayClasses(cards, left.take(3), highlightNow = true)
+        }
+    }
+}
+
+/** What your AI did through the gateway lately, and a way into the full log. */
+@Composable
+private fun YourAi(cards: Cards, modifier: Modifier = Modifier) {
+    val nav = LocalNav.current
+    val status = LocalStatusColors.current
+    val app = LocalAppColors.current
+    val refused = cards.audit.count { it.decision == "deny" }
+    val held = cards.audit.count { it.decision == "ask" }
+    Row(
+        modifier
+            .fillMaxWidth()
+            .pressable(scaleTo = 0.98f) { nav(Routes.AI_LOG) }
+            .glassSurface()
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconTile(Icons.Outlined.Shield, status.safe)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text("AI activity", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "${cards.audit.size} requests through the gateway · $held held for you · $refused refused",
+                style = MaterialTheme.typography.bodySmall,
+                color = app.secondaryLabel,
+            )
+        }
+        Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null, tint = app.tertiaryLabel)
     }
 }
 
@@ -298,7 +393,15 @@ private fun DueCard(item: Item, reminder: Reminder?, busy: Boolean, modifier: Mo
                 RouteBadge(item.route)
             }
             Spacer(Modifier.height(10.dp))
-            RemindButton(reminder, busy, onRemind)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                RemindButton(reminder, busy, onRemind)
+                if (due != null) {
+                    val context = LocalContext.current
+                    GlassPill("Calendar", onClick = {
+                        Opener.addToPhoneCalendar(context, item)?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
+                    }, icon = Icons.Outlined.EventAvailable, tint = MaterialTheme.colorScheme.onSurface)
+                }
+            }
         }
     }
 }

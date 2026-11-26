@@ -12,6 +12,24 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BugReport
+import androidx.compose.material.icons.outlined.Alarm
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.WbSunny
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.Manifest
+import android.os.Build
+import com.sevenfive.app.notify.Alerts
+import com.sevenfive.app.ui.components.IconTile
 import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DeleteOutline
@@ -97,6 +115,19 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPortalCheck: () -> Un
                 GroupAction("Connect", onClick = { vm.connectTo(host); onBack() }, enabled = host.isNotBlank())
             }
 
+            NotificationsSection(vm)
+
+            Group(header = "Your AI", footer = "Every request your AI (or this app) made through " +
+                "the gateway: what ran, what waited for your tap, what was refused.") {
+                val nav = com.sevenfive.app.ui.LocalNav.current
+                GroupRow("AI activity", icon = Icons.Outlined.Shield, iconColor = status.safe, chevron = true) {
+                    nav(com.sevenfive.app.ui.Routes.AI_LOG)
+                }
+                GroupDivider()
+                GroupRow("Ask your semester", icon = Icons.Outlined.AutoAwesome, iconColor = MaterialTheme.colorScheme.primary,
+                    chevron = true) { nav(com.sevenfive.app.ui.Routes.ASK) }
+            }
+
             Group(header = "Demo tour", footer = "Runs the whole demo from this phone, step by step: each step opens " +
                 "the right tab, says what to tell the audience, and makes the live moments happen. Works with " +
                 "the online demo server.") {
@@ -166,6 +197,56 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPortalCheck: () -> Un
                 color = app.tertiaryLabel,
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
+        }
+    }
+}
+
+@Composable
+private fun NotificationsSection(vm: AppViewModel) {
+    val context = LocalContext.current
+    val app = LocalAppColors.current
+    var digest by remember { mutableStateOf(Alerts.digestOn(context)) }
+    var allowed by remember { mutableStateOf(Alerts.canNotify(context)) }
+    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        allowed = granted
+        if (!granted) vm.say("Notifications are off for 7even5ive: turn them on in the phone's settings.")
+    }
+    fun ensure(): Boolean {
+        if (allowed) return true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) ask.launch(Manifest.permission.POST_NOTIFICATIONS)
+        return false
+    }
+    Group(header = "Notifications", footer = "Reminders ring on this phone at the time you chose, even " +
+        "with the app closed. The digest comes at 8 am with what's due and your lowest attendance.") {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconTile(Icons.Outlined.WbSunny, app.deadline, size = 30.dp)
+            Spacer(Modifier.width(14.dp))
+            Text("Morning digest", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Switch(
+                checked = digest,
+                onCheckedChange = { on ->
+                    if (on && !ensure()) return@Switch
+                    digest = on
+                    Alerts.setDigest(context, on)
+                },
+                colors = SwitchDefaults.colors(checkedTrackColor = LocalStatusColors.current.safe),
+            )
+        }
+        GroupDivider()
+        GroupRow("Send today's digest now", icon = Icons.Outlined.NotificationsActive, iconColor = app.notice) {
+            if (!ensure()) return@GroupRow
+            val cards = vm.container.cards.cached()
+            if (cards == null) vm.say("No cards yet: connect to the server first.")
+            else Alerts.showDigest(context, cards)
+        }
+        GroupDivider()
+        GroupRow("Try a reminder notification", icon = Icons.Outlined.Alarm, iconColor = app.exam) {
+            if (!ensure()) return@GroupRow
+            val first = vm.container.cards.cached()?.dueThisWeek?.firstOrNull()
+            Alerts.showReminder(context, 9_999, first?.title ?: "DBMS Assignment 3", first?.subject, first?.dueAt)
         }
     }
 }

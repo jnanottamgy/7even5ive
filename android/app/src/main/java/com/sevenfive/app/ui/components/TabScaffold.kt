@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -38,6 +39,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sevenfive.app.ui.AppViewModel
+import com.sevenfive.app.ui.LocalNav
+import com.sevenfive.app.ui.Routes
 import com.sevenfive.app.ui.theme.AuroraBackground
 import com.sevenfive.app.ui.theme.LocalAppColors
 import com.sevenfive.app.ui.theme.LocalBottomInset
@@ -90,6 +93,22 @@ fun TabScaffold(
                 LargeTopAppBar(
                     title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     actions = {
+                        val nav = LocalNav.current
+                        Box(
+                            Modifier
+                                .padding(end = 8.dp)
+                                .size(38.dp)
+                                .pressable { nav(Routes.SEARCH) }
+                                .glassSurface(shape = CircleShape, strong = true),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                Icons.Outlined.Search,
+                                contentDescription = "Search",
+                                tint = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
                         Box(
                             Modifier
                                 .padding(end = 8.dp)
