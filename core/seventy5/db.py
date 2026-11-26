@@ -204,6 +204,11 @@ class Database:
                             tuple(row.values())).fetchone()
             return int(new["id"])
 
+    def item_for_event(self, student_id: int, event_id: int) -> Any | None:
+        return self.conn.execute(
+            "SELECT * FROM items WHERE event_id=? AND student_id=?", (event_id, student_id)
+        ).fetchone()
+
     def item(self, student_id: int, item_id: int) -> Any | None:
         return self.conn.execute(
             "SELECT * FROM items WHERE id=? AND student_id=?", (item_id, student_id)

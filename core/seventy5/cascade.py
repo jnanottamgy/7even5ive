@@ -125,10 +125,13 @@ class Cascade:
         if (bot := self._from_bot(payload, subjects)) is not None:
             if bot.kind == "chitchat":
                 return Outcome("bot", "skipped")
+            # The student filing it themselves (Share to 7even5ive) is the same check, but
+            # the card says who decided: "you", not the bot.
+            who = "you" if payload.get("by") == "student" else "bot"
             item = self.db.insert_item(**base, kind=bot.kind, subject=bot.subject,
                                        title=bot.title, due_at=_parse_due(bot.due_at),
-                                       route="bot", relevance=None)
-            return Outcome("bot", "filed", item)
+                                       route=who, relevance=None)
+            return Outcome(who, "filed", item)
 
         state = {"source": source, "text": payload.get("text", ""),
                  "attachment": payload.get("attachment")}

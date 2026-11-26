@@ -403,3 +403,150 @@ def test_the_demo_tour_goes_through_the_real_webhook_and_resets(tmp_path, monkey
     assert client.post("/demo/reset", headers=auth).json()["ok"]
     due = client.get("/api/cards", headers=auth).json()["due_this_week"]
     assert len(due) == 4 and not any(c["title"] == cloud.QUIZ_TITLE for c in due)
+
+
+# --- portal data, files, share, ask ---------------------------------------------------------
+
+
+def _client(a):
+    return TestClient(create(a)), {"Authorization": f"Bearer {demo.TOKEN}"}
+
+
+def test_cards_carry_timetable_marks_and_results_from_portmax(app):
+    a, sid = app()
+    client, auth = _client(a)
+    cards = client.get("/api/cards", headers=auth).json()
+    assert cards["timetable"]["connected"] and cards["timetable"]["data"][0]["day"] == "Mon"
+    assert cards["marks"]["data"][0]["component"] == "CIE-1"
+    assert cards["results"]["data"]["semesters"][-1]["cgpa"] == 8.58
+    assert a.gateway.call(sid, "marks")["status"] == "ok"
+
+
+def test_demo_files_are_real_pdf_and_docx():
+    import base64
+    import io
+    import zipfile
+
+    from seventy5 import files
+
+    pdf = base64.b64decode(files.demo_file_b64("OS_Unit4_Deadlocks.pdf"))
+    assert pdf.startswith(b"%PDF-1.4") and pdf.rstrip().endswith(b"%%EOF")
+    docx = base64.b64decode(files.demo_file_b64("DCN_Lab_Manual.docx"))
+    assert "word/document.xml" in zipfile.ZipFile(io.BytesIO(docx)).namelist()
+    assert files.demo_file_b64("nope.pdf") is None
+
+
+def _webhook(client, body):
+    raw = json.dumps(body).encode()
+    ts = int(time.time())
+    return client.post("/bot/webhook", content=raw,
+                       headers={"x-75-timestamp": str(ts), "x-75-signature": sign(raw, ts)})
+
+
+def test_a_forwarded_file_opens_from_the_phone_and_only_for_its_student(app):
+    import base64
+
+    from seventy5 import files
+
+    a, sid = app()
+    client, auth = _client(a)
+    b64 = files.demo_file_b64("OS_Unit4_Deadlocks.pdf")
+    _webhook(client, {"from": demo.PHONE, "message_id": "wamid.f1", "text": "OS notes",
+                      "attachment": "OS_Unit4_Deadlocks.pdf", "file": b64,
+                      "decision": {"kind": "material", "subject": "Operating Systems"}})
+    _webhook(client, {"from": demo.PHONE, "message_id": "wamid.f2", "text": "bad file",
+                      "attachment": "bad.pdf", "file": "%%%not base64",
+                      "decision": {"kind": "material", "subject": "Operating Systems"}})
+    a.work()
+    mats = {m["title"]: m for m in tools.materials(a.db, sid)}
+    assert mats["OS_Unit4_Deadlocks.pdf"]["has_file"] and not mats["bad.pdf"]["has_file"]
+    r = client.get(f"/api/files/{mats['OS_Unit4_Deadlocks.pdf']['id']}", headers=auth)
+    assert r.status_code == 200 and r.headers["content-type"] == "application/pdf"
+    assert r.content == base64.b64decode(b64)
+    assert client.get(f"/api/files/{mats['bad.pdf']['id']}", headers=auth).status_code == 404
+    assert client.get(f"/api/files/{mats['OS_Unit4_Deadlocks.pdf']['id']}").status_code == 401
+
+
+def test_shared_with_a_kind_is_filed_as_the_student_said(app):
+    import base64
+
+    a, sid = app()
+    client, auth = _client(a)
+    pdf = base64.b64encode(b"%PDF-1.4 tiny").decode()
+    r = client.post("/api/share", headers=auth, json={
+        "text": "PnS formula sheet", "file_name": "PnS_formulas.pdf", "file_b64": pdf,
+        "kind": "material", "subject": "Probability and Statistics"}).json()
+    assert r["status"] == "filed" and r["item"]["route"] == "you"
+    assert r["item"]["title"] == "PnS_formulas.pdf"
+    assert client.get(f"/api/files/{r['item']['id']}", headers=auth).content == b"%PDF-1.4 tiny"
+
+    # A dated kind needs a date: no date fails the check, so the cascade decides (here: review).
+    r = client.post("/api/share", headers=auth, json={
+        "text": "lab record submission", "kind": "deadline",
+        "subject": "Operating Systems"}).json()
+    assert r["status"] == "needs_review"
+    r = client.post("/api/share", headers=auth, json={
+        "text": "lab record submission", "kind": "deadline", "subject": "Operating Systems",
+        "title": "OS lab record", "due_at": demo._at(2, 17)}).json()
+    assert r["status"] == "filed" and r["item"]["due_at"]
+    assert client.post("/api/share", headers=auth, json={}).status_code == 400
+    assert client.post("/api/share", json={"text": "x"}).status_code == 401
+
+
+def test_offline_ask_answers_from_gateway_tools_and_says_so(app):
+    a, sid = app()
+    client, auth = _client(a)
+
+    def ask(q):
+        r = client.post("/api/ask", headers=auth, json={"question": q})
+        assert r.status_code == 200
+        return r.json()
+
+    day = demo.clock.now().weekday()
+    skip = ask("can I skip " + ["monday", "tuesday", "wednesday", "thursday", "friday",
+                                "saturday", "sunday"][0])
+    assert skip["route"] == "offline" and "Skipping Monday" in skip["answer"]
+    assert {"attendance", "timetable"} <= set(skip["tools"])
+    assert "Database Management Systems" in ask("how is my dbms attendance")["answer"]
+    assert "CGPA 8.58" in ask("what's my cgpa")["answer"]
+    assert "CIE-1" in ask("show my CIE marks for DBMS")["answer"]
+    assert "Nothing due" in ask("what's due this week?")["answer"]
+    client.post("/api/share", headers=auth, json={
+        "text": "DBMS Assignment 3", "kind": "deadline", "subject": "Database Management Systems",
+        "title": "DBMS Assignment 3", "due_at": demo._at(2, 23, 59)})
+    assert "DBMS Assignment 3" in ask("what's due this week?")["answer"]
+    assert "offline" in ask("tell me a joke")["answer"]
+    assert day in range(7)
+    # Every fact came through the gateway, so the audit shows the calls (tool names only).
+    assert any(r["tool"] == "timetable" for r in a.db.audit_log(sid))
+    assert client.post("/api/ask", headers=auth, json={"question": ""}).status_code == 400
+
+
+def test_claude_ask_runs_tools_through_the_gateway(app, monkeypatch):
+    from types import SimpleNamespace as NS
+
+    from seventy5 import ask as ask_mod
+
+    a, sid = app()
+    item_id = _dated_item(a, sid)
+    replies = [
+        NS(content=[NS(type="tool_use", id="t1", name="add_to_calendar",
+                       input={"item_id": item_id})]),
+        NS(content=[NS(type="tool_use", id="t2", name="send_email", input={"to": "x"})]),
+        NS(content=[NS(type="text", text="Done: it's waiting for your tap.")]),
+    ]
+    seen = []
+
+    class Messages:
+        def create(self, **kw):
+            seen.append(kw["messages"][-1])
+            return replies.pop(0)
+
+    monkeypatch.setattr(ask_mod, "_client", lambda: (NS(messages=Messages()), "m"))
+    import dataclasses
+    monkeypatch.setattr(ask_mod, "settings", dataclasses.replace(ask_mod.settings, anthropic_api_key="k"))
+    out = ask_mod.answer(a.gateway, sid, "put the assignment in my calendar")
+    assert out == {"answer": "Done: it's waiting for your tap.", "route": "claude",
+                   "tools": ["add_to_calendar", "send_email"]}
+    assert len(a.db.pending(sid)) == 1  # the write waits for the student, as for any MCP client
+    assert "denied" in seen[-1]["content"][0]["content"]

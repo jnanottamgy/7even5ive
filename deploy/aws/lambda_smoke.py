@@ -69,6 +69,26 @@ check("PortMax runner served", call("/v1/runner.js")["statusCode"] == 200)
 login = call("/index.php")
 check("mock portal login page", login["statusCode"] == 200 and "pm-login" in login["body"], login["statusCode"])
 
+# Portal data, files, Ask and Share.
+check("timetable, marks and results in the cards",
+      body.get("timetable", {}).get("connected") and body.get("marks", {}).get("connected")
+      and body.get("results", {}).get("connected"))
+notes = next((m for m in body.get("materials", []) if m.get("has_file")), None)
+check("a demo material has its file", notes is not None, body.get("materials"))
+pdf = call(f"/api/files/{notes['id']}", headers=TOKEN)
+import base64
+raw = base64.b64decode(pdf["body"]) if pdf.get("isBase64Encoded") else pdf["body"].encode()
+check("the file comes back as binary through API Gateway",
+      pdf["statusCode"] == 200 and pdf.get("isBase64Encoded") and raw[:4] in (b"%PDF", b"PK\x03\x04"),
+      {k: pdf.get(k) for k in ("statusCode", "isBase64Encoded", "headers")})
+asked = call("/api/ask", "POST", {**TOKEN, "content-type": "application/json"},
+             json.dumps({"question": "what's my cgpa"}))
+check("ask answers offline", asked["statusCode"] == 200 and "CGPA" in json.loads(asked["body"])["answer"], asked)
+shared = call("/api/share", "POST", {**TOKEN, "content-type": "application/json"},
+              json.dumps({"text": "OS formula sheet", "kind": "material", "subject": "Operating Systems"}))
+check("share files as the student said",
+      shared["statusCode"] == 200 and json.loads(shared["body"])["item"]["route"] == "you", shared)
+
 # The app's demo tour: WhatsApp events through the real signed webhook, and the reset.
 check("demo tour needs the student's token", call("/demo/forward/quiz", "POST")["statusCode"] == 401)
 quiz = call("/demo/forward/quiz", "POST", TOKEN)

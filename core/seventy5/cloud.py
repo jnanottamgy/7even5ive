@@ -144,7 +144,7 @@ def demo_api(router: Router, base_db: str) -> Any:
     from fastapi.testclient import TestClient
     from portmax.mock_portal.app import PortalConfig, create_app
 
-    from . import demo, tools
+    from . import demo, files, tools
     from .config import settings
     from .gateway import Denied
 
@@ -166,7 +166,7 @@ def demo_api(router: Router, base_db: str) -> Any:
                                  "title": QUIZ_TITLE, "due_at": demo._at(2, 10)}}
         if kind == "notes":
             return {"from": demo.PHONE, "text": "OS unit 4 slides", "attachment": NOTES_FILE,
-                    "file_id": "f_demo_notes",
+                    "file_id": "f_demo_notes", "file": files.demo_file_b64(NOTES_FILE),
                     "decision": {"kind": "material", "subject": "Operating Systems"}}
         if kind == "stranger":
             return {"from": "919800000000", "text": "Win a free iPhone!!"}

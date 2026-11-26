@@ -13,9 +13,10 @@ from typing import Any
 
 from portmax.errors import NotConnected
 from portmax.store import Store
+from portmax.tools import answer as portal_answer
 from portmax.tools import attendance_plan_answer
 
-from . import clock
+from . import clock, files
 from .config import settings
 from .db import Database
 
@@ -46,7 +47,9 @@ def due_this_week(db: Database, student_id: int) -> list[dict[str, Any]]:
 
 
 def materials(db: Database, student_id: int, subject: str | None = None) -> list[dict[str, Any]]:
-    return [_card(r) for r in db.items(student_id, kinds=("material",), subject=subject)]
+    """Notes, slides and manuals; has_file says the phone can open the file itself."""
+    return [_card(r) | {"has_file": files.has_file(db, student_id, r["id"])}
+            for r in db.items(student_id, kinds=("material",), subject=subject)]
 
 
 def opportunities(db: Database, student_id: int) -> list[dict[str, Any]]:
@@ -67,6 +70,34 @@ def attendance(db: Database, student_id: int) -> dict[str, Any]:
         return {"connected": False, "subjects": []}
     return {"connected": True, "stale": plan.stale, "fetched_at": plan.fetched_at.isoformat(),
             "subjects": [s.model_dump(mode="json") for s in plan.data]}
+
+
+def _saved(db: Database, student_id: int, tool: str) -> dict[str, Any]:
+    # PortMax's saved answer for one portal tool, or not connected. Same freshness flag as
+    # attendance: stale after a day without a refresh.
+    student = db.student(student_id)
+    try:
+        ans = portal_answer(portal_store(), student["portal_id"], tool, clock.now())  # type: ignore[arg-type]
+    except NotConnected:
+        return {"connected": False}
+    out = ans.model_dump(mode="json")
+    return {"connected": True, "stale": out["stale"], "fetched_at": out["fetched_at"],
+            "data": out["data"]}
+
+
+def timetable(db: Database, student_id: int) -> dict[str, Any]:
+    """The weekly timetable from the portal: day, start, end, subject code, room."""
+    return _saved(db, student_id, "get_timetable")
+
+
+def marks(db: Database, student_id: int) -> dict[str, Any]:
+    """Internal marks per subject and component (CIE-1, CIE-2, quizzes, lab)."""
+    return _saved(db, student_id, "get_marks")
+
+
+def results(db: Database, student_id: int) -> dict[str, Any]:
+    """Semester results: grade per subject, SGPA and CGPA."""
+    return _saved(db, student_id, "get_results")
 
 
 def calendar_key(student_id: int, item_id: int) -> str:
