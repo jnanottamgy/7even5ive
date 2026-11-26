@@ -1,4 +1,4 @@
-"""7even5ive as an MCP server: the student's own Claude, ChatGPT or Claude Code asks what's due.
+"""7even5ive as an MCP server: the student's own Claude Code, Codex or Claude asks what's due.
 
 Every tool goes through the gateway, so an MCP client gets exactly the rights the phone has:
 reads are allowed, add_to_calendar waits for the student's Approve, the rest is denied.
@@ -7,7 +7,9 @@ Two ways to reach it:
 - stdio, one student (the token comes from the environment):
       SEVENTY5_TOKEN=... python -m seventy5.mcp_server
 - streamable HTTP at <server>/mcp on the online service (cloud.py, also on Lambda), any student:
-      Authorization: Bearer <the student's token>, checked on every request.
+      Authorization: Bearer <the student's token>, checked on every request. The token comes
+      from signing in through the app (connector.py: OAuth, what Claude Code and Codex do) or
+      is a personal token made in the app's Settings.
   Stateless with JSON answers, so it works behind API Gateway and Lambda, where a response
   cannot stream and the next request may meet a fresh instance.
 Why one server object for every student: the student is read from the request, never stored
@@ -171,9 +173,18 @@ def http_app(app: Callable[[], Any]) -> Callable[..., Any]:
         try:
             sid = app().gateway.authenticate(token, scope="mcp")
         except Denied:
-            await reply(send, 401, {"error": "unknown caller: send Authorization: Bearer "
-                                             "<your 7even5ive token>"},
-                        [(b"www-authenticate", b'Bearer realm="7even5ive"')])
+            # RFC 9728: the challenge names where to learn how to sign in (connector.py), so
+            # Claude Code and Codex can open the student's browser by themselves.
+            from .connector import SCOPE, base_url, resource_metadata_url
+
+            challenge = (f'Bearer realm="7even5ive", resource_metadata='
+                         f'"{resource_metadata_url(base_url(scope))}", scope="{SCOPE}"')
+            if token:
+                challenge += ', error="invalid_token"'
+            await reply(send, 401, {"error": "unknown caller: sign in through Claude Code or "
+                                             "Codex, or send Authorization: Bearer <your "
+                                             "7even5ive token>"},
+                        [(b"www-authenticate", challenge.encode())])
             return
         STUDENT.set(sid)
         # A fresh stateless manager per request: no session outlives the request, which is

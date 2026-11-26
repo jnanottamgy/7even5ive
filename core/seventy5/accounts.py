@@ -237,6 +237,22 @@ def drop_token(db: Database, sid: int) -> None:
     db.audit(sid, "personal_token", "allow", "revoked", clock.iso(clock.now()))
 
 
+# --- AI apps connected through the MCP connector (connector.py) ---------------------------------
+def connections(db: Database, sid: int) -> list[dict[str, Any]]:
+    """What Settings lists: each app's own name, when it was connected and last used. Never a
+    token (only their hashes exist)."""
+    return [{"id": int(r["id"]), "name": r["client_name"] or "An AI app",
+             "connected_at": r["created_at"], "last_used_at": r["last_used_at"]}
+            for r in db.grants(sid)]
+
+
+def disconnect(db: Database, sid: int, grant_id: int) -> bool:
+    gone = db.drop_grant(sid, grant_id)
+    if gone:
+        db.audit(sid, "mcp_disconnect", "allow", "student", clock.iso(clock.now()))
+    return gone
+
+
 # --- WhatsApp -------------------------------------------------------------------------------------
 def link_code_in(text: str | None) -> str | None:
     """The code in a "LINK 75-XXXXXX" message, upper case, or None."""
@@ -280,6 +296,13 @@ def link_from_bot(db: Database, text: str, phone: str) -> int | None:
     sid = db.link_whatsapp(code, phone, clock.iso(clock.now()))
     if sid is not None:
         db.audit(sid, "whatsapp_link", "allow", "code from the bot", clock.iso(clock.now()))
+        # The deadlines the bot already holds for this number arrive now, not only new ones.
+        from . import sync
+
+        try:
+            sync.backfill(db, sid)
+        except Exception as err:  # noqa: BLE001 - linking is done; the next event fills in
+            log.warning("backfill after link failed", extra={"error": type(err).__name__})
     return sid
 
 

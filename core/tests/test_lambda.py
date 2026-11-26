@@ -3,6 +3,8 @@ stands in for a server's background loop."""
 
 from __future__ import annotations
 
+import pytest
+
 import os
 
 from seventy5 import lambda_demo
@@ -34,13 +36,46 @@ def test_parameters_become_settings_and_real_variables_win(monkeypatch):
     assert ssm.calls[1]["NextToken"] == "page-2"
 
 
-def test_no_permission_leaves_the_stand_ins():
+def test_an_unreadable_parameter_store_stops_the_start_and_says_why():
+    """Not stand-ins for the instance's whole life (that would quietly be the offline demo):
+    the start fails, the log names the kind of error, the next request tries again."""
     class Refused:
         def get_parameters_by_path(self, **kwargs):
             raise PermissionError("AccessDenied")
 
-    assert lambda_demo.load_settings("/7even5ive-demo", Refused()) == []
-    assert lambda_demo.load_settings(None) == []
+    with pytest.raises(lambda_demo.SettingsNotLoaded, match="PermissionError"):
+        lambda_demo.load_settings("/7even5ive-demo", Refused())
+    assert lambda_demo.load_settings(None) == []  # no Parameter Store named: nothing to read
+
+
+def test_the_tick_budget_follows_the_time_lambda_has_left(monkeypatch):
+    seen = {}
+
+    class Context:
+        def get_remaining_time_in_millis(self):
+            return 15000  # a cold start used most of the minute
+
+    class FakeApp:
+        @property
+        def deadline(self):
+            return seen.get("deadline")
+
+        @deadline.setter
+        def deadline(self, value):
+            if value is not None:
+                seen["deadline"] = value
+
+    class FakeRouter:
+        app = FakeApp()
+
+    import time
+
+    monkeypatch.setattr(lambda_demo, "_ensure", lambda: None)
+    monkeypatch.setattr(lambda_demo, "_router", FakeRouter())
+    monkeypatch.setattr(lambda_demo, "_scheduler", type("S", (), {"jobs": []})())
+    start = time.monotonic()
+    lambda_demo.tick(Context())
+    assert seen["deadline"] - start <= 15 - lambda_demo.TICK_RESERVE_SECONDS + 0.5
 
 
 def test_the_startup_report_names_features_never_values(monkeypatch):

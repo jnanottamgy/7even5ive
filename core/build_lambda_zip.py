@@ -35,11 +35,21 @@ def main() -> None:
             "--platform", "manylinux2014_x86_64", "--platform", "manylinux_2_28_x86_64",
             "--implementation", "cp", "--python-version", "3.12", "--only-binary=:all:",
             "-r", str(HERE / "requirements-lambda.txt"),
+            "-c", str(HERE / "constraints-lambda.txt"),  # the exact, tested versions
         ],
         check=True,
     )  # fmt: skip
     for cache in BUILD.rglob("__pycache__"):
         shutil.rmtree(cache, ignore_errors=True)
+    if sys.version_info[:2] == (3, 12):
+        # Lambda's runtime is Python 3.12: shipping its bytecode saves compiling every module at
+        # every cold start (seconds). unchecked-hash: never compared with the sources' times,
+        # which a zip doesn't keep. Built with another Python, the zip just has no bytecode.
+        subprocess.run([sys.executable, "-m", "compileall", "-q", "-j", "0",
+                        "--invalidation-mode", "unchecked-hash", str(BUILD)], check=True)
+    else:
+        print(f"note: Python {sys.version_info[0]}.{sys.version_info[1]} builds no bytecode for"
+              " Lambda's 3.12 (CI builds with 3.12)")
 
     DIST.mkdir(exist_ok=True)
     ZIP.unlink(missing_ok=True)

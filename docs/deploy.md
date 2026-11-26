@@ -1,5 +1,10 @@
 # Deploying the core to AWS
 
+> **Not the deployment.** This is an earlier production plan (`core/template.yaml`,
+> `core/seventy5/aws.py`). The stack to deploy is `deploy/aws/7even5ive-serverless.yaml`:
+> see [`online.md`](online.md) and [`remaining-steps.pdf`](remaining-steps.pdf).
+
+
 Region: **Mumbai (`ap-south-1`)** for AWS and Supabase.
 
 ## Once

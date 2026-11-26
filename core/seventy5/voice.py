@@ -29,7 +29,7 @@ from typing import Any
 import httpx
 
 from . import clock
-from .calls import clean, push_agent, system_tool
+from .calls import PRIVACY, clean, push_agent, system_tool
 from .config import settings
 from .db import Database
 
@@ -142,8 +142,9 @@ def assistant_config(tool_ids: list[str]) -> dict[str, Any]:
             **({"tts": {"voice_id": settings.elevenlabs_voice_id}}
                if settings.elevenlabs_voice_id else {}),
         },
-        # Signed URLs only: the bare agent id is not enough to start a conversation.
-        "platform_settings": {"auth": {"enable_auth": True}},
+        # Signed URLs only: the bare agent id is not enough to start a conversation. No voice
+        # recording, and the transcript gone after 30 days (calls.PRIVACY).
+        "platform_settings": {"auth": {"enable_auth": True}, "privacy": PRIVACY},
     }
 
 

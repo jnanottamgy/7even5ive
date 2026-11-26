@@ -41,7 +41,7 @@ raw attendance numbers and never warns you before you're barred.
 | **Library** | Every material filed by subject (5 subjects + Miscellaneous), one tap away. |
 | **Out** | "Due this week" on the phone; attendance with the exact classes to attend or skip; opportunities that fit the student's branch, year and interests; a morning briefing read aloud; opt-in reminders and an opt-in urgent call. |
 | **Voice** | Ask 7even5ive out loud (an ElevenLabs agent whose every tool runs through the gateway), the briefing in ElevenLabs' voice, and the urgent call ([`docs/voice.md`](docs/voice.md), [`docs/call.md`](docs/call.md)). |
-| **Your own AI** | 7even5ive is an MCP server: plug it into Claude, ChatGPT, Claude Code or any MCP client, at `<server>/mcp` with the student's token. |
+| **Your own AI** | 7even5ive is an MCP connector: `claude mcp add --transport http 7even5ive <server>/mcp` or `codex mcp add 7even5ive --url <server>/mcp`, then sign in with your 7even5ive account in the browser ([`docs/mcp.md`](docs/mcp.md)). |
 
 It organises and presents; it does **not** plan study schedules. It never notifies a student about
 a deadline they just forwarded themselves.

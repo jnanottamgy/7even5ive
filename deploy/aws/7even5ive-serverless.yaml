@@ -1,10 +1,11 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >-
-  7even5ive serverless demo: the self-contained demo (core, PortMax's phone API, the mock college
-  portal and MCP over HTTP, with the recorded demo data) as one Lambda behind an API Gateway HTTP
-  API, plus a once-a-minute tick for reminders, urgent calls, college mail and Classroom.
-  Handler seventy5.lambda_demo.handler; code from core/build_lambda_zip.py. The production
-  pipeline, several functions sharing Supabase, is core/template.yaml.
+  7even5ive serverless: one HTTPS address (an API Gateway HTTP API) in front of two Lambda
+  functions running the same code (handler seventy5.lambda_demo.handler, zip from
+  core/build_lambda_zip.py). ApiFunction answers the app, the bot and ElevenLabs webhooks, MCP
+  and its sign-in, and runs the once-a-minute tick (reminders, urgent calls, college mail,
+  Classroom); it scales out, its data in Supabase. DemoFunction answers everything else: the
+  demo's mock college portal, whose logins live in memory, so it is kept to one instance.
 
 Parameters:
   CodeBucket:
@@ -19,9 +20,18 @@ Parameters:
     Default: "true"
     AllowedValues: ["true", "false"]
     Description: >-
-      true keeps the function to one instance at a time, which the demo needs: the mock
-      portal's login and the demo data live in that instance. Needs a Lambda concurrency quota
-      above 10 (see docs/online.md); false works on any account but two instances can disagree.
+      true keeps the demo's mock college portal (DemoFunction) on one instance: its logins live
+      in memory. Needs a Lambda concurrency quota of at least 101 in this region (AWS keeps 100
+      unreserved; the usual quota is 1000). false works on any account, but the demo portal's
+      login may then fail now and then.
+  ApiOnOneInstance:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: >-
+      true only while Supabase isn't set up (no DATABASE_URL): the app's data then lives in one
+      instance's /tmp, so the API must stay on that one instance (and the quota must be at least
+      102 with PinToOneInstance). With Supabase, leave false: requests never wait for each other.
   SettingsPath:
     Type: String
     Default: /7even5ive-demo
@@ -39,6 +49,7 @@ Parameters:
 
 Conditions:
   Pin: !Equals [!Ref PinToOneInstance, "true"]
+  PinApi: !Equals [!Ref ApiOnOneInstance, "true"]
   Tick: !Equals [!Ref TickEnabled, "true"]
 
 Resources:
@@ -73,10 +84,13 @@ Resources:
                   - bedrock-mantle:*
                 Resource: "*"
 
+  # The catch-all behind the address: the demo's mock college portal (and anything not routed
+  # to ApiFunction below). Its logical name is the first version's, so an existing stack keeps
+  # its address when it is updated to this template.
   DemoFunction:
     Type: AWS::Lambda::Function
     Properties:
-      Description: 7even5ive demo - core, PortMax phone API, mock portal and MCP (seventy5.lambda_demo)
+      Description: 7even5ive mock college portal for the demo (seventy5.lambda_demo)
       Runtime: python3.12
       Architectures: [x86_64]   # what build_lambda_zip.py packages and what was tested
       Handler: seventy5.lambda_demo.handler
@@ -87,10 +101,46 @@ Resources:
       MemorySize: 1024          # more memory is more CPU: a quicker cold start
       Timeout: 29               # API Gateway answers within 30 s
       ReservedConcurrentExecutions: !If [Pin, 1, !Ref "AWS::NoValue"]
+      LoggingConfig:
+        LogFormat: JSON         # keeps each log line's fields (job, error, counts)
       Environment:
         Variables:
           PYTHONDONTWRITEBYTECODE: "1"
           SSM_PREFIX: !Ref SettingsPath
+
+  # The app's API, the webhooks, MCP and its sign-in, and the tick. Scales out (its data is in
+  # Supabase); 60 s so a tick's last network call finishes rather than being cut off (API
+  # Gateway still answers the phone within 30 s).
+  ApiFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: 7even5ive app API, webhooks, MCP, sign-in and background jobs (seventy5.lambda_demo)
+      Runtime: python3.12
+      Architectures: [x86_64]
+      Handler: seventy5.lambda_demo.handler
+      Code:
+        S3Bucket: !Ref CodeBucket
+        S3Key: !Ref CodeKey
+      Role: !GetAtt FunctionRole.Arn
+      MemorySize: 1024
+      Timeout: 60
+      ReservedConcurrentExecutions: !If [PinApi, 1, !Ref "AWS::NoValue"]
+      LoggingConfig:
+        LogFormat: JSON
+      Environment:
+        Variables:
+          PYTHONDONTWRITEBYTECODE: "1"
+          SSM_PREFIX: !Ref SettingsPath
+
+  # A tick that fails or meets a busy function is not retried or queued: the next one comes a
+  # minute later, and every job is safe to run again then.
+  ApiAsyncConfig:
+    Type: AWS::Lambda::EventInvokeConfig
+    Properties:
+      FunctionName: !Ref ApiFunction
+      Qualifier: $LATEST
+      MaximumRetryAttempts: 0
+      MaximumEventAgeInSeconds: 120
 
   # Kept a week; the app logs counts and ids only, never message or mail text.
   FunctionLogs:
@@ -99,8 +149,15 @@ Resources:
       LogGroupName: !Sub /aws/lambda/${DemoFunction}
       RetentionInDays: 7
 
-  # Quick create: a $default route to the function and an auto-deployed $default stage,
-  # so every path (/api, /v1, /mcp, the portal's /index.php) reaches the one function.
+  ApiLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${ApiFunction}
+      RetentionInDays: 7
+
+  # Quick create: a $default route to DemoFunction (the mock portal's /index.php and anything
+  # else) and an auto-deployed $default stage. The routes below send the app's paths to
+  # ApiFunction; both run the same code, which routes by path again (cloud.py).
   HttpApi:
     Type: AWS::ApiGatewayV2::Api
     Properties:
@@ -116,8 +173,66 @@ Resources:
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*
 
-  # The background loop of a long-running server, as a schedule. A tick that meets the one
-  # pinned instance busy is retried by Lambda's async queue a moment later.
+  ApiFunctionInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref ApiFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*
+
+  ApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt ApiFunction.Arn
+      PayloadFormatVersion: "2.0"
+      TimeoutInMillis: 30000
+
+  RouteApi:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: ANY /api/{proxy+}
+      Target: !Sub integrations/${ApiIntegration}
+
+  RouteBot:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: ANY /bot/{proxy+}
+      Target: !Sub integrations/${ApiIntegration}
+
+  RoutePortMax:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: ANY /v1/{proxy+}
+      Target: !Sub integrations/${ApiIntegration}
+
+  RouteDemo:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: ANY /demo/{proxy+}
+      Target: !Sub integrations/${ApiIntegration}
+
+  RouteMcp:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: ANY /mcp
+      Target: !Sub integrations/${ApiIntegration}
+
+  RouteSignIn:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: ANY /oauth/{proxy+}
+      Target: !Sub integrations/${ApiIntegration}
+
+  # The background loop of a long-running server, as a schedule, on ApiFunction.
   TickRule:
     Type: AWS::Events::Rule
     Properties:
@@ -126,14 +241,14 @@ Resources:
       State: !If [Tick, ENABLED, DISABLED]
       Targets:
         - Id: tick
-          Arn: !GetAtt DemoFunction.Arn
+          Arn: !GetAtt ApiFunction.Arn
           Input: '{"seventy5": "tick"}'
 
   TickPermission:
     Type: AWS::Lambda::Permission
     Properties:
       Action: lambda:InvokeFunction
-      FunctionName: !Ref DemoFunction
+      FunctionName: !Ref ApiFunction
       Principal: events.amazonaws.com
       SourceArn: !GetAtt TickRule.Arn
 
@@ -145,7 +260,9 @@ Outputs:
     Description: Answers {"service":"7even5ive","version":1}; the first call takes a few seconds.
     Value: !Sub ${HttpApi.ApiEndpoint}/api/health
   McpUrl:
-    Description: MCP over HTTP for Claude or ChatGPT (Authorization Bearer the student's token).
+    Description: >-
+      MCP for Claude Code and Codex (claude mcp add --transport http 7even5ive <this>; codex mcp
+      add 7even5ive --url <this>): the student signs in in the browser (connector.py).
     Value: !Sub ${HttpApi.ApiEndpoint}/mcp
   GoogleRedirectUri:
     Description: Add this as an Authorized redirect URI on the Google OAuth client (Web application).

@@ -3,7 +3,7 @@
 Everything at your fingertips, using MCP. 75 is a campus agent that turns a student's
 WhatsApp class groups, college email, Google Classroom and portal into deadlines,
 materials, attendance warnings and real opportunities, and serves them to the student's
-phone and to their own Claude or ChatGPT over MCP, behind one gateway with one set of rules.
+phone and to their own Claude Code or Codex over MCP, behind one gateway with one set of rules.
 
 wHACKiest 2026 · Track 1: Make MCP Matter.
 

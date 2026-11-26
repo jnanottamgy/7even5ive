@@ -17,7 +17,7 @@ import hashlib
 import logging
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import httpx
 
@@ -198,13 +198,17 @@ def speak(text: str, http: httpx.Client | None = None) -> bytes:
 
 
 def audio(db: Database, sid: int, now: datetime | None = None,
-          http: httpx.Client | None = None) -> bytes:
+          http: httpx.Client | None = None,
+          may_make: Callable[[], bool] = lambda: True) -> bytes:
     """Today's briefing as mp3: made on first request, then served from the cache. A changed
-    briefing (a new deadline filed at noon) is a new file."""
+    briefing (a new deadline filed at noon) is a new file. may_make: asked before paying for a
+    new clip (the shared demo's cap); False means the app reads the text with the phone's voice."""
     briefing = build(db, sid, now)
     path = _cache_path(sid, briefing["day"], briefing["text"])
     if path.exists():
         return path.read_bytes()
+    if not may_make():
+        raise VoiceUnavailable("the demo's voice is resting; try again later")
     sound = speak(briefing["text"], http)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)

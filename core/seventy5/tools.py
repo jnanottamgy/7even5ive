@@ -220,22 +220,52 @@ def _read(call: Any) -> Any:
         raise ValueError("no such subject or file") from err
 
 
+def _shelf(db: Database, student_id: int) -> tuple[Any, str]:
+    """(the library to read, the number it knows this student by).
+
+    The shared demo always reads the invented library: its token is public, so it must never
+    reach a real person's files. A real account reads the bot's, once WhatsApp is linked; it
+    never sees the invented one."""
+    from .demo import is_demo
+    from .library import DemoLibrary, LibraryUnavailable, configured
+
+    row = db.student(student_id)
+    if is_demo(db, student_id):
+        return DemoLibrary(), str(row["wa_phone"] or "")
+    if not configured():
+        raise LibraryUnavailable("Your files come from the WhatsApp bot, which isn't connected"
+                                 " to this server yet.")
+    if not row["wa_phone"]:
+        raise LibraryUnavailable("Link WhatsApp first (Settings, Link WhatsApp): your files come"
+                                 " from the bot.")
+    return library_client(), str(row["wa_phone"])
+
+
 def list_library(db: Database, student_id: int) -> dict[str, Any]:
     """Subjects of the active term, each with its three shelves and how many files are on them."""
-    phone = db.student(student_id)["wa_phone"]
-    return dict(_read(lambda: library_client().library(phone)))
+    def call() -> Any:
+        lib, phone = _shelf(db, student_id)
+        return lib.library(phone)
+
+    return dict(_read(call))
 
 
 def list_library_files(db: Database, student_id: int, subject_id: int | None = None,
                        shelf: str | None = None, unsorted: bool = False,
                        offset: int = 0) -> dict[str, Any]:
     """One shelf of one subject (or files still waiting for a subject), newest first."""
-    phone = db.student(student_id)["wa_phone"]
-    return dict(_read(lambda: library_client().files(
-        phone, subject_id=subject_id, shelf=shelf, unsorted=unsorted, offset=int(offset))))
+    def call() -> Any:
+        lib, phone = _shelf(db, student_id)
+        return lib.files(phone, subject_id=subject_id, shelf=shelf, unsorted=unsorted,
+                         offset=int(offset))
+
+    return dict(_read(call))
 
 
 def open_file(db: Database, student_id: int, file_id: int) -> dict[str, Any]:
     """A link that opens one file for a few minutes, or a note's text."""
-    phone = db.student(student_id)["wa_phone"]
-    return dict(_read(lambda: library_client().open(phone, int(file_id))))
+    def call() -> Any:
+        lib, phone = _shelf(db, student_id)
+        return lib.open(phone, int(file_id))
+
+    return dict(_read(call))

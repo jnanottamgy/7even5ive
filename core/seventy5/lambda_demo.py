@@ -34,21 +34,33 @@ from typing import Any
 log = logging.getLogger(__name__)
 logging.getLogger().setLevel(logging.INFO)
 
-# One tick's jobs together must finish well inside Lambda's 29 s: they share this deadline, and
-# each job only starts work it can finish before it (mail.MAIL_RESERVE, google.CLASSROOM_RESERVE).
+# One tick's jobs share one deadline, and each job only starts work it can finish before it
+# (mail.MAIL_RESERVE, google.CLASSROOM_RESERVE). At most this long, and never closer than
+# TICK_RESERVE_SECONDS to the time Lambda actually has left (a cold start uses some of it).
 TICK_BUDGET_SECONDS = 22.0
+TICK_RESERVE_SECONDS = 8.0
+
+
+class SettingsNotLoaded(RuntimeError):
+    """Parameter Store was named (SSM_PREFIX) but couldn't be read. Raised at start, so the
+    error shows in the log and the next request tries a fresh start; running on stand-ins
+    instead would quietly be the offline demo (SQLite, no accounts) for this instance's life."""
 
 
 def load_settings(prefix: str | None, client: Any = None) -> list[str]:
     """Parameters under the prefix become environment variables (real ones win). Returns the
-    names it set, never the values. A failure is logged and leaves the stand-ins."""
+    names it set, never the values. A failure raises SettingsNotLoaded, naming only the kind
+    of error (a missing permission, a key the role can't decrypt with, throttling)."""
     if not prefix:
         return []
     try:
         if client is None:
             import boto3  # in the Lambda runtime
+            from botocore.config import Config
 
-            client = boto3.client("ssm")
+            # Many cold starts at once can be throttled: retried, a little apart.
+            client = boto3.client("ssm", config=Config(retries={"max_attempts": 6,
+                                                                "mode": "standard"}))
         names: list[str] = []
         token: str | None = None
         while True:
@@ -63,15 +75,16 @@ def load_settings(prefix: str | None, client: Any = None) -> list[str]:
             token = page.get("NextToken")
             if not token:
                 return names
-    except Exception as err:  # noqa: BLE001 - a missing permission must not stop the demo
-        log.warning("settings not loaded from Parameter Store", extra={"error": type(err).__name__})
-        return []
+    except Exception as err:  # noqa: BLE001 - every kind is reported the same way
+        log.error("settings not loaded from Parameter Store", extra={"error": type(err).__name__})
+        raise SettingsNotLoaded(f"Parameter Store {prefix} not readable: {type(err).__name__}") from err
 
 
 def use_tmp_unless_supabase() -> None:
     """Without a Supabase DATABASE_URL, the three SQLite files live in /tmp (Lambda's code folder
     is read-only) and start over at each cold start. With one, all three share Supabase."""
-    if not os.environ.get("DATABASE_URL", "").startswith(("postgres://", "postgresql://")):
+    if not os.environ.get("DATABASE_URL", "").startswith(
+            ("postgres://", "postgresql://", "postgresql+psycopg://")):
         os.environ.setdefault("DATABASE_URL", "/tmp/75.db")
         os.environ.setdefault("PORTMAX_DATABASE_URL", "sqlite:////tmp/portmax.db")
         os.environ.setdefault("MAILFILTER_DATABASE_URL", "sqlite:////tmp/mailfilter.db")
@@ -102,7 +115,7 @@ def _ensure() -> Any:
     return _handler
 
 
-def tick() -> dict[str, Any]:
+def tick(context: Any = None) -> dict[str, Any]:
     """One turn of the background loop: every job that is due runs once, within the budget."""
     global _scheduler
     _ensure()
@@ -116,7 +129,10 @@ def tick() -> dict[str, Any]:
         # in the database (a restart never runs the 1 PM check twice).
         _scheduler = Scheduler(lambda: _router.app.db, current_jobs(_router))
     app = _router.app  # a demo reset makes a new app: set its deadline each time
-    app.deadline = time.monotonic() + TICK_BUDGET_SECONDS
+    budget = TICK_BUDGET_SECONDS
+    if context is not None:
+        budget = min(budget, context.get_remaining_time_in_millis() / 1000 - TICK_RESERVE_SECONDS)
+    app.deadline = time.monotonic() + max(budget, 1.0)
     try:
         ran = [job.name for job in _scheduler.jobs if _scheduler.run_once(job)]
     finally:
@@ -126,5 +142,5 @@ def tick() -> dict[str, Any]:
 
 def handler(event: dict[str, Any], context: Any) -> Any:
     if isinstance(event, dict) and event.get("seventy5") == "tick":
-        return tick()
+        return tick(context)
     return _ensure()(event, context)

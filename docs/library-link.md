@@ -52,11 +52,28 @@ Code: the bot repo, branch `seventy5-link`: `app/routers/seventy5.py`,
   keeps the highest `version` per deadline, so a late, older update loses.
 - **Reminders follow:** a moved deadline moves its reminders (same time before); a deleted one
   cancels them.
-- **Nothing lost for long:** 7even5ive backfills every upcoming deadline and the subject list
-  when it starts, which repairs any event missed while it was down.
+- **Pulled in when linked:** when a student links WhatsApp, 7even5ive pulls every upcoming
+  deadline and the subject list the bot holds for that number. After that, only events: the bot
+  must retry any event that doesn't get a 2xx answer (7even5ive drops a repeated `event_id`).
 
 Code: `core/seventy5/library.py` (client), `core/seventy5/sync.py` (events and backfill),
 `core/seventy5/tools.py` (`list_library`, `list_library_files`, `open_file`).
+
+## What the bot must do (Kartik's side, not on GitHub yet)
+
+None of the bot's branches on GitHub (`Kartikkatwe/academic-assistant`, checked 27 Nov 2026) has
+this link yet: the pull API above, the signed events, or the `SEVENTY5_*` settings. Until the
+`seventy5-link` work is pushed, merged and deployed, the settings below do nothing. It must:
+
+1. Serve the pull API above (`/seventy5/v1/...`, the service key and `X-Student-Phone`).
+2. Send each `deadline.*` event, and forward each message, signed as in
+   [`bot-events.md`](bot-events.md); retry anything that doesn't get a 2xx answer, for a few
+   minutes (7even5ive drops a repeated `event_id` or `message_id`).
+3. **Forward `LINK 75-XXXXXX` from any number**, whatever its own list of numbers says: that is
+   how a new student links. 7even5ive answers `{"ok": true, "linked": true|false, "reply": "…"}`;
+   send `reply` back to the student on WhatsApp, and from then on serve and report that number.
+4. Never forward from a number 7even5ive doesn't know beyond that: it answers `{"ok": true}` and
+   stores nothing, but the student's words shouldn't leave the bot for nothing.
 
 ## Settings
 
@@ -66,12 +83,10 @@ Code: `core/seventy5/library.py` (client), `core/seventy5/sync.py` (events and b
 SEVENTY5_SERVICE_TOKEN=<long random string A>
 SEVENTY5_WEBHOOK_URL=<7even5ive AppUrl>/bot/webhook
 SEVENTY5_WEBHOOK_SECRET=<long random string B>
-SEVENTY5_PHONES=91XXXXXXXXXX          # your number; only linked students are served or reported
 ```
 
-**On the 7even5ive demo server**: AWS console → Systems Manager → Parameter Store, **in the
-stack's own region** (the serverless demo is in Sydney, `ap-southeast-2`) → create each as a
-**SecureString** under `/7even5ive-demo/`. Both the serverless stack (read at every cold start)
+**On 7even5ive**: AWS console → Systems Manager → Parameter Store, **in the stack's own
+region** → create each as a **SecureString** under `/7even5ive-demo/`. Both the serverless stack (read at every cold start)
 and the EC2 stack (read at every boot) use this path. `SEVENTY5_WEBHOOK_URL` is the stack's
 `BotWebhookUrl` output.
 
@@ -81,18 +96,21 @@ and the EC2 stack (read at every boot) use this path. `SEVENTY5_WEBHOOK_URL` is 
 | `/7even5ive-demo/LIBRARY_SERVICE_TOKEN` | string A |
 | `/7even5ive-demo/BOT_WEBHOOK_SECRET` | string B |
 | `/7even5ive-demo/APPROVAL_SECRET` | another long random string |
-| `/7even5ive-demo/DEMO_PHONE` | your number, `91XXXXXXXXXX` |
 
-Serverless: they apply at the next cold start (Lambda → the function → Configuration →
-Environment variables → Edit → Save starts fresh instances). EC2: reboot the instance. They
+Serverless: they apply when the functions next start (Lambda → each function → Configuration
+→ Environment variables → Edit → add or change `RELOAD` = the current time → Save). EC2: reboot the instance. They
 never appear in the template, the console or the logs. **An EC2 stack created before this
 change** wrote its start script at first boot, so delete and recreate it once (about 15
 minutes).
 
-Without these settings everything still runs: Files shows an invented demo library and no
-deadlines are backfilled.
+Without these settings everything still runs: real accounts' Files says the bot isn't
+connected; the demo always shows its invented library (its token is public, so it never reads a
+real one, and its WhatsApp number is invented: show live forwards from your own account).
 
 ## Check it
+
+With your own account (not the demo): app → **Settings** → **Link WhatsApp** → send the code
+to the bot → Settings shows the number. Then:
 
 1. Forward a deadline to the bot on WhatsApp. Within seconds, pull to refresh in the app: the
    card is on *This week*, tagged `bot`.

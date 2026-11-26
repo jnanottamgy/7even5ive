@@ -5,7 +5,8 @@ serves everything the app needs, routed by path:
 
     /api/*, /bot/*  7even5ive core (cards, approvals, tools, health, the bot webhook)
     /v1/*           PortMax's phone API (portal settings, runner.js, page upload)
-    /mcp            MCP over HTTP for the student's own Claude or ChatGPT (Bearer token)
+    /mcp            MCP over HTTP for the student's own Claude Code, Codex or other MCP app
+    /oauth/*, /.well-known/oauth-*   how those apps sign in as the student (connector.py)
     /demo/*         demo-only actions for the app's demo tour (see demo_api); never in api.py
     /dev            the core's development web page
     everything else the mock college portal the app's WebView logs in to
@@ -26,6 +27,8 @@ from contextvars import ContextVar
 from typing import Any
 
 PREFIXES_CORE = ("/api/", "/bot/")
+# The MCP connector's sign-in (connector.py): its OAuth metadata and endpoints.
+PREFIXES_CONNECTOR = ("/oauth/", "/.well-known/oauth-")
 # The address the phone is using for this request. All three apps share it, so the portal
 # pages it uploads must come from exactly here.
 REQUEST_ORIGIN: ContextVar[str | None] = ContextVar("REQUEST_ORIGIN", default=None)
@@ -54,6 +57,7 @@ class Router:
         self.demo: Any = None  # the demo-only actions (demo_api), set by build_router
         self.app: Any = None  # the core's App behind `core`; a demo reset replaces both
         self.mcp: Any = None  # MCP over HTTP (mcp_server.http_app), set by build_router
+        self.connector: Any = None  # its OAuth sign-in (connector.oauth_app), set by build_router
 
     async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
         if scope["type"] == "lifespan":
@@ -67,6 +71,8 @@ class Router:
             await self.portmax(scope, receive, send)
         elif path in ("/mcp", "/mcp/") and self.mcp is not None:
             await self.mcp(scope, receive, send)
+        elif path.startswith(PREFIXES_CONNECTOR) and self.connector is not None:
+            await self.connector(scope, receive, send)
         elif path.startswith("/demo/") and self.demo is not None:
             await self.demo(scope, receive, send)
         elif path == "/dev":
@@ -195,6 +201,9 @@ def build_router(db_url: str | None = None) -> Router:
 
     router.demo = demo_api(router)
     router.mcp = http_app(lambda: router.app)  # always the current app, across demo resets
+    from .connector import oauth_app
+
+    router.connector = oauth_app(lambda: router.app)
     return router
 
 

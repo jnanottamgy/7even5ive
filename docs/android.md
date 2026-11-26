@@ -14,7 +14,7 @@ A student's semester is scattered across WhatsApp groups, college mail, Google C
 the college portal. 7even5ive pulls all of it into one place: deadlines and exams ("due this
 week"), study materials by subject, attendance with the exact number of classes to attend or
 skip, and real opportunities from college mail with spam and fake "placement cell" mail
-removed. The student's own AI (Claude, ChatGPT) can ask about it over MCP. Every tool call,
+removed. The student's own AI (Claude Code, Codex) can ask about it over MCP. Every tool call,
 from the AI or from this app, goes through one gateway with one set of rules.
 
 ## 2. What the app does
@@ -235,7 +235,7 @@ drive or exam itself when `due_at` is the deadline to register). Reminders add `
 | `GET /api/voice/session` | `{available, signed_url, dynamic_variables, tools, max_seconds}` or `{available: false, reason}` ([`voice.md`](voice.md)) |
 | `POST /api/google/start` · `POST /api/google/finish` `{code, state}` · `POST /api/google/disconnect` | Google's consent page to open in the browser · the app finishes the sign-in when the browser hands back `sevenfive://google?code=…&state=…` (only the student who started it can) · revoke and forget |
 | `GET /api/mail` · `POST /api/mail/check` | The mailbox status · Check now (`429` within 5 minutes of the last check) |
-| `POST /mcp` | MCP over HTTP for Claude or ChatGPT (`Authorization: Bearer <token>`) |
+| `POST /mcp` | MCP over HTTP for Claude Code or Codex (`Authorization: Bearer <token>`; they sign in through `/oauth/*`, [`mcp.md`](mcp.md)) |
 
 ### Accounts (Supabase Auth, [`supabase.md`](supabase.md))
 

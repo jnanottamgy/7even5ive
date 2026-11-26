@@ -149,13 +149,44 @@ CREATE TABLE IF NOT EXISTS wa_link_codes (
 CREATE TABLE IF NOT EXISTS deleted_accounts (
   auth_user_id TEXT PRIMARY KEY, deleted_at TEXT NOT NULL
 );
+-- The MCP connector (connector.py): AI apps (Claude Code, Codex) signing in as a student with
+-- OAuth. Times are Unix seconds. Codes and tokens are kept only as their SHA-256.
+-- oauth_clients: apps that registered themselves (RFC 7591), as the app described itself.
+CREATE TABLE IF NOT EXISTS oauth_clients (
+  client_id TEXT PRIMARY KEY, info TEXT NOT NULL, created_at BIGINT NOT NULL
+);
+-- oauth_requests: a sign-in page in progress, until the student signs in or 10 minutes pass.
+CREATE TABLE IF NOT EXISTS oauth_requests (
+  id TEXT PRIMARY KEY, client_id TEXT NOT NULL, params TEXT NOT NULL, expires_at BIGINT NOT NULL
+);
+-- oauth_codes: what the signed-in student's browser hands the app; spent once, 5 minutes.
+CREATE TABLE IF NOT EXISTS oauth_codes (
+  code_hash TEXT PRIMARY KEY, client_id TEXT NOT NULL, student_id BIGINT NOT NULL,
+  params TEXT NOT NULL, expires_at BIGINT NOT NULL
+);
+-- oauth_grants: one connected app of one student (what Settings lists). Its access token (an
+-- hour) and refresh token (90 days) are both replaced at every refresh; disconnecting deletes it.
+CREATE TABLE IF NOT EXISTS oauth_grants (
+  id {pk}, student_id BIGINT NOT NULL, client_id TEXT NOT NULL, client_name TEXT,
+  access_hash TEXT NOT NULL, access_expires_at BIGINT NOT NULL,
+  refresh_hash TEXT NOT NULL, refresh_expires_at BIGINT NOT NULL,
+  scopes TEXT NOT NULL, resource TEXT, created_at TEXT NOT NULL, last_used_at TEXT
+);
 """
 
 # Every table above, in the order a student's rows are deleted (children before parents).
 STUDENT_TABLES = ("audit", "calendar", "pending_approvals", "notifications", "devices", "calls",
                   "reminders", "items", "events", "subjects", "google_accounts", "connect_codes",
-                  "wa_link_codes")
-CORE_TABLES = (*STUDENT_TABLES, "students", "used_approvals", "jobs", "deleted_accounts")
+                  "wa_link_codes", "oauth_codes", "oauth_grants")
+CORE_TABLES = (*STUDENT_TABLES, "students", "used_approvals", "jobs", "deleted_accounts",
+               "oauth_clients", "oauth_requests")
+
+# The connector's lookups: every token and code is found by its hash.
+CONNECTOR_INDEXES = """
+CREATE UNIQUE INDEX IF NOT EXISTS oauth_grants_access ON oauth_grants(access_hash);
+CREATE UNIQUE INDEX IF NOT EXISTS oauth_grants_refresh ON oauth_grants(refresh_hash);
+CREATE INDEX IF NOT EXISTS oauth_grants_student ON oauth_grants(student_id, id);
+"""
 
 # Columns added after the first release. A fresh database gets them from SCHEMA above only if
 # they are listed there too; an older database gets them here, once.
@@ -198,8 +229,12 @@ IDLE_CHECK_SECONDS = 20.0
 
 
 def token_hash(token: str) -> str:
-    """What the database keeps of a personal token: its SHA-256, never the token."""
+    """What the database keeps of a token or code: its SHA-256, never the value."""
     return hashlib.sha256(token.encode()).hexdigest()
+
+
+# The MCP connector's tokens (connector.py) say what they are, so a leaked one is easy to spot.
+ACCESS_PREFIX, REFRESH_PREFIX = "75a_", "75r_"
 
 
 def _ist(value: str | None) -> str | None:
@@ -224,7 +259,8 @@ def pg_options(url: str) -> dict[str, Any]:
 
     prepare_threshold=None: Supabase's transaction pooler cannot keep prepared statements.
     sslmode=require: anything but a local server is reached encrypted or not at all.
-    Keepalives: a connection the network silently dropped is noticed, not waited on forever.
+    Keepalives and tcp_user_timeout: a connection the network silently dropped is noticed,
+    not waited on forever.
     """
     from psycopg.conninfo import conninfo_to_dict
 
@@ -234,7 +270,11 @@ def pg_options(url: str) -> dict[str, Any]:
     options: dict[str, Any] = {"prepare_threshold": None, "connect_timeout": 10,
                                "application_name": "7even5ive", "keepalives": 1,
                                "keepalives_idle": 30, "keepalives_interval": 10,
-                               "keepalives_count": 3}
+                               "keepalives_count": 3,
+                               # Data sent but never acknowledged for 10 s: the connection is
+                               # dead (dropped while Lambda was frozen). Without this, the check
+                               # before use could wait past Lambda's whole time limit.
+                               "tcp_user_timeout": 10000}
     if not local and "sslmode" not in given:
         options["sslmode"] = "require"
     return options
@@ -275,6 +315,30 @@ def open_store(cls: Any, url: str, metadata: Any) -> Any:
         finally:
             conn.close()
     return store
+
+
+class BadInput(ValueError):
+    """A value no column can hold: text with a NUL character (Postgres refuses it, SQLite would
+    keep it) or half of a surrogate pair (not UTF-8), or a whole number past 64 bits. Raised
+    before anything is sent, on both engines alike; the API answers it with a 400."""
+
+
+_INT64 = 2**63
+
+
+def _check(args: Any) -> None:
+    for value in args if isinstance(args, (tuple, list)) else ():
+        if isinstance(value, str):
+            if "\x00" in value:
+                raise BadInput("That text has a character that can't be stored.")
+            if not value.isascii():
+                try:
+                    value.encode("utf-8")
+                except UnicodeEncodeError:
+                    raise BadInput("That text has a character that can't be stored.") from None
+        elif isinstance(value, int) and not isinstance(value, bool) and not (
+                -_INT64 <= value < _INT64):
+            raise BadInput("That number is too large.")
 
 
 class _Result:
@@ -352,6 +416,7 @@ class _Conn:
         return sql.replace("%", "%%").replace("?", "%s") if self.pg else sql
 
     def execute(self, sql: str, args: Any = ()) -> _Result:
+        _check(args)
         with self.lock:
             self._fresh()
             cur = self.raw.execute(self._sql(sql), args)
@@ -361,6 +426,8 @@ class _Conn:
             return _Result(rows, cur.rowcount)
 
     def executemany(self, sql: str, rows: list[Any]) -> None:
+        for row in rows:
+            _check(row)
         with self.lock:
             self._fresh()
             if self.pg:
@@ -489,8 +556,23 @@ class Database:
         self.conn = _Conn(url or settings.database_url)
         self.conn.script(_schema(self.conn.pg))
         self._migrate()
-        self.conn.script(INDEXES)
+        self._indexes(INDEXES + CONNECTOR_INDEXES)
         lock_down(self.conn, CORE_TABLES)
+
+    def _indexes(self, script: str) -> None:
+        """Creates the indexes this database lacks. On Postgres only the missing ones are run,
+        each giving up after 5 s waiting for a lock: CREATE INDEX IF NOT EXISTS takes a SHARE
+        lock on its table even when the index is there, so at every cold start it would queue
+        behind any open write and hold up everything queued behind it."""
+        if not self.conn.pg:
+            self.conn.script(script)
+            return
+        have = {r["indexname"] for r in self.conn.execute(
+            "SELECT indexname FROM pg_indexes WHERE schemaname='public'").fetchall()}
+        for statement in (s.strip() for s in script.split(";")):
+            name = re.search(r"IF NOT EXISTS\s+(\w+)", statement)
+            if statement and (name is None or name.group(1) not in have):
+                _ddl(self.conn, statement)
 
     def _migrate(self) -> None:
         """Adds columns a database made by an older version lacks. Idempotent."""
@@ -580,6 +662,12 @@ class Database:
                 c.execute(f"DELETE FROM {table} WHERE student_id=?", (student_id,))
             return c.execute("DELETE FROM students WHERE id=?", (student_id,)).rowcount == 1
 
+    def audit_count(self, student_id: int, tool: str, since: str) -> int:
+        """How many times this happened for the student since then (the demo's daily caps)."""
+        row = self.conn.execute("SELECT COUNT(*) AS n FROM audit WHERE student_id=? AND tool=?"
+                                " AND at >= ?", (student_id, tool, since)).fetchone()
+        return int(row["n"])
+
     def mark_deleted(self, auth_user_id: str, now: str) -> None:
         with self.tx() as c:
             c.execute("INSERT INTO deleted_accounts VALUES (?,?) ON CONFLICT(auth_user_id)"
@@ -608,11 +696,10 @@ class Database:
         """Spends the code and gives its student this number (taken from whoever had it: the
         signed message proves it is this student's now). None if unknown, used or expired."""
         with self.tx() as c:
-            row = c.execute("SELECT * FROM wa_link_codes WHERE code=?", (code,)).fetchone()
-            if row is None:
-                return None
-            c.execute("DELETE FROM wa_link_codes WHERE code=?", (code,))
-            if row["expires_at"] <= now:
+            # One statement spends it: of two deliveries at once, only one gets the row back.
+            row = c.execute("DELETE FROM wa_link_codes WHERE code=? RETURNING student_id,"
+                            " expires_at", (code,)).fetchone()
+            if row is None or row["expires_at"] <= now:
                 return None
             sid = int(row["student_id"])
             if c.execute("SELECT id FROM students WHERE id=?", (sid,)).fetchone() is None:
@@ -620,6 +707,110 @@ class Database:
             c.execute("UPDATE students SET wa_phone=NULL WHERE wa_phone=? AND id<>?", (phone, sid))
             c.execute("UPDATE students SET wa_phone=? WHERE id=?", (phone, sid))
             return sid
+
+    # --- the MCP connector (connector.py) -------------------------------------------------------
+    def oauth_client(self, client_id: str) -> str | None:
+        row = self.conn.execute("SELECT info FROM oauth_clients WHERE client_id=?",
+                                (client_id,)).fetchone()
+        return str(row["info"]) if row is not None else None
+
+    def add_oauth_client(self, client_id: str, info: str, now: int, unused_before: int) -> None:
+        """Registers an app. Registrations that never connected anyone are dropped after a
+        day, so anonymous registrations cannot pile up."""
+        with self.tx() as c:
+            c.execute("DELETE FROM oauth_clients WHERE created_at < ? AND NOT EXISTS (SELECT 1"
+                      " FROM oauth_grants g WHERE g.client_id = oauth_clients.client_id)",
+                      (unused_before,))
+            c.execute("INSERT INTO oauth_clients(client_id, info, created_at) VALUES (?,?,?)",
+                      (client_id, info, now))
+
+    def add_oauth_request(self, request_id: str, client_id: str, params: str, expires_at: int,
+                          now: int) -> None:
+        with self.tx() as c:
+            c.execute("DELETE FROM oauth_requests WHERE expires_at < ?", (now,))
+            c.execute("INSERT INTO oauth_requests(id, client_id, params, expires_at)"
+                      " VALUES (?,?,?,?)", (request_id, client_id, params, expires_at))
+
+    def oauth_request(self, request_id: str, now: int) -> Any | None:
+        return self.conn.execute("SELECT * FROM oauth_requests WHERE id=? AND expires_at >= ?",
+                                 (request_id, now)).fetchone()
+
+    def end_oauth_request(self, request_id: str, now: int) -> Any | None:
+        """Spends a sign-in request (allowed or cancelled): one statement, so only once."""
+        return self.conn.execute("DELETE FROM oauth_requests WHERE id=? AND expires_at >= ?"
+                                 " RETURNING client_id, params", (request_id, now)).fetchone()
+
+    def add_oauth_code(self, code_hash: str, client_id: str, student_id: int, params: str,
+                       expires_at: int, now: int) -> None:
+        with self.tx() as c:
+            c.execute("DELETE FROM oauth_codes WHERE expires_at < ?", (now,))
+            c.execute("INSERT INTO oauth_codes(code_hash, client_id, student_id, params,"
+                      " expires_at) VALUES (?,?,?,?,?)",
+                      (code_hash, client_id, student_id, params, expires_at))
+
+    def oauth_code(self, code_hash: str) -> Any | None:
+        return self.conn.execute("SELECT * FROM oauth_codes WHERE code_hash=?",
+                                 (code_hash,)).fetchone()
+
+    def grant_from_code(self, code_hash: str, client_id: str, grant: dict[str, Any]) -> int | None:
+        """Spends the code (once: one DELETE, so two exchanges cannot both win) and connects
+        the app for its student. None if the code was spent, or its student is gone."""
+        with self.tx() as c:
+            row = c.execute("DELETE FROM oauth_codes WHERE code_hash=? AND client_id=?"
+                            " RETURNING student_id", (code_hash, client_id)).fetchone()
+            if row is None or c.execute("SELECT 1 FROM students WHERE id=?",
+                                        (row["student_id"],)).fetchone() is None:
+                return None
+            cols = {"student_id": int(row["student_id"]), "client_id": client_id, **grant}
+            new = c.execute(f"INSERT INTO oauth_grants({', '.join(cols)}) VALUES"
+                            f" ({', '.join('?' for _ in cols)}) RETURNING id",
+                            tuple(cols.values())).fetchone()
+            return int(new["id"])
+
+    def oauth_grant(self, column: str, hashed: str, now: int) -> Any | None:
+        """The live grant whose access or refresh token this is (column: access or refresh)."""
+        if column not in ("access", "refresh"):
+            raise ValueError(column)
+        return self.conn.execute(
+            f"SELECT * FROM oauth_grants WHERE {column}_hash=? AND {column}_expires_at >= ?",
+            (hashed, now)).fetchone()
+
+    def rotate_grant(self, grant_id: int, old_refresh_hash: str, tokens: dict[str, Any]) -> bool:
+        """New access and refresh tokens for a grant, only if the refresh token used is still its
+        current one (two refreshes at once: one wins, the other must sign in again)."""
+        sets = ", ".join(f"{k}=?" for k in tokens)
+        with self.tx() as c:
+            return c.execute(f"UPDATE oauth_grants SET {sets} WHERE id=? AND refresh_hash=?",
+                             (*tokens.values(), grant_id, old_refresh_hash)).rowcount == 1
+
+    def revoke_grant(self, hashed: str) -> None:
+        """Disconnects the app holding this access or refresh token."""
+        with self.tx() as c:
+            c.execute("DELETE FROM oauth_grants WHERE access_hash=? OR refresh_hash=?",
+                      (hashed, hashed))
+
+    def student_by_grant(self, access_hash: str, now: int, now_iso: str,
+                         seen_before: str) -> Any | None:
+        """The student a live access token belongs to. Notes when the app was last used, at
+        most once an hour (seen_before), so a busy app costs no write per request."""
+        row = self.conn.execute(
+            "SELECT g.id AS grant_id, g.last_used_at AS grant_used, s.* FROM oauth_grants g"
+            " JOIN students s ON s.id = g.student_id"
+            " WHERE g.access_hash=? AND g.access_expires_at >= ?", (access_hash, now)).fetchone()
+        if row is not None and (row["grant_used"] is None or row["grant_used"] < seen_before):
+            self.conn.execute("UPDATE oauth_grants SET last_used_at=? WHERE id=?",
+                              (now_iso, row["grant_id"]))
+        return row
+
+    def grants(self, student_id: int) -> list[Any]:
+        return self.conn.execute(
+            "SELECT id, client_name, created_at, last_used_at FROM oauth_grants"
+            " WHERE student_id=? ORDER BY id", (student_id,)).fetchall()
+
+    def drop_grant(self, student_id: int, grant_id: int) -> bool:
+        with self.tx() as c:
+            return c.execute("DELETE FROM oauth_grants WHERE id=? AND student_id=?",
+                             (grant_id, student_id)).rowcount == 1
 
     def subjects(self, student_id: int) -> list[str]:
         rows = self.conn.execute(

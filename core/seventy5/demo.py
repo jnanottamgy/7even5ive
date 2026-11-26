@@ -28,9 +28,13 @@ from .llm import LLMError, Proposal
 SUBJECTS = ["Computer Networks", "Database Management Systems",
             "Design and Analysis of Algorithms", "Operating Systems", "Probability and Statistics"]
 PORTAL_ID = "demo"
-# DEMO_PHONE: the number your bot knows you by (91 + 10 digits), so its events reach this
-# student. The default is invented.
-PHONE = "".join(ch for ch in os.environ.get("DEMO_PHONE", "919900000001") if ch.isdigit())
+# The demo student's WhatsApp number: invented, always. Its token is public, so it must never
+# be a real person's (it would read their bot library and files, receive their forwards, and
+# ring their phone). DEMO_PHONE is no longer read: to show a live WhatsApp forward, sign in to
+# your own account and link WhatsApp there.
+PHONE = "919900000001"
+# Postgres: one demo morning at a time across instances (pg_advisory_xact_lock's key).
+SEED_LOCK = 7575001
 # The demo student's token: public on purpose (it is in the app, behind "Try the demo"). The
 # database keeps only its hash, like any personal token. Real accounts sign in with Supabase.
 TOKEN = "demo-student-token"
@@ -135,22 +139,31 @@ class FixtureLLM:
         return self.script[text]
 
 
+# Kept when the demo starts over: its phones (wake-ups), and its calls and audit log, which
+# its daily limits count (a reset must not hand out a fresh day's calls or voice sessions).
+KEPT_ON_RESET = ("devices", "calls", "audit")
+
+
 def seed(app: Any) -> int:
     """The demo student, back to the start of the demo morning. Only the demo student's rows
-    change: on Supabase the same database holds every real account. Its phones (wake-ups) and
-    call settings stay; its cards, reminders, calls, mail and approvals start over."""
+    change: on Supabase the same database holds every real account. Its phones, call settings,
+    calls and audit stay; its cards, reminders, mail and approvals start over."""
     from . import mail
 
     db = app.db
-    existing = db.student_by_token(TOKEN)
-    # The demo's number, unless a real account linked it (WhatsApp proved it is theirs then):
-    # the invented morning must never land in a real student's cards.
-    owner = db.student_by_phone(PHONE)
-    phone = PHONE if owner is None or (existing is not None and owner["id"] == existing["id"]) else None
-    profile = {"name": "Demo Student", "wa_phone": phone, "branch": "CSE", "year": 3,
-               "interests": "hackathons, backend, AI", "portal_id": PORTAL_ID,
-               "college": "mockcollege"}
     with db.tx() as c:
+        if db.conn.pg:
+            # Two instances starting at once: the second waits here, then reseeds the same row.
+            c.execute("SELECT pg_advisory_xact_lock(?)", (SEED_LOCK,))
+        existing = c.execute("SELECT * FROM students WHERE token_hash=?",
+                             (token_hash(TOKEN),)).fetchone()
+        # The invented number, unless a real account linked it (then WhatsApp proved it is
+        # theirs): the invented morning must never land in a real student's cards.
+        owner = c.execute("SELECT id FROM students WHERE wa_phone=?", (PHONE,)).fetchone()
+        mine = owner is None or (existing is not None and owner["id"] == existing["id"])
+        profile = {"name": "Demo Student", "wa_phone": PHONE if mine else None, "branch": "CSE",
+                   "year": 3, "interests": "hackathons, backend, AI", "portal_id": PORTAL_ID,
+                   "college": "mockcollege"}
         if existing is None:
             cols = ", ".join([*profile, "token_hash", "created_at"])
             marks = ", ".join("?" for _ in range(len(profile) + 2))
@@ -162,12 +175,13 @@ def seed(app: Any) -> int:
             from .db import STUDENT_TABLES
 
             for table in STUDENT_TABLES:
-                if table != "devices":
+                if table not in KEPT_ON_RESET:
                     c.execute(f"DELETE FROM {table} WHERE student_id=?", (sid,))
             sets = ", ".join(f"{k}=?" for k in profile)
             c.execute(f"UPDATE students SET {sets} WHERE id=?", (*profile.values(), sid))
         for name in SUBJECTS:
-            c.execute("INSERT INTO subjects(student_id, name) VALUES (?,?)", (sid, name))
+            c.execute("INSERT INTO subjects(student_id, name) VALUES (?,?)"
+                      " ON CONFLICT(student_id, name) DO NOTHING", (sid, name))
     seed_portal()
     mail.reset_demo(sid)
     return sid
@@ -188,16 +202,11 @@ def seed_portal() -> None:
 def play(app: Any, client: Any, sid: int) -> list[str]:
     from .ingress import accept, sign
 
-    from .library import configured
-
     lines = []
-    linked = configured()
-    # A real account linked the demo's number: its forwards would land in that account.
+    # A real account linked the invented number: its forwards would land in that account.
     owns_phone = app.db.student(sid)["wa_phone"] == PHONE
     for i, m in enumerate(messages(), 1):
-        if (linked or not owns_phone) and m["source"] == "whatsapp":
-            # A real bot is linked: its own deadlines arrive by backfill and events, so the
-            # invented forwards would only duplicate them. Mail and Classroom stay invented.
+        if not owns_phone and m["source"] == "whatsapp":
             continue
         if m["source"] == "whatsapp":
             # No decision = the bot was unsure, so 7even5ive's own cascade decides.
@@ -244,7 +253,7 @@ def morning(app: Any) -> tuple[int, list[str]]:
     which is why recorded answers are the default."""
     from fastapi.testclient import TestClient
 
-    from . import mail, sync
+    from . import mail
     from .api import create
     from .app import App
     from .cascade import Cascade
@@ -258,9 +267,8 @@ def morning(app: Any) -> tuple[int, list[str]]:
         replay = App(db=app.db, queue=Queue(), cascade=Cascade(app.db, jev, llm),
                      gateway=app.gateway, last=[], sender=app.sender, caller=app.caller)
         sid = seed(replay)
+        # No backfill from the bot: it doesn't know the invented number, and must not be asked.
         lines = play(replay, TestClient(create(replay)), sid)
-        if app.db.student(sid)["wa_phone"]:
-            lines += sync.backfill(app.db, sid)
         lines += mail.startup(app.db, sid)
         app.db.job_ran(SEED_JOB, clock.iso(clock.now()), None)
         return sid, lines

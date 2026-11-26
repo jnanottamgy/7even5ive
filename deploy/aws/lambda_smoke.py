@@ -106,8 +106,33 @@ mcp = call("/mcp", "POST", {**JSON, "accept": "application/json, text/event-stre
            json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}))
 tools = {t["name"] for t in json.loads(mcp["body"]).get("result", {}).get("tools", [])}
 check("MCP over HTTP lists the tools", {"due_this_week", "briefing"} <= tools, mcp)
-check("MCP needs the token", call("/mcp", "POST", {"content-type": "application/json"},
-                                  "{}")["statusCode"] == 401)
+unsigned = call("/mcp", "POST", {"content-type": "application/json"}, "{}")
+check("MCP needs the token", unsigned["statusCode"] == 401)
+
+# The MCP connector (connector.py): an app is told where to sign in, registers, and is sent to
+# the sign-in page (which, without Supabase, says accounts aren't set up).
+www = {k.lower(): v for k, v in (unsigned.get("headers") or {}).items()}.get("www-authenticate", "")
+check("MCP names where to sign in", 'resource_metadata="https://smoke.test/.well-known/'
+      'oauth-protected-resource/mcp"' in www, www)
+resource = json.loads(call("/.well-known/oauth-protected-resource/mcp")["body"])
+check("sign-in metadata", resource.get("authorization_servers") == ["https://smoke.test"], resource)
+meta = json.loads(call("/.well-known/oauth-authorization-server")["body"])
+check("OAuth server metadata", meta.get("issuer") == "https://smoke.test" and
+      meta.get("code_challenge_methods_supported") == ["S256"], meta)
+registered = call("/oauth/register", "POST", JSON, json.dumps({
+    "client_name": "smoke", "redirect_uris": ["http://127.0.0.1:9/cb"],
+    "token_endpoint_auth_method": "none", "grant_types": ["authorization_code", "refresh_token"],
+    "response_types": ["code"]}))
+check("an MCP app can register", registered["statusCode"] == 201, registered)
+client_id = json.loads(registered["body"])["client_id"]
+started = call(f"/oauth/authorize?response_type=code&client_id={client_id}"
+               "&redirect_uri=http%3A%2F%2F127.0.0.1%3A9%2Fcb&code_challenge="
+               "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256&state=s")
+location = {k.lower(): v for k, v in (started.get("headers") or {}).items()}.get("location", "")
+check("authorize leads to the sign-in page", started["statusCode"] == 302 and
+      location.startswith("https://smoke.test/oauth/login?request="), started)
+page = call(location.removeprefix("https://smoke.test"))
+check("without Supabase the sign-in page says so", page["statusCode"] == 503, page["statusCode"])
 
 # Accounts: without Supabase only the demo; the demo account can't be changed or deleted.
 auth_config = json.loads(call("/api/auth/config")["body"])

@@ -17,15 +17,18 @@ SQLite, and the app offers only the demo. About 20 minutes, no command line.
 [supabase.com](https://supabase.com) → **New project**.
 
 - **Region: the same region as the Lambda.** Every request makes several database round trips;
-  across regions each one costs a long hop, and a cold start makes dozens. If you are moving
-  the stack to Mumbai, choose **South Asia (Mumbai)** here and create the stack there.
-- **Database password:** a long random one, kept in your password manager. It goes into the
-  database URL below and nowhere else.
+  across regions a first start passes Lambda's time limit. For a stack in Mumbai: **Need a
+  specific region?** → **South Asia (Mumbai)** (not "Asia-Pacific", which can mean Singapore).
+  The region can't be changed later.
+- **Database password:** **Generate a password**, letters and digits only (an `@`, `/` or `%`
+  breaks the database URL below), kept in your password manager. It goes into the database URL
+  and nowhere else.
 
 ## 2. The database → `DATABASE_URL`
 
 Project → **Connect** → **Transaction pooler** → copy the URI and put the database password in
-place of `[YOUR-PASSWORD]`. It looks like
+place of the bracketed password placeholder (no brackets). On the Pro plan, turn on **Use IPv4
+connection** first (its dedicated pooler is IPv6 only). It looks like
 `postgresql://postgres.<ref>:<password>@aws-<n>-<region>.pooler.supabase.com:6543/postgres`.
 
 Parameter Store: `/7even5ive-demo/DATABASE_URL`, **SecureString**.
@@ -72,12 +75,21 @@ works, but it is slower and counts against Supabase's limits.
 
 ## 5. Authentication settings
 
-**Authentication** → **Sign In / Providers** → **Email**: enabled, **Confirm email** on.
+**Authentication** → **Sign In / Providers**: **User Signups** → **Confirm email** on; **Email**
+→ enabled, **Email OTP Length** 6 (the default; 6 to 10 work).
+
+**Your own email sender, first.** Projects on the Free plan made since June 2026 can't edit the
+email templates until the project sends through your own SMTP, and Supabase's default templates
+send a link, never the code the app asks for. Supabase's built-in email also reaches only the
+members of your Supabase organization, two emails an hour. So: **Authentication** → **Emails** →
+**SMTP Settings** → turn on custom SMTP with Resend, Amazon SES, Brevo or ZeptoMail (verify your
+sender address with them first). Custom SMTP starts at 30 emails an hour (**Authentication** →
+**Rate Limits**).
 
 **Authentication** → **Emails** → **Templates**. The app works with codes, not links, so two
 templates must show the code (`{{ .Token }}`). Replace each body with:
 
-**Confirm signup**, subject `Your 7even5ive code: {{ .Token }}`:
+**Confirm sign up**, subject `Your 7even5ive code: {{ .Token }}`:
 
 ```html
 <h2>Welcome to 7even5ive</h2>
@@ -95,13 +107,8 @@ templates must show the code (`{{ .Token }}`). Replace each body with:
 <p>Enter it in the app with your new password. If you didn't ask, ignore this email.</p>
 ```
 
-The code length is set under **Email** (6 is easiest to type; the app takes 6 to 10 digits).
-
-**Email delivery, before real students.** Supabase's own mail server only sends to the
-addresses of your Supabase team, and only a few an hour: enough to try it, not for students.
-**Authentication** → **Emails** → **SMTP Settings** → your own SMTP (Resend, Amazon SES, Brevo or
-ZeptoMail all work). For a quick demo only, turning **Confirm email** off also works: sign-up
-then signs in at once (password reset still needs email).
+For a quick demo without SMTP, turning **Confirm email** off also works: sign-up then signs in
+at once (password reset still needs email).
 
 **Recommended:** **Authentication** → **Rate Limits** → **IP address forwarding** on. A
 username sign-in goes through the server; with forwarding on (and the secret key set) it counts
@@ -123,7 +130,8 @@ code to send, without the button.
 
 ## 7. Restart and check
 
-1. Lambda → the function → **Configuration** → **Environment variables** → **Edit** → **Save**.
+1. Lambda → each of the two functions → **Configuration** → **Environment variables** →
+   **Edit** → add or change `RELOAD` = the current date and time → **Save**.
 2. CloudWatch, at the next start: `live  Database: Supabase Postgres` and
    `live  Accounts (sign up, log in): Supabase Auth, JWKS (ES256/RS256)`.
 3. `<AppUrl>/api/auth/config` in a browser: `"enabled": true` with your project URL.
@@ -150,14 +158,19 @@ phone ──(sign up · code · log in · refresh · reset)──► Supabase Au
   offline never does.
 - **Usernames** are unique and lowercase: 3 to 30 letters, numbers, dots or underscores; a few
   are reserved. The database's unique index decides, so two students can't both get one.
-- **Personal token (MCP).** **Settings** → **Connect Claude or ChatGPT** makes a token, shown
-  once; the server keeps only its SHA-256. It works for `/mcp` only, never for the app's API or
-  the account.
-- **The demo account** is shared by everyone who taps **Try the demo**. It can't connect Google
-  or WhatsApp, get a token, change its profile or be deleted, and only it can run the demo tour
-  (at most 3 resets a minute). Its morning is refreshed at 5 AM each day. One thing it can do on
-  purpose: the urgent call. With `DEMO_STUDENT_PHONE` set, anyone trying the demo can ring that
-  phone, at most `CALL_MAX_PER_DAY` times a day; leave it unset when you aren't presenting.
+- **Claude Code and Codex (MCP).** They sign in as the student with OAuth, in the browser, on
+  this same account ([`mcp.md`](mcp.md)): their tokens work for `/mcp` only, never for the app's
+  API or the account, and Settings can disconnect each. A personal token (shown once; the server
+  keeps only its SHA-256) is there for MCP apps that can only send a fixed header.
+- **The demo account** is shared by everyone who taps **Try the demo**, so its token is public.
+  It can't connect Google or WhatsApp, get a token, sign in an MCP app, change its profile or be
+  deleted, and only it can run the demo tour (at most 3 resets a minute). Its WhatsApp number is
+  invented and its Files library is the invented one: it never reaches a real person's library,
+  forwards or phone. Its paid voice is capped (voice sessions and new briefing clips per address
+  and per day). Its morning is refreshed at 5 AM each day. One thing it can do on purpose: the
+  urgent call. With `DEMO_STUDENT_PHONE` set, anyone trying the demo can ring that phone, at most
+  `CALL_MAX_PER_DAY` times a day (a demo reset doesn't reset the count); leave it unset when you
+  aren't presenting.
 - **Delete account** (Settings, typing DELETE) revokes Google, forgets the college mail read,
   removes the portal answers and every row, then the login itself (the secret key). Its session,
   still valid for up to an hour, is turned away from then on. The app then forgets everything on
@@ -169,9 +182,11 @@ phone ──(sign up · code · log in · refresh · reset)──► Supabase Au
 |---|---|
 | The app: "Accounts aren't set up on this server yet" | `SUPABASE_URL` or `SUPABASE_PUBLISHABLE_KEY` missing; restart after adding |
 | The app: "Can't reach 7even5ive" on the login screen | The server address (tap **Server** at the bottom) or the phone's network |
-| No email arrives after **Sign up** | Built-in mail only reaches your Supabase team (step 5); check spam |
+| No email arrives after **Sign up** | No custom SMTP: built-in mail only reaches your Supabase organization, two an hour (step 5); check spam |
+| The email has a link, not a code | The templates weren't changed; on a new Free project they can't be until SMTP is on (step 5) |
 | "Can't check your sign-in right now" (503) | The JWKS address unreachable, or a legacy-secret project with no `SUPABASE_JWT_SECRET` (step 4) |
-| The first request after a while takes many seconds | Supabase and the Lambda are in different regions (step 1) |
+| The server never finishes starting, or every request takes seconds | Supabase and the Lambda are in different regions (step 1): it must be the same region |
+| Every request fails right after adding `DATABASE_URL` | A password with `@`, `/` or `%` in the URL: use letters and digits only (step 1) |
 | **Delete account**: "isn't set up on this server yet" | `SUPABASE_SECRET_KEY` missing; nothing was deleted |
 | The startup log says `stand-in  Database` | `DATABASE_URL` missing or not `postgresql://`; the data starts over at each cold start |
 

@@ -14,6 +14,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -71,13 +72,18 @@ def signed_assertion(account: ServiceAccount, now: float) -> str:
 class FcmWaker:
     """Callable(student_id): sends {"type": "sync"} to every phone the student registered.
 
-    Sends happen on a small background pool, so the reminder loop never waits on Google.
+    On a long-running server, sends happen on a small background pool, so the reminder loop
+    never waits on Google. On Lambda they happen before the request or tick returns: Lambda
+    freezes the instance as soon as it has answered, and a thread left with a wake-up would sit
+    until the next invocation (or meet a dead connection then).
     """
 
     def __init__(self, db: Database, account: ServiceAccount, http: httpx.Client | None = None,
-                 clock: Callable[[], float] = time.time, background: bool = True) -> None:
+                 clock: Callable[[], float] = time.time, background: bool | None = None) -> None:
+        if background is None:
+            background = not os.environ.get("AWS_LAMBDA_FUNCTION_NAME")
         self.db, self.account, self.clock = db, account, clock
-        self.http = http or httpx.Client(timeout=10.0)
+        self.http = http or httpx.Client(timeout=5.0)
         self._token: tuple[str, float] | None = None
         self._lock = threading.Lock()
         self._pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="fcm") if background else None
@@ -123,7 +129,7 @@ class FcmWaker:
 
     def __call__(self, student_id: int) -> None:
         if self._pool is None:
-            self.wake(student_id)
+            self._safe_wake(student_id)
         else:
             self._pool.submit(self._safe_wake, student_id)
 

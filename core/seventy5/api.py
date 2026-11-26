@@ -20,6 +20,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from . import accounts, auth, briefing, calls, clock, google, mail, notify, tools, voice
 from .app import App, build
 from .config import settings
+from .db import BadInput
 from .gateway import Denied, read_token
 from .ingress import BadSignature, accept, verify
 from .scheduler import Scheduler
@@ -34,10 +35,17 @@ class ApiError(Exception):
         self.status, self.detail, self.code = status, detail, code
 
 
-# Anyone may call these two; each address gets this many per 5 minutes.
+# Anyone may call these. Username checks: this many per address per 5 minutes. Log-ins share
+# their counts with the MCP connector's sign-in page (auth.py).
 _username_checks = auth.Limiter(60, 300)
-_login_by_ip = auth.Limiter(10, 300)
-_login_by_name = auth.Limiter(10, 900)
+_login_by_ip = auth.LOGIN_BY_IP
+_login_by_name = auth.LOGIN_BY_NAME
+# The shared demo's paid voice (its token is public): a few per address an hour, and a cap per
+# day in all, counted from its audit log (which a demo reset keeps).
+_demo_voice_by_ip = auth.Limiter(3, 3600)
+_demo_audio_by_ip = auth.Limiter(10, 3600)
+DEMO_VOICE_PER_DAY = 20
+DEMO_AUDIO_PER_DAY = 40
 
 WEB = Path(__file__).parent / "web"
 
@@ -63,6 +71,12 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
     @api.exception_handler(ApiError)
     async def api_error(_: Request, err: ApiError) -> JSONResponse:
         return JSONResponse({"detail": err.detail, "code": err.code}, status_code=err.status)
+
+    @api.exception_handler(BadInput)
+    async def bad_input(_: Request, err: BadInput) -> JSONResponse:
+        # Text with a NUL or half a character, or a number past 64 bits: refused the same way
+        # on SQLite and Postgres, before anything reaches the database.
+        return JSONResponse({"detail": str(err), "code": "bad_input"}, status_code=400)
 
     def bearer(header: str | None) -> str:
         return (header or "").removeprefix("Bearer ").strip()
@@ -104,11 +118,18 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
                           x_75_timestamp: str | None = Header(None),
                           x_75_signature: str | None = Header(None)) -> dict[str, Any]:
         body = await request.body()
+        if len(x_75_timestamp or "") > 12 or len(x_75_signature or "") > 128:
+            raise HTTPException(401, "bad signature")  # never a real one; never parsed
         try:
             verify(body, x_75_timestamp, x_75_signature)
         except BadSignature as err:
             raise HTTPException(401, str(err)) from err
-        event = json.loads(body)
+        try:
+            event = json.loads(body)
+        except ValueError as err:
+            raise HTTPException(400, "the event must be JSON") from err
+        if not isinstance(event, dict):
+            raise HTTPException(400, "the event must be an object")
         sender = str(event.get("from", ""))
         if accounts.link_code_in(str(event.get("text") or "")) is not None:
             # "LINK 75-XXXXXX": this number becomes the student's who made the code. The
@@ -170,8 +191,8 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
         sid = student_from(authorization)
         try:
             return state.gateway.approve(sid, body.get("token", ""))
-        except Denied as err:
-            raise HTTPException(403, str(err)) from err
+        except Denied as err:  # 503: not set up on this server yet; anything else is a no
+            raise HTTPException(503 if err.status == 503 else 403, str(err)) from err
 
     @api.post("/api/tools/{tool}")
     def call_tool(tool: str, body: dict[str, Any] | None = None,
@@ -185,8 +206,8 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
             raise HTTPException(400, "args must be an object")
         try:
             return state.gateway.call(sid, tool, args)
-        except Denied as err:
-            raise HTTPException(403, str(err)) from err
+        except Denied as err:  # 503: not set up on this server yet; anything else is a no
+            raise HTTPException(503 if err.status == 503 else 403, str(err)) from err
 
     # --- the outbox and the phones it wakes -------------------------------------------
     @api.get("/api/notifications")
@@ -238,6 +259,9 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
         enabled = body.get("enabled")
         if enabled is not None and not isinstance(enabled, bool):
             raise HTTPException(400, "enabled must be true or false")
+        for key in ("quiet_start", "quiet_end"):
+            if body.get(key) is not None and not isinstance(body.get(key), str):
+                raise HTTPException(400, f"{key} must be a time like 22:00")
         try:
             out = calls.update_settings(state.db, sid, enabled=enabled,
                                         quiet_start=body.get("quiet_start"),
@@ -279,11 +303,26 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
     def get_briefing(authorization: str | None = Header(None)) -> dict[str, Any]:
         return briefing.build(state.db, student_from(authorization))
 
+    def demo_allows(sid: int, request: Request, tool: str, by_ip: auth.Limiter,
+                    per_day: int) -> bool:
+        """For the shared demo only: may it spend on one more of these? Counted when allowed."""
+        from .demo import is_demo
+
+        if not is_demo(state.db, sid):
+            return True
+        today = clock.iso(clock.now().astimezone(clock.IST).replace(hour=0, minute=0, second=0,
+                                                                   microsecond=0))
+        if state.db.audit_count(sid, tool, today) >= per_day or not by_ip.allow(caller(request)):
+            return False
+        state.db.audit(sid, tool, "allow", "demo", clock.iso(clock.now()))
+        return True
+
     @api.get("/api/briefing/audio")
-    def briefing_audio(authorization: str | None = Header(None)) -> Response:
+    def briefing_audio(request: Request, authorization: str | None = Header(None)) -> Response:
         sid = student_from(authorization)
         try:
-            sound = briefing.audio(state.db, sid)
+            sound = briefing.audio(state.db, sid, may_make=lambda: demo_allows(
+                sid, request, "briefing_audio", _demo_audio_by_ip, DEMO_AUDIO_PER_DAY))
         except briefing.VoiceUnavailable as err:
             # The app says why and reads the text with the phone's own voice instead.
             raise HTTPException(503, str(err)) from err
@@ -297,12 +336,17 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
         about the student is in the address (the state is a one-time code)."""
         from .cloud import origin_of
 
+        from .config import deployed
+
         sid = student_from(authorization)
         try:
             accounts.refuse_demo(state.db, sid, "connect Google (it is shared by everyone "
                                                 "trying the app)")
         except accounts.AccountError as err:
             raise refusal(err) from err
+        if deployed() and not settings.token_encryption_key.strip():
+            # Google's refresh tokens would be sealed with the public development key.
+            raise HTTPException(503, "Google sign-in isn't set up on this server yet.")
         try:
             return google.start(state.db, sid, origin_of(request.scope))
         except google.GoogleUnavailable as err:
@@ -364,10 +408,14 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
 
     # --- the voice assistant ----------------------------------------------------------------
     @api.get("/api/voice/session")
-    def voice_session(authorization: str | None = Header(None)) -> dict[str, Any]:
+    def voice_session(request: Request,
+                      authorization: str | None = Header(None)) -> dict[str, Any]:
         """A signed address for one conversation with the assistant. Its tools run on the phone,
         through /api/tools like any tap, so the gateway decides what each may do."""
         sid = student_from(authorization)
+        if not demo_allows(sid, request, "demo_voice", _demo_voice_by_ip, DEMO_VOICE_PER_DAY):
+            raise HTTPException(429, "The demo's voice assistant has had a busy day. Try again "
+                                     "later, or sign up for your own account.")
         try:
             out = voice.session(state.db, sid)
         except voice.VoiceUnavailable as err:
@@ -409,11 +457,13 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
             raise ApiError(503, "Sign-in isn't set up on this server.", "auth_unavailable")
         login = str(body.get("login") or "").strip().lower().removeprefix("@")
         password = str(body.get("password") or "")
+        wrong = ApiError(400, "Wrong username or password.", "invalid_credentials")
+        if len(login) > auth.LOGIN_MAX_CHARS or len(password) > 1024:
+            raise wrong  # never a login; and never a key in the limiters below
         ip = caller(request)
         if not _login_by_ip.allow(ip) or not _login_by_name.allow(login):
             raise ApiError(429, "Too many tries. Wait a few minutes and try again.",
                            "rate_limited")
-        wrong = ApiError(400, "Wrong username or password.", "invalid_credentials")
         row = state.db.student_by_username(login) if login and "@" not in login else None
         if row is None or not row["email"] or not password:
             raise wrong
@@ -470,13 +520,14 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
         if not auth.can_delete_users():
             raise ApiError(503, "Deleting accounts isn't set up on this server yet. Nothing was"
                                 " deleted.", "auth_unavailable")
+        # First: its session lives on for up to an hour and must not make a new profile, not
+        # even one saved while the rows below are being removed.
+        state.db.mark_deleted(identity.user_id, clock.iso(clock.now()))
         if sid is not None:
             try:
                 accounts.delete_everything(state.db, sid)
             except accounts.AccountError as err:
                 raise refusal(err) from err
-        # Its session lives on for up to an hour: it must not make a new profile meanwhile.
-        state.db.mark_deleted(identity.user_id, clock.iso(clock.now()))
         try:
             auth.delete_user(identity.user_id)
         except auth.AuthError as err:
@@ -509,6 +560,29 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
             accounts.drop_token(state.db, sid)
         except accounts.AccountError as err:
             raise refusal(err) from err
+        return {"deleted": True}
+
+    @api.get("/api/me/connections")
+    def list_connections(request: Request,
+                         authorization: str | None = Header(None)) -> dict[str, Any]:
+        """The AI apps signed in as this student through the MCP connector (connector.py), and
+        the address to give a new one."""
+        from .cloud import origin_of
+
+        _, sid = account_from(authorization)
+        if sid is None:
+            raise ApiError(403, "Finish setting up your account first.", "profile_required")
+        base = settings.public_url or origin_of(request.scope) or ""
+        return {"mcp_url": f"{base}/mcp", "connections": accounts.connections(state.db, sid)}
+
+    @api.post("/api/me/connections/{grant_id}/delete")
+    def disconnect_app(grant_id: int,
+                       authorization: str | None = Header(None)) -> dict[str, Any]:
+        _, sid = account_from(authorization)
+        if sid is None:
+            raise ApiError(403, "Finish setting up your account first.", "profile_required")
+        if not accounts.disconnect(state.db, sid, grant_id):
+            raise ApiError(404, "That app isn't connected.", "not_found")
         return {"deleted": True}
 
     @api.post("/api/me/whatsapp")

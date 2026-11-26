@@ -27,10 +27,12 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-DEFAULT_URL = "https://fl4el8s1h4.execute-api.ap-southeast-2.amazonaws.com"
+# The stack's AppUrl: SEVENFIVE_URL, else the first (Sydney) stack. A new stack: export
+# SEVENFIVE_URL=<AppUrl>, or pass --url.
+DEFAULT_URL = os.environ.get("SEVENFIVE_URL") or "https://fl4el8s1h4.execute-api.ap-southeast-2.amazonaws.com"
 TOKEN = os.environ.get("SEVENFIVE_TOKEN", "demo-student-token")
 # The demo server's webhook secret. The demo runs with the development default; a real
-# deployment sets BOT_WEBHOOK_SECRET (docs/deploy.md) and so must this script.
+# deployment sets BOT_WEBHOOK_SECRET (docs/keys.md): export the same value before running this.
 BOT_SECRET = os.environ.get("BOT_WEBHOOK_SECRET", "dev-bot-secret")
 STUDENT_PHONE = "919900000001"
 IST = timezone(timedelta(hours=5, minutes=30))

@@ -16,7 +16,7 @@ from seventy5.notify import LogSender
 
 TABLES = ("audit, reminders, calendar, pending_approvals, used_approvals, notifications, devices,"
           " calls, jobs, google_accounts, connect_codes, wa_link_codes, deleted_accounts, items,"
-          " events, subjects, students")
+          " events, subjects, oauth_clients, oauth_requests, oauth_codes, oauth_grants, students")
 
 
 @pytest.fixture

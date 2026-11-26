@@ -1,3 +1,6 @@
+# NOT THE DEPLOYMENT. An earlier plan (several functions, SQS, AgentCore; aws.py). It loads
+# only a few keys, has no Supabase, Google, ElevenLabs, MCP sign-in or portal routes, and runs
+# none of the background jobs. Deploy deploy/aws/7even5ive-serverless.yaml (docs/online.md).
 # 7even5ive on AWS (SAM). Deploy from core/:
 #   python build_lambda.py           # gathers seventy5 + portmax into .build/
 #   sam build --use-container        # Linux wheels, built in Docker

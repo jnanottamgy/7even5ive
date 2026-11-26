@@ -41,22 +41,38 @@ your quiet hours"). Never silence, never two messages.
 
 1. **ElevenLabs key** in Parameter Store (`ELEVENLABS_API_KEY`), see [`keys.md`](keys.md).
 2. **A phone number in ElevenLabs** → **ElevenAgents** → **Phone numbers** → **Import**:
-   - *Twilio* (the demo; a foreign caller id): a Twilio number and its account SID and token.
-     On a Twilio trial, first verify the student's phone in Twilio (trial accounts only call
-     verified numbers). `CALL_PROVIDER=twilio`.
-   - *Exotel* (an Indian caller id, for real students): imported natively by ElevenLabs.
-     `CALL_PROVIDER=exotel`. (Any other SIP trunk, e.g. Plivo: `CALL_PROVIDER=sip`.)
-   Copy the imported number's id into `ELEVENLABS_PHONE_NUMBER_ID`.
-3. **The agent**, as code: on a laptop with the key in `core/.env`,
+   - *Twilio* (the demo; a foreign caller id): a Twilio number (not an Indian one) and its
+     account SID and token. A Twilio trial only calls numbers verified by SMS, plays a trial
+     message first and waits for a key press before the agent speaks; calls to India may need
+     **Voice** → **Settings** → **Geo permissions** → India on. `CALL_PROVIDER=twilio`.
+   - *Exotel* (an Indian caller id, for real students), supported natively by ElevenLabs, but
+     not instantly: ask Exotel support to turn on the **Voicebot** applet (1–2 business days);
+     in Exotel's **App Bazaar** make a flow whose Voicebot applet points at
+     `wss://api.elevenlabs.io/v1/convai/conversation/exotel` and note its **App ID**; get the
+     **Account SID**, **API Key** and **API Token** from **Monitor** → **Developer**. Then
+     ElevenLabs → **ElevenAgents** → **Phone numbers** → **Import number** → **From Exotel**,
+     region Mumbai, the number in +91 form. `CALL_PROVIDER=exotel`. (Any other SIP trunk,
+     e.g. Plivo: `CALL_PROVIDER=sip`.)
+   Copy the imported number's id into `ELEVENLABS_PHONE_NUMBER_ID` (if the dashboard doesn't
+   show it, `GET https://api.elevenlabs.io/v1/convai/phone-numbers` with the key lists
+   `phone_number_id`).
+3. **The agent**, as code: on a laptop with Python 3.12 or newer and the key (and
+   `ELEVENLABS_VOICE_ID`, if you chose a voice) in `core/.env`,
    `cd core && .venv/bin/python -m seventy5.calls setup-agent` → put the printed id in
-   `ELEVENLABS_AGENT_ID`. Re-run after changing the prompt (it updates in place).
-   `show-agent` prints the exact configuration that is sent.
+   `ELEVENLABS_AGENT_ID`, in Parameter Store and in `core/.env` (then a re-run, after changing
+   the prompt, updates that agent instead of making another). `show-agent` prints the exact
+   configuration that is sent. The agent records no voice, and ElevenLabs keeps each
+   conversation 30 days (`calls.PRIVACY`), not for ever as its default.
 4. **The outcome webhook**: ElevenLabs → **ElevenAgents** → **Settings** → **Post-call
    webhook** → URL = the stack's `CallWebhookUrl` output, authentication HMAC → copy the secret
-   into `ELEVENLABS_WEBHOOK_SECRET`.
-5. **The phone to ring**: `DEMO_STUDENT_PHONE=+91XXXXXXXXXX`.
+   into `ELEVENLABS_WEBHOOK_SECRET`. If it asks which events, include **call initiation
+   failure** (busy, no answer: that is how a missed call is known). Only the transcript and
+   initiation-failure events count; an answered call is never turned into a missed one.
+5. **The phone to ring for the demo account**: `DEMO_STUDENT_PHONE=+91XXXXXXXXXX`. A real
+   student's calls ring the WhatsApp number they linked.
 6. In the app: Settings → Urgent call → turn on → **Test call now** rings at once about the
-   soonest thing due, under every rule above.
+   soonest thing due, under every rule above: not between 10 PM and 8 AM India time, and at
+   most twice a day.
 
 The server log's startup report shows `live  ElevenLabs urgent call: via twilio` once 1–3 are
 in place; until then calls are recorded and listed in Settings, not rung.

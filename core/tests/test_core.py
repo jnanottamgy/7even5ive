@@ -477,9 +477,20 @@ def test_library_reads_through_the_gateway_and_says_when_it_is_down(app, monkeyp
         def library(self, phone):
             raise library.LibraryUnavailable(library.UNREACHABLE)
 
+    # A real account reads the bot's library, and is told plainly when it can't.
+    real = a.db.create_student(name="Asha", auth_user_id="u-asha", username="asha.k")
     monkeypatch.setattr(tools, "_library", Down())
-    down = a.gateway.call(sid, "list_library")["result"]
+    off = a.gateway.call(real, "list_library")["result"]
+    assert off["available"] is False and "isn't connected" in off["reason"]
+    monkeypatch.setattr(library, "configured", lambda: True)
+    unlinked = a.gateway.call(real, "list_library")["result"]
+    assert unlinked["available"] is False and "Link WhatsApp first" in unlinked["reason"]
+    a.db.update_student(real, wa_phone="919812345678")
+    down = a.gateway.call(real, "list_library")["result"]
     assert down == {"available": False, "reason": library.UNREACHABLE}
+    # The shared demo (public token) never reaches the bot: always the invented library.
+    assert a.gateway.call(sid, "list_library")["result"]["subjects"][0]["name"] == (
+        "Database Management Systems")
 
 
 def test_a_storage_failure_says_the_file_not_the_library_is_unavailable():

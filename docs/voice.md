@@ -27,6 +27,9 @@ App ── POST /api/tools/due_this_week (student token) ──> gateway ──>
   server listed for that conversation.
 - **Nothing said is stored** by 7even5ive; the transcript lives on the phone while the screen
   is open. Five minutes at most per conversation (`VOICE_MAX_SECONDS`).
+- **At ElevenLabs** the agent records no voice and each conversation is kept 30 days, then
+  deleted (`calls.PRIVACY`; ElevenLabs' own default is to record and keep for ever). Re-run
+  `setup-assistant` once to apply it to an agent made before.
 - **Model**: Claude Haiku 5.5, run by ElevenLabs (`ELEVENLABS_AGENT_LLM`).
 - **Audio**: the app plays whatever PCM rate the agent announces and records at the rate it asks
   for, in a call-style session so the phone's echo canceller works on the speaker. If the

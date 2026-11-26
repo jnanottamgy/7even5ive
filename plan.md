@@ -184,6 +184,9 @@ Status: `[ ]` to do, `[~]` in progress, `[x]` done and tested, `[-]` decided not
 | P23 | A username sign-in goes through the server (it finds the email; same answer for an unknown name and a wrong password; 10 tries per 5 minutes per address). Personal tokens (MCP) are stored as SHA-256, shown once, and work for `/mcp` only. WhatsApp is linked by a code the student sends to the bot, whose signed webhook proves the number. | Usernames are the Instagram way; a token or a typed phone number must never let one student act as another. |
 | P24 | The demo account (public token, "Try the demo") can't connect Google or WhatsApp, get a token, change its profile or be deleted; only it may use `/demo/*`. Real accounts never get invented mail (mail mode `none` until Google). Event keys are unique per student. | Everyone shares the demo student; classmates share Classroom coursework ids. |
 | P25 | Deleting an account revokes Google, forgets the mail filter's and PortMax's rows, removes every row, then the Supabase login (secret key); without the secret key nothing is deleted. The phone's session is sealed by the Android Keystore; signing out also clears the portal's WebView cookies, notifications and this phone's push registration. | Google Play requires account deletion; a shared phone must not leak the last student's data. |
+| P26 | The MCP connector: Claude Code and Codex sign in as the student with OAuth 2.1 (MCP's authorization spec: protected-resource and server metadata, dynamic registration, PKCE S256, our own sign-in page checking the password with Supabase). Access tokens last an hour, refresh tokens 90 days, both replaced at every refresh, kept as SHA-256, good for `/mcp` only; Settings lists and disconnects each app. The MCP SDK's handlers do the protocol checks. Personal tokens stay for apps that can only send a header. | One command and a browser sign-in on the laptop, nothing copied from the phone; the same sign-in is what claude.ai's and ChatGPT's connectors need, which a pasted token can't do. |
+| P27 | The serverless stack is two functions on one address: ApiFunction (the app's API, webhooks, MCP, sign-in, the tick) scales out; DemoFunction (the catch-all: the demo's mock portal, whose logins live in memory) is kept to one instance. The tick isn't retried; the functions log JSON; a key Parameter Store can't give stops the start instead of running on stand-ins. | With everything on one pinned instance, any two overlapping requests got HTTP 500 and the 1 PM mail check blocked the app. The old function keeps its name, so a stack updated in place keeps its address. |
+| P28 | The shared demo's WhatsApp number is always the invented one (DEMO_PHONE is gone); it reads only the invented library; its calls ring only DEMO_STUDENT_PHONE and its daily caps (calls, voice sessions, new briefing clips) survive a reset. On a deployed server (Lambda or Postgres) the public development secrets are refused: approvals without APPROVAL_SECRET, Connect Google without TOKEN_ENCRYPTION_KEY. | The demo token is public: tied to a real number it read that person's files and forwards and rang their phone. A forgotten key must fail closed, not quietly protect real data with a public secret. |
 
 ## Keys and accounts the team hands over at the end
 
@@ -262,3 +265,17 @@ email templates and your own SMTP: [`docs/supabase.md`](docs/supabase.md)); `BOT
   tests five times in a row); the Lambda zip passes its smoke test on SQLite and twice on
   Postgres through the pooler, all 23 tables locked. Not run here: a real Supabase project, a
   phone (no emulator), the screens rendered.
+- 27 Nov: a deep check before real use. Five independent reviews (deployment, accounts and data,
+  integrations, the Android app, and every instruction in remaining-steps.pdf against the
+  vendors' current docs) found about 70 problems; each is fixed or written down in the PDF's
+  "Known gaps". Server: P26–P28 above; text no column can hold (a NUL, half a character) and
+  numbers past 64 bits are a 400 on both engines; every tool's arguments are checked before it
+  runs or an approval is spent; a link code and an OAuth code are spent by one statement; the
+  demo's seed takes a Postgres advisory lock; indexes are created only when missing, under a lock
+  timeout; a dropped connection is noticed within 10 s; an answered call is never relabelled
+  missed; ElevenLabs records no voice and keeps conversations 30 days; Firebase wake-ups are
+  sent before Lambda freezes; linking WhatsApp pulls in the bot's deadlines; the Lambda zip ships
+  Python 3.12 bytecode and pinned versions. Found outside this repository: the bot's side of the
+  link isn't on any of its GitHub branches (Kartik), and ChatGPT's connectors take OAuth only.
+  The connector was tried with the real Claude Code and Codex against a local server: both signed
+  in, and Claude Code reported Connected.

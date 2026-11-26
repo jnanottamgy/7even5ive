@@ -332,6 +332,26 @@ class Limiter:
             return True
 
 
+# Password sign-ins on a student's behalf (the app's username log-in, the MCP connector's
+# sign-in page) share these counts, so two ways in never add up to more guesses.
+LOGIN_BY_IP = Limiter(10, 300)
+LOGIN_BY_NAME = Limiter(10, 900)
+# An email address can't be longer; a longer "login" is refused before it becomes a key above.
+LOGIN_MAX_CHARS = 254
+
+
+def end_session(access_token: str, http: httpx.Client | None = None) -> None:
+    """Signs out this one Supabase session, best effort. The connector's sign-in page only
+    needed to know the password was right; it keeps no session."""
+    client = http or _client()
+    try:
+        client.post(f"{settings.supabase_url}/auth/v1/logout", params={"scope": "local"},
+                    headers={"apikey": settings.supabase_publishable_key,
+                             "Authorization": f"Bearer {access_token}"})
+    except httpx.HTTPError:
+        pass
+
+
 def client_ip(headers: Any, fallback: str | None) -> str:
     """The caller's address for rate limits. Behind API Gateway, CloudFront or Render, the last
     X-Forwarded-For entry is the one our own proxy added: a client can put anything in front of

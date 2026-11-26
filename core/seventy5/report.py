@@ -8,7 +8,7 @@ key's value, never a number, never an address that identifies a student.
 
 from __future__ import annotations
 
-from .config import DEV_BOT_SECRET, settings
+from .config import DEV_APPROVAL_SECRET, DEV_BOT_SECRET, settings
 
 
 def lines() -> list[str]:
@@ -36,15 +36,18 @@ def lines() -> list[str]:
         ("Bot library (Files)", bool(s.library_url and s.library_service_token), "invented demo library"),
         ("Google sign-in (Gmail, Calendar, Classroom)",
          bool(s.google_client_id and s.google_client_secret), "demo mailbox, calendar kept in 7even5ive"),
-        ("Token encryption key", bool(s.token_encryption_key), "fixed development key"),
-        ("Approval token secret", s.approval_secret != "dev-approval-secret", "development secret"),
+        ("Token encryption key", bool(s.token_encryption_key),
+         "public development key: Google sign-in refused on a deployed server"),
+        ("Approval token secret", s.approval_secret != DEV_APPROVAL_SECRET,
+         "public development secret: approvals refused on a deployed server"),
         ("ElevenLabs urgent call", f"via {s.call_provider}" if call_ready else None,
          "calls are recorded, not rung"),
         ("ElevenLabs call webhook", bool(s.elevenlabs_webhook_secret), "call outcomes refused"),
         ("ElevenLabs briefing voice", eleven, "the phone reads the briefing itself"),
         ("ElevenLabs voice assistant", eleven and bool(s.elevenlabs_assistant_agent_id),
          "the app says it isn't set up"),
-        ("Real number for the demo call", bool(s.demo_student_phone), "the invented number is never dialled"),
+        ("Real number for the demo call", bool(s.demo_student_phone),
+         "the demo's calls are recorded, not rung"),
         ("Firebase wake-ups", bool(s.fcm_service_account_json or s.fcm_service_account_file),
          "phones pull every 15 minutes"),
     ]

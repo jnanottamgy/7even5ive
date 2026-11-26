@@ -30,11 +30,22 @@ _load_dotenv(ROOT / ".env")
 # The bot webhook's development secret: in this repository, so anyone can sign with it. While it
 # is in use the webhook accepts events for the demo student only, and WhatsApp can't be linked.
 DEV_BOT_SECRET = "dev-bot-secret"
+# The approval tokens' development secret: also public. On a deployed server it is refused.
+DEV_APPROVAL_SECRET = "dev-approval-secret"
+
+
+def deployed() -> bool:
+    """A real deployment: on AWS Lambda, or keeping data in Postgres (Supabase). Real students'
+    data, so a public development secret must never protect anything there."""
+    url = os.environ.get("DATABASE_URL") or ""
+    return bool(os.environ.get("AWS_LAMBDA_FUNCTION_NAME")) or url.startswith(
+        ("postgres://", "postgresql://", "postgresql+psycopg://"))
 
 _DATABASE_URL = (os.environ.get("DATABASE_URL") or str(ROOT / "data" / "75.db"))
 # On Supabase all three share one database (their tables have distinct names); locally each
 # has its own SQLite file. An explicit PORTMAX_/MAILFILTER_DATABASE_URL always wins.
-_SHARED = _DATABASE_URL if _DATABASE_URL.startswith(("postgres://", "postgresql://")) else ""
+_SHARED = (_DATABASE_URL if _DATABASE_URL.startswith(
+    ("postgres://", "postgresql://", "postgresql+psycopg://")) else "")
 
 
 @dataclass(frozen=True)
@@ -57,14 +68,15 @@ class Settings:
     bot_whatsapp_number: str = "".join(
         ch for ch in os.environ.get("BOT_WHATSAPP_NUMBER", "") if ch.isdigit())
 
-    # Signed events from the WhatsApp bot. Dev default only; preflight refuses it in prod.
+    # Signed events from the WhatsApp bot. With the dev default, only the demo's (api.py).
     bot_secret: str = (os.environ.get("BOT_WEBHOOK_SECRET") or DEV_BOT_SECRET)
     # Why 300 s: long enough for clock drift, short enough that a captured request
     # cannot be replayed later.
     bot_max_skew_seconds: int = 300
 
     # One-time approval tokens for anything that writes outside 75.
-    approval_secret: str = (os.environ.get("APPROVAL_SECRET") or "dev-approval-secret")
+    # With the dev default on a deployed server, approvals are refused (gateway.py).
+    approval_secret: str = (os.environ.get("APPROVAL_SECRET") or DEV_APPROVAL_SECRET)
     approval_ttl_seconds: int = 15 * 60
 
     jev_api_key: str = os.environ.get("JEV_API_KEY", "")

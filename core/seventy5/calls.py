@@ -427,11 +427,18 @@ def verify_webhook(body: bytes, header: str | None, secret: str,
 
 
 def outcome_of(event: dict[str, Any]) -> tuple[str | None, str, int | None]:
-    """(provider id, answered | missed | voicemail, duration) from one webhook event."""
-    data = event.get("data") or {}
+    """(provider id, answered | missed | voicemail, duration) from one webhook event; (None, "",
+    None) for an event that says nothing about the outcome. Only two do: the transcript after
+    a call, and a call that never connected (busy, no answer). post_call_audio (sent when
+    "Send audio data" is on) carries ids and audio only: read as an outcome, it would turn an
+    answered call into a missed one and send a false push."""
+    data = event.get("data") if isinstance(event.get("data"), dict) else {}
     conversation = data.get("conversation_id")
-    if event.get("type") == "call_initiation_failure":
+    kind = event.get("type")
+    if kind == "call_initiation_failure":
         return conversation, "missed", 0
+    if kind != "post_call_transcription":
+        return None, "", None
     metadata = data.get("metadata") or {}
     duration = metadata.get("call_duration_secs")
     duration = int(duration) if isinstance(duration, int | float) else None
@@ -451,6 +458,9 @@ def handle_webhook(db: Database, sender: Any, event: dict[str, Any]) -> dict[str
     row = db.conn.execute("SELECT * FROM calls WHERE provider_id=?", (provider_id,)).fetchone()
     if row is None:
         return {"matched": False}
+    if row["status"] == "answered" and outcome != "answered":
+        # Picked up is final: a later or repeated event never turns it into a missed call.
+        return {"matched": True, "outcome": "answered"}
     now = clock.iso(clock.now())
     with db.tx() as c:
         c.execute("UPDATE calls SET status=?, ended_at=?, duration_seconds=? WHERE id=?",
@@ -496,6 +506,12 @@ def system_tool(kind: str) -> dict[str, Any]:
     return {"name": kind, "type": "system", "params": {"system_tool_type": kind}}
 
 
+# What ElevenLabs keeps of a conversation with our agents. Its defaults are to record the voice
+# and keep the conversation forever; ours: no recording, the transcript kept 30 days (time to
+# look into a failed call), then gone. Names, deadlines and mail cards are said in these calls.
+PRIVACY = {"record_voice": False, "retention_days": 30}
+
+
 def agent_config() -> dict[str, Any]:
     """The agent's settings as one reviewed object (pushed by `setup-agent`).
 
@@ -519,6 +535,7 @@ def agent_config() -> dict[str, Any]:
             **({"tts": {"voice_id": settings.elevenlabs_voice_id}}
                if settings.elevenlabs_voice_id else {}),
         },
+        "platform_settings": {"privacy": PRIVACY},
     }
 
 
