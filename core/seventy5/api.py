@@ -74,11 +74,12 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
         except Denied as err:
             raise ApiError(err.status, str(err), err.code) from err
 
-    def account_from(authorization: str | None) -> tuple[Any, int | None]:
+    def account_from(authorization: str | None,
+                     allow_deleted: bool = False) -> tuple[Any, int | None]:
         """For /api/me: (Supabase identity or None, student id or None). A signed-in student
         with no profile yet gets (identity, None); the demo gets (None, its id)."""
         try:
-            identity, row = state.gateway.identify(bearer(authorization))
+            identity, row = state.gateway.identify(bearer(authorization), allow_deleted)
         except Denied as err:
             raise ApiError(err.status, str(err), err.code) from err
         if identity is None and row is not None and row["auth_user_id"]:
@@ -109,7 +110,7 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
             raise HTTPException(401, str(err)) from err
         event = json.loads(body)
         sender = str(event.get("from", ""))
-        if accounts.LINK_CODE.match(str(event.get("text") or "")):
+        if accounts.link_code_in(str(event.get("text") or "")) is not None:
             # "LINK 75-XXXXXX": this number becomes the student's who made the code. The
             # signature above proves the bot saw it come from this number. Never filed.
             linked = accounts.link_from_bot(state.db, str(event.get("text")), sender)
@@ -118,6 +119,10 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
                     if linked is not None else
                     "That code didn't work: it may have expired. Make a new one in the app."}
         student = state.db.student_by_phone(sender)
+        if student is not None and student["auth_user_id"] and not accounts.whatsapp_ready():
+            # Signed with the public development secret: good enough for the invented demo
+            # student, never for a real account's data.
+            return {"ok": True}
         if student is None:
             # Unknown number: no reply, no row, no model call. Spam costs one SELECT.
             return {"ok": True}
@@ -386,9 +391,12 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
                 "password_min_length": 8,
                 "demo": True}
 
+    def caller(request: Request) -> str:
+        return auth.client_ip(request.headers, request.client.host if request.client else None)
+
     @api.get("/api/auth/username")
     def username_available(request: Request, u: str = "") -> dict[str, Any]:
-        if not _username_checks.allow(request.client.host if request.client else "?"):
+        if not _username_checks.allow(caller(request)):
             raise ApiError(429, "Too many checks. Wait a minute.", "rate_limited")
         return accounts.username_check(state.db, u)
 
@@ -399,9 +407,9 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
         and a wrong password, so this can't be used to find out who has an account."""
         if not auth.configured():
             raise ApiError(503, "Sign-in isn't set up on this server.", "auth_unavailable")
-        login = str(body.get("login") or "").strip().lower()
+        login = str(body.get("login") or "").strip().lower().removeprefix("@")
         password = str(body.get("password") or "")
-        ip = request.client.host if request.client else "?"
+        ip = caller(request)
         if not _login_by_ip.allow(ip) or not _login_by_name.allow(login):
             raise ApiError(429, "Too many tries. Wait a few minutes and try again.",
                            "rate_limited")
@@ -423,8 +431,10 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
             raise ApiError(400, "Confirm your email first: log in with your email address to "
                                 "get a new code.", "email_not_confirmed")
         if reply.status_code == 429:
-            raise ApiError(429, "Too many tries. Wait a few minutes and try again.",
-                           "rate_limited")
+            # Supabase counts username sign-ins against this server's address unless IP
+            # forwarding is on in the project: the email way goes straight from the phone.
+            raise ApiError(429, "Too many sign-ins right now. Log in with your email address "
+                                "instead, or try again in a few minutes.", "rate_limited")
         if reply.status_code >= 500:
             raise ApiError(503, "The sign-in service isn't answering. Try again.",
                            "auth_unavailable")
@@ -452,7 +462,7 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
     def delete_me(body: dict[str, Any], authorization: str | None = Header(None)) -> dict[str, Any]:
         """Deletes the account: every row, the mail read, the portal answers, Google revoked,
         then the login itself. The app asks twice before calling this."""
-        identity, sid = account_from(authorization)
+        identity, sid = account_from(authorization, allow_deleted=True)
         if identity is None:
             raise ApiError(403, "The demo account can't be deleted.", "demo_account")
         if body.get("confirm") != "DELETE":
@@ -465,6 +475,8 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
                 accounts.delete_everything(state.db, sid)
             except accounts.AccountError as err:
                 raise refusal(err) from err
+        # Its session lives on for up to an hour: it must not make a new profile meanwhile.
+        state.db.mark_deleted(identity.user_id, clock.iso(clock.now()))
         try:
             auth.delete_user(identity.user_id)
         except auth.AuthError as err:

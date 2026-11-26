@@ -239,7 +239,26 @@ email templates and your own SMTP: [`docs/supabase.md`](docs/supabase.md)); `BOT
   mail; a demo reset or cold start would have wiped every table; Parameter Store's
   `DATABASE_URL` lost to the `/tmp` default; an empty `.env` value overrode a default; a literal
   `%` in SQL broke on Postgres. The cascade now calls Bedrock's Messages API like the mail judge
-  (one model id, `anthropic.claude-haiku-5-5`). Tests: core 162 on SQLite (+3 Postgres-only) and
-  165 on Postgres and through the pooler; Android 57; the Lambda zip passes its smoke test on
-  SQLite and twice on Postgres (the second cold start keeps the day's demo). Not run here: a
-  real Supabase project, a phone (no emulator), the screens rendered.
+  (one model id, `anthropic.claude-haiku-5-5`).
+- 26 Nov: two independent reviews of that work (server: 12 findings, app: 13) and every one
+  fixed or documented. Server: the public development bot secret no longer accepts a real
+  account's events or links WhatsApp (it could have taken a student's number); a demo reset
+  replays on its own copy of the app instead of swapping the live models, one at a time, at most
+  3 a minute, and the demo also refreshes at 5 AM; rate limits use the address our proxy saw
+  (the last `X-Forwarded-For`), and a flood of keys no longer resets them; PortMax's and the mail
+  filter's tables are locked down wherever they open; a failed key fetch keeps the keys already
+  held; schema changes look before they lock and wait at most 5 s; a long message can't make the
+  link-code check slow; the mail jobs only read students with a mailbox; a token whose `alg`
+  doesn't fit its key is a 401, not a 500; a deleted account's session can't make a new profile.
+  App: who is signed in changes under one lock with a generation count, so a late refresh can't
+  bring back a logged-out session and a late answer is never applied to the next person; the
+  clean-up on a switch never calls back into the account code (no deadlock); a sign-in finishes
+  even if its screen went away; logging out first gets a token Supabase accepts; only Supabase's
+  own codes end a session; the session is read and written off the main thread and a passing
+  Keystore error no longer wipes it; a new reset code is checked again; the phone registers once
+  the profile exists; another server's sign-in settings are never used; switching person also
+  clears the portal WebView's storage and cache and the briefing's audio. Tests: core 170 on
+  SQLite (+3 Postgres-only), 173 on Postgres and through the pooler; Android 68 (the account
+  tests five times in a row); the Lambda zip passes its smoke test on SQLite and twice on
+  Postgres through the pooler, all 23 tables locked. Not run here: a real Supabase project, a
+  phone (no emulator), the screens rendered.

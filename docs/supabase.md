@@ -102,13 +102,19 @@ addresses of your Supabase team, and only a few an hour: enough to try it, not f
 ZeptoMail all work). For a quick demo only, turning **Confirm email** off also works: sign-up
 then signs in at once (password reset still needs email).
 
-**Optional:** **Authentication** → **Rate Limits** → **IP address forwarding** on. Then a
-username sign-in, which goes through the server, counts against the student's own address and
-not the server's. Email sign-ins go straight from the phone to Supabase either way.
+**Recommended:** **Authentication** → **Rate Limits** → **IP address forwarding** on. A
+username sign-in goes through the server; with forwarding on (and the secret key set) it counts
+against the student's own address. With it off, every username sign-in counts against the
+server's one address, so a burst of wrong passwords can make username sign-in wait a few
+minutes for everyone (the app then says to log in with the email, which goes straight from the
+phone to Supabase and is never affected).
 
 ## 6. Linking WhatsApp (optional) → `BOT_WHATSAPP_NUMBER`
 
-The bot's own WhatsApp number, `91XXXXXXXXXX`. In the app, **Settings** → **Link WhatsApp**
+Needs the bot's real webhook secret (`BOT_WEBHOOK_SECRET`, [`keys.md`](keys.md) step 3): with
+the development secret, which is public, anyone could sign a "LINK" message from any number, so
+the server refuses to link and accepts only the demo student's events. Then the bot's own
+WhatsApp number, `91XXXXXXXXXX`. In the app, **Settings** → **Link WhatsApp**
 shows a code (`LINK 75-ABC234`) and opens WhatsApp with it typed. The bot forwards it like any
 message; its signed webhook proves which number sent it, and that number becomes the student's.
 That number is also the one an urgent call rings. Without the parameter the app still shows the
@@ -147,10 +153,14 @@ phone ──(sign up · code · log in · refresh · reset)──► Supabase Au
   once; the server keeps only its SHA-256. It works for `/mcp` only, never for the app's API or
   the account.
 - **The demo account** is shared by everyone who taps **Try the demo**. It can't connect Google
-  or WhatsApp, get a token, change its profile or be deleted, and only it can run the demo tour.
+  or WhatsApp, get a token, change its profile or be deleted, and only it can run the demo tour
+  (at most 3 resets a minute). Its morning is refreshed at 5 AM each day. One thing it can do on
+  purpose: the urgent call. With `DEMO_STUDENT_PHONE` set, anyone trying the demo can ring that
+  phone, at most `CALL_MAX_PER_DAY` times a day; leave it unset when you aren't presenting.
 - **Delete account** (Settings, typing DELETE) revokes Google, forgets the college mail read,
-  removes the portal answers and every row, then the login itself (the secret key). The app
-  then forgets everything on the phone: session, cards, the portal login, notifications.
+  removes the portal answers and every row, then the login itself (the secret key). Its session,
+  still valid for up to an hour, is turned away from then on. The app then forgets everything on
+  the phone: session, cards, the portal login and its storage, notifications.
 
 ## When something is wrong
 

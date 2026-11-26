@@ -15,7 +15,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from fastapi.testclient import TestClient
 
 from conftest import at, file_item
-from seventy5 import accounts, auth, clock, config, demo, mail
+from seventy5 import accounts, auth, clock, config, demo, ingress, mail
 from seventy5 import api as api_module
 from seventy5.api import create
 from seventy5.db import STUDENT_TABLES, Database, token_hash
@@ -79,8 +79,9 @@ class FakeSupabase:
 def supa(monkeypatch):
     fake = FakeSupabase()
     on = replace(config.settings, supabase_url=URL, supabase_publishable_key=PUB,
-                 supabase_secret_key=SECRET, bot_whatsapp_number="919900000075")
-    for module in (auth, api_module, accounts):
+                 supabase_secret_key=SECRET, bot_whatsapp_number="919900000075",
+                 bot_secret="the-bots-own-secret")
+    for module in (auth, api_module, accounts, ingress):
         monkeypatch.setattr(module, "settings", on)
     monkeypatch.setattr(auth, "_client", fake.client)
     monkeypatch.setattr(auth, "_verifier", None)
@@ -394,8 +395,9 @@ def test_deleting_an_account_removes_every_row_and_the_login(make_app, supa):
                                  (sid,)).fetchone()["n"]
         assert left == 0, table
     assert len(a.db.all_cards(demo_sid)) == demo_items  # no one else's rows
-    # Signing in again (Supabase still had a session) is a fresh start, not the old account.
-    assert client.get("/api/me", headers=me).json()["onboarded"] is False
+    # Its session (valid for up to an hour more) is turned away, so the app signs out.
+    gone = client.get("/api/me", headers=me)
+    assert gone.status_code == 401 and gone.json()["code"] == "account_deleted"
 
 
 def test_deleting_needs_the_secret_key_and_a_failed_login_removal_can_be_retried(
@@ -445,11 +447,35 @@ def test_the_demo_morning_is_kept_for_the_day_then_refreshed(tmp_path, make_app)
     a, sid = make_app()
     clock.freeze(at(2030, 1, 7, 9, 0))
     demo.seed(a)
-    assert demo.seeded_today(a.db)
+    assert not demo.seeded_today(a.db)  # only a whole morning counts
+    assert demo.refresh_if_stale(a)
+    assert demo.seeded_today(a.db) and not demo.refresh_if_stale(a)
     clock.freeze(at(2030, 1, 7, 23, 0))
     assert demo.seeded_today(a.db)
-    clock.freeze(at(2030, 1, 8, 0, 5))
+    clock.freeze(at(2030, 1, 8, 5, 1))
     assert not demo.seeded_today(a.db)
+    assert demo.refresh_if_stale(a)  # the daily job makes the new day's morning
+
+
+def test_a_demo_reset_never_changes_how_real_messages_are_decided(make_app, supa):
+    from seventy5.jev import ScriptedDecider
+
+    a, client, me, sid = signed_in(make_app, supa)
+    live_jev, live_llm = a.cascade.jev, a.cascade.llm
+    assert isinstance(live_jev, ScriptedDecider)
+    demo.morning(a)
+    assert a.cascade.jev is live_jev and a.cascade.llm is live_llm
+
+
+def test_the_daily_demo_job_is_scheduled_with_the_core_jobs(make_app):
+    from seventy5.cloud import Router, current_jobs
+
+    a, _ = make_app()
+    router = Router(core=None, portmax=None, portal=None)
+    router.app = a
+    jobs = {job.name: job for job in current_jobs(router)}
+    assert {"reminders", "mail", "mail-continue", "demo-morning"} <= set(jobs)
+    assert [t.strftime("%H:%M") for t in jobs["demo-morning"].at] == ["05:00"]
 
 
 def test_the_demo_morning_never_lands_in_a_real_account_that_linked_its_number(make_app, supa):
@@ -537,7 +563,6 @@ def test_supabase_tables_are_closed_to_its_data_api(make_app):
     from mailfilter.store import metadata as mail_tables
     from portmax.store import metadata as portal_tables
 
-    from seventy5.cloud import lock_down_all
     from seventy5.db import CORE_TABLES, lock_down, open_store
 
     from mailfilter.store import Store as MailStore
@@ -546,13 +571,17 @@ def test_supabase_tables_are_closed_to_its_data_api(make_app):
     a, _ = make_app()
     open_store(PortalStore, PG, portal_tables)
     open_store(MailStore, PG, mail_tables)
-    with psycopg.connect(PG, autocommit=True) as c:
+    with psycopg.connect(PG, autocommit=True, prepare_threshold=None) as c:
         for role in ("anon", "authenticated"):
             c.execute(f"GRANT ALL ON ALL TABLES IN SCHEMA public TO {role}")
             c.execute(f"GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO {role}")
-    lock_down_all(a.db)
+    # Every entry point closes its own tables as it opens them: the core's Database, and the
+    # PortMax and mail filter stores (as the production pipeline and the laptop demo do).
+    Database(PG)
+    open_store(PortalStore, PG, portal_tables)
+    open_store(MailStore, PG, mail_tables)
     everything = [*CORE_TABLES, *portal_tables.tables, *mail_tables.tables]
-    with psycopg.connect(PG, autocommit=True) as c:
+    with psycopg.connect(PG, autocommit=True, prepare_threshold=None) as c:
         rows = c.execute("SELECT relname, relrowsecurity FROM pg_class c JOIN pg_namespace n"
                          " ON n.oid=c.relnamespace WHERE n.nspname='public' AND relkind='r'"
                          " AND relname = ANY(%s)", ([*portal_tables.tables, *mail_tables.tables,
@@ -564,7 +593,7 @@ def test_supabase_tables_are_closed_to_its_data_api(make_app):
                 assert not c.execute("SELECT has_table_privilege(%s, %s, 'SELECT')",
                                      (role, f"public.{name}")).fetchone()[0], (role, name)
     assert lock_down(a.db.conn, everything) == []  # a second start has nothing to change
-    with psycopg.connect(PG, autocommit=True) as c:
+    with psycopg.connect(PG, autocommit=True, prepare_threshold=None) as c:
         assert not c.execute("SELECT has_sequence_privilege('anon', 'public.items_id_seq', 'USAGE')"
                              ).fetchone()[0]
 
@@ -618,3 +647,124 @@ def test_a_new_student_gets_the_portal_subjects_without_typing_them(make_app, su
     merged = tools.subjects(a.db, sid)
     assert merged[0] == "Operating Systems" and set(demo.SUBJECTS) <= set(merged)
     assert len(merged) == len({m.lower() for m in merged})  # no subject twice
+
+
+
+# --- what the reviews found ----------------------------------------------------------------------
+def test_the_public_dev_bot_secret_never_links_or_reaches_a_real_account(make_app, supa, monkeypatch):
+    a, client, me, sid = signed_in(make_app, supa)
+    code = client.post("/api/me/whatsapp", headers=me).json()["code"]
+    assert _bot(client, f"LINK {code}", "919812345678").json()["linked"]
+    dev = replace(api_module.settings, bot_secret=config.DEV_BOT_SECRET)
+    for module in (api_module, accounts, ingress):
+        monkeypatch.setattr(module, "settings", dev)
+    refused = client.post("/api/me/whatsapp", headers=me)
+    assert refused.status_code == 503 and refused.json()["code"] == "whatsapp_unavailable"
+    # Anyone can sign with the public secret: a forged link from a victim's number does nothing,
+    assert _bot(client, f"LINK {code}", "919800000002").json()["linked"] is False
+    # and a forged forward from a real account's number is dropped unfiled.
+    _bot(client, "fake deadline tomorrow", "919812345678")
+    assert a.db.conn.execute("SELECT COUNT(*) AS n FROM events WHERE student_id=?",
+                             (sid,)).fetchone()["n"] == 0
+    # The demo student's own events still work on the dev secret (the demo tour).
+    _bot(client, "DBMS notes", demo.PHONE)
+    assert a.db.conn.execute("SELECT COUNT(*) AS n FROM events WHERE student_id=?",
+                             (demo.student_id(a.db),)).fetchone()["n"] > 0
+
+
+def test_a_long_message_is_never_slow_to_check_for_a_link_code():
+    started = time.monotonic()
+    assert accounts.link_code_in("link" + " " * 60000 + "!") is None
+    assert accounts.link_code_in("LINK: 75-abc234") == "75-ABC234"
+    assert accounts.link_code_in("  75-ABC234 ") == "75-ABC234"
+    assert accounts.link_code_in("please link 75-ABC234") is None
+    assert time.monotonic() - started < 0.5
+
+
+def test_rate_limits_use_the_address_our_proxy_saw(make_app, supa):
+    a, _ = make_app()
+    client = TestClient(create(a))
+    answers = [client.get("/api/auth/username", params={"u": f"n{i}"},
+                          headers={"x-forwarded-for": f"10.0.0.{i}, 203.0.113.9"}).status_code
+               for i in range(61)]
+    assert answers[60] == 429  # a different first address each time changes nothing
+    assert auth.client_ip({"x-forwarded-for": "1.2.3.4, 5.6.7.8"}, "9.9.9.9") == "5.6.7.8"
+    assert auth.client_ip({}, "9.9.9.9") == "9.9.9.9"
+
+
+def test_a_flood_of_new_keys_never_resets_the_count_of_one_being_guessed():
+    now = [0.0]
+    limiter = auth.Limiter(3, 300, clock=lambda: now[0])
+    limiter.MAX_KEYS = 50
+    assert all(limiter.allow("victim") for _ in range(3))
+    assert not limiter.allow("victim")
+    for i in range(200):
+        limiter.allow(f"junk-{i}")
+    assert not limiter.allow("victim")
+    now[0] += 301
+    assert limiter.allow("victim")  # its window passed: allowed again, as it should be
+
+
+def test_a_key_endpoint_outage_signs_no_one_out(supa):
+    now = [1000.0]
+    calls = {"n": 0}
+
+    def flaky(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return httpx.Response(200, json=supa.jwks())
+        raise httpx.ConnectError("down", request=request)
+
+    verifier = auth.Verifier(URL, PUB, http=httpx.Client(transport=httpx.MockTransport(flaky)),
+                             clock=lambda: now[0])
+    assert verifier.verify(supa.token()).user_id == ASHA
+    now[0] += auth.JWKS_TTL_SECONDS + 1  # stale: a refetch is due, and fails
+    assert verifier.verify(supa.token()).user_id == ASHA
+    assert verifier.verify(supa.token()).user_id == ASHA  # no refetch storm meanwhile
+    assert calls["n"] == 2
+
+
+def test_a_token_whose_alg_does_not_fit_its_key_is_refused_not_a_crash(make_app, supa):
+    import base64
+
+    a, client, me, sid = signed_in(make_app, supa)
+    good = supa.token()
+    header = base64.urlsafe_b64encode(json.dumps({"alg": "RS256", "kid": supa.kid,
+                                                  "typ": "JWT"}).encode()).decode().rstrip("=")
+    forged = header + "." + good.split(".", 1)[1]
+    for path in ("/api/cards", "/api/me"):
+        answer = client.get(path, headers=bearer(forged))
+        assert answer.status_code == 401, (path, answer.text)
+
+
+def test_a_deleted_accounts_session_cannot_make_a_new_profile(make_app, supa):
+    a, client, me, sid = signed_in(make_app, supa)
+    assert client.post("/api/me/delete", headers=me, json={"confirm": "DELETE"}).json()["deleted"]
+    again = client.post("/api/me", headers=me, json={"username": "asha.k", "name": "Asha"})
+    assert again.status_code == 401 and again.json()["code"] == "account_deleted"
+    assert client.get("/api/me", headers=me).json()["code"] == "account_deleted"
+    assert a.db.student_by_username("asha.k") is None
+    # Retrying the deletion (say Supabase failed the first time) still works.
+    assert client.post("/api/me/delete", headers=me, json={"confirm": "DELETE"}).json()["deleted"]
+
+
+def test_the_mail_jobs_only_look_at_students_with_a_mailbox(make_app, supa):
+    a, client, me, sid = signed_in(make_app, supa)
+    for i in range(30):
+        a.db.create_student(name=f"S{i}", auth_user_id=f"user-{i}", username=f"s{i}")
+    assert a.db.mailbox_students() == [demo.student_id(a.db)]
+
+
+def test_demo_resets_are_limited(tmp_path, monkeypatch, supa):
+    from mailfilter.store import Store as MailStore
+    from portmax.store import Store
+
+    from seventy5 import cloud, tools
+
+    monkeypatch.setattr(tools, "_portal", Store(f"sqlite:///{tmp_path.as_posix()}/pm.db"))
+    monkeypatch.setattr(mail, "_store", MailStore(f"sqlite:///{tmp_path.as_posix()}/mail.db"))
+    monkeypatch.setattr(mail, "_demo", {})
+    client = TestClient(cloud.build_router(str(tmp_path / "75.db")))
+    shared = bearer(demo.TOKEN)
+    answers = [client.post("/demo/reset", headers=shared).status_code for _ in range(4)]
+    assert answers == [200, 200, 200, 429]

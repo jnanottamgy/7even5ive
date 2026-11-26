@@ -99,10 +99,17 @@ class SessionStore(context: Context, private val sealer: Sealer = KeystoreSealer
             else -> Saved.Nobody
         }
     } catch (e: Exception) {
-        // A key gone with a reinstall or a restore elsewhere, or a damaged file: sign in again.
-        prefs.edit().clear().apply()
+        // A key gone for good (a restore on another phone, the Keystore reset) or a damaged
+        // file: sign in again. Anything else (the Keystore busy after an update) leaves the
+        // saved session alone, to be read at the next start.
+        if (gone(e)) prefs.edit().clear().apply()
         Saved.Nobody
     }
+
+    private fun gone(e: Exception): Boolean =
+        e is javax.crypto.AEADBadTagException || e is java.security.UnrecoverableKeyException ||
+            e is android.security.keystore.KeyPermanentlyInvalidatedException ||
+            e is IllegalArgumentException || e is kotlinx.serialization.SerializationException
 
     @Synchronized
     override fun save(saved: Saved) {

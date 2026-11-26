@@ -3,6 +3,8 @@ package com.sevenfive.app
 import android.app.Application
 import android.content.Context
 import android.webkit.CookieManager
+import android.webkit.WebStorage
+import android.webkit.WebView
 import androidx.core.app.NotificationManagerCompat
 import com.sevenfive.app.data.Accounts
 import com.sevenfive.app.data.ApiException
@@ -37,6 +39,9 @@ class SevenFiveApp : Application() {
         super.onCreate()
         Diagnostics.install(this)
         container = AppContainer(this)
+        // Who was signed in, read off the main thread (the Keystore is slow); the app shows its
+        // start screen until then.
+        Thread({ container.accounts.start() }, "accounts-start").start()
         Notifications.createChannels(this)
         // Every 15 minutes the outbox is pulled even while the app is closed; Firebase, when the
         // build has it, wakes the phone sooner. The portal session is kept alive every 30.
@@ -60,7 +65,7 @@ class AppContainer(context: Context) {
     val cards = CardsRepository(core)
     val portalStore = PortalStore(context)
     val portal = PortalEngine(portmax, cards, portalStore, BuildConfig.COLLEGE)
-    val finder = ServerFinder(servers, cards, portmax)
+    val finder = ServerFinder(servers, cards, portmax, mayMove = { accounts.session == null })
     val outbox = OutboxPuller(appContext, core)
     val keepAlive = KeepAliveSettings(context)
     val briefingPlayer = BriefingPlayer(appContext, core)
@@ -68,36 +73,45 @@ class AppContainer(context: Context) {
 
     init {
         accounts.core = core
-        accounts.onSwitch = { leaving -> forget(leaving) }
+        accounts.onSwitch = { leaving, token -> forget(leaving, token) }
         accounts.onArrive = { Push.register(appContext) }
-        accounts.start()
     }
 
     /**
-     * Someone else is about to use the app: nothing of the last person's may stay. Their phone
-     * registration (so their reminders stop waking this phone), their cards, the outbox position,
-     * the portal login in the WebView, shown notifications, and audio in progress.
+     * Someone else uses the app now: nothing of the last person's may stay. Their phone
+     * registration (so their reminders stop waking this phone; sent with their own [token], as
+     * it is), their cards, the outbox position, the portal login and everything the portal's
+     * WebView stored, shown notifications, the briefing's audio. Each step on its own: one
+     * failing (a WebView being updated) never stops the rest.
      */
-    private suspend fun forget(leaving: Saved) {
-        if (leaving != Saved.Nobody) {
-            Push.currentToken(appContext)?.let { token ->
+    private suspend fun forget(leaving: Saved, token: String?) {
+        if (leaving != Saved.Nobody && token != null) {
+            Push.currentToken(appContext)?.let { device ->
                 try {
-                    core.removeDevice(token)
+                    core.removeDeviceAs(token, device)
                 } catch (e: ApiException) {
-                    // Their session may be over already; the server drops dead tokens itself.
+                    // Their session may be over already; the next sign-in on this phone moves
+                    // the registration to that student anyway.
                 }
             }
         }
         cards.reset()
         outbox.forget()
         portmax.forget()
+        runCatching {
+            appContext.cacheDir.listFiles { f -> f.name.startsWith("briefing-") }?.forEach { it.delete() }
+        }
         withContext(Dispatchers.Main) {
-            briefingPlayer.stop()
-            voice.stop()
-            CookieManager.getInstance().removeAllCookies(null)
-            CookieManager.getInstance().flush()
-            portalStore.forget()
-            NotificationManagerCompat.from(appContext).cancelAll()
+            runCatching { briefingPlayer.stop() }
+            runCatching { voice.stop() }
+            runCatching {
+                CookieManager.getInstance().removeAllCookies(null)
+                CookieManager.getInstance().flush()
+            }
+            runCatching { WebStorage.getInstance().deleteAllData() }
+            runCatching { WebView(appContext).apply { clearCache(true) }.destroy() }
+            runCatching { portalStore.forget() }
+            runCatching { NotificationManagerCompat.from(appContext).cancelAll() }
         }
     }
 }

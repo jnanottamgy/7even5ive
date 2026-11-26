@@ -24,7 +24,7 @@ Never commit a key, never put one in the template, the APK or a chat.
 |---|---|---|---|
 | 1 | `APPROVAL_SECRET` | Signs one-time approval tokens | A development secret |
 | 2 | `TOKEN_ENCRYPTION_KEY` | Encrypts stored Google refresh tokens | A fixed development key |
-| 3 | `BOT_WEBHOOK_SECRET` | The WhatsApp bot's signed events reach 7even5ive | Only the demo tour can sign events |
+| 3 | `BOT_WEBHOOK_SECRET` | The WhatsApp bot's signed events reach 7even5ive; students can link WhatsApp | A public development secret: only the demo student's events are accepted, and WhatsApp can't be linked |
 | 4 | `LIBRARY_URL`, `LIBRARY_SERVICE_TOKEN` | Files shows the bot's real library; deadlines backfill | Invented demo library |
 | 5 | `DEMO_PHONE` | The number the bot knows the demo student by (`91XXXXXXXXXX`) | Invented `919900000001` |
 | 6 | `ANTHROPIC_API_KEY` *or* `BEDROCK_MODEL_ID` | Claude for the cascade and for judging real college mail | Recorded demo answers; real mail can't be read |

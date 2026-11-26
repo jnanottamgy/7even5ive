@@ -96,7 +96,9 @@ class Verifier:
         self.clock = clock
         self._lock = threading.Lock()
         self._keys: dict[str, Any] = {}
-        self._keys_at = -1e9
+        self._fetched_at = -1e9  # the last fetch that worked
+        self._tried_at = -1e9  # the last fetch tried, worked or not
+        self._last_ok = False
         self._asked: dict[str, Identity] = {}  # HS256 without the secret: SHA-256(token) -> who
 
     # --- the key set ------------------------------------------------------------------------
@@ -107,27 +109,49 @@ class Verifier:
             response = self.http.get(f"{self.issuer}/.well-known/jwks.json",
                                      headers={"apikey": self.publishable_key})
             response.raise_for_status()
-            found = response.json().get("keys", [])
+            data = response.json()
+            found = data.get("keys", []) if isinstance(data, dict) else []
+            if not isinstance(found, list):
+                raise ValueError("keys is not a list")
         except (httpx.HTTPError, ValueError) as err:
             log.warning("jwks fetch failed", extra={"error": type(err).__name__})
             raise AuthError("Can't check your sign-in right now. Try again in a moment.", 503,
                             "auth_unavailable") from err
-        keys: dict[str, Any] = {}
+        keys: dict[str, tuple[str | None, Any]] = {}
         for jwk in found:
             try:
-                keys[str(jwk.get("kid"))] = jwt.PyJWK(jwk).key
-            except (jwt.PyJWKError, jwt.InvalidKeyError, ValueError, TypeError):
+                keys[str(jwk.get("kid"))] = (jwk.get("alg"), jwt.PyJWK(jwk).key)
+            except (jwt.PyJWKError, jwt.InvalidKeyError, ValueError, TypeError, AttributeError):
                 continue  # a key type this build can't use: skip it, keep the others
-        self._keys, self._keys_at = keys, self.clock()
+        self._keys, self._fetched_at = keys, self.clock()
 
-    def _key(self, kid: str | None) -> Any:
+    def _key(self, kid: str | None, alg: str) -> Any:
+        """The public key for this token. The set is fetched again after 10 minutes, or for a
+        key id not seen yet, but at most every 30 seconds; when a fetch fails, the keys already
+        held keep working (a short outage of the key endpoint signs no one out)."""
         with self._lock:
-            age = self.clock() - self._keys_at
-            if age > JWKS_TTL_SECONDS or (str(kid) not in self._keys and age > JWKS_RETRY_SECONDS):
-                self._fetch_keys()
-            key = self._keys.get(str(kid))
-        if key is None:
+            now = self.clock()
+            known = str(kid) in self._keys
+            stale = now - self._fetched_at > JWKS_TTL_SECONDS
+            if (stale or not known) and now - self._tried_at >= JWKS_RETRY_SECONDS:
+                self._tried_at = now
+                try:
+                    self._fetch_keys()
+                    self._last_ok = True
+                except AuthError:
+                    self._last_ok = False
+                    if not known:
+                        raise
+            entry = self._keys.get(str(kid))
+            last_ok = self._last_ok
+        if entry is None:
+            if not last_ok:
+                raise AuthError("Can't check your sign-in right now. Try again in a moment.", 503,
+                                "auth_unavailable")
             raise AuthError("This sign-in was made with a key this server doesn't trust.")
+        key_alg, key = entry
+        if key_alg and key_alg != alg:
+            raise AuthError("Not a valid sign-in token.")
         return key
 
     # --- checking a token -------------------------------------------------------------------
@@ -136,11 +160,11 @@ class Verifier:
 
         try:
             header = jwt.get_unverified_header(token)
-        except jwt.PyJWTError as err:
+        except (jwt.PyJWTError, ValueError, TypeError) as err:
             raise AuthError("Not a valid sign-in token.") from err
         alg = header.get("alg")
         if alg in ("ES256", "RS256"):
-            key: Any = self._key(header.get("kid"))
+            key: Any = self._key(header.get("kid"), alg)
         elif alg == "HS256" and self.jwt_secret:
             key = self.jwt_secret
         elif alg == "HS256":
@@ -153,7 +177,8 @@ class Verifier:
                                 options={"require": ["exp", "sub", "aud", "iss"]})
         except jwt.ExpiredSignatureError as err:
             raise AuthError("Your session expired. Sign in again.") from err
-        except jwt.PyJWTError as err:
+        except (jwt.PyJWTError, TypeError, ValueError, KeyError) as err:
+            # TypeError/ValueError: a token whose alg doesn't fit the key's type.
             raise AuthError("Not a valid sign-in token.") from err
         return self._identity(claims)
 
@@ -191,10 +216,13 @@ class Verifier:
                             "auth_unavailable") from err
         if response.status_code in (401, 403):
             raise AuthError("Your session expired. Sign in again.")
-        if response.status_code != 200:
+        try:
+            user = response.json() if response.status_code == 200 else None
+        except ValueError:
+            user = None
+        if not isinstance(user, dict):
             raise AuthError("Can't check your sign-in right now. Try again in a moment.", 503,
                             "auth_unavailable")
-        user = response.json()
         identity = self._identity({**claims, "sub": user.get("id"),
                                    "email": user.get("email") or claims.get("email"),
                                    "is_anonymous": user.get("is_anonymous", False)})
@@ -273,7 +301,12 @@ def password_login(email: str, password: str, client_ip: str | None,
 # --- a small limiter for the endpoints anyone can call ---------------------------------------
 class Limiter:
     """At most `limit` calls per `window` seconds per key, in this process. Lambda is pinned to
-    one instance, so this holds; elsewhere it is per instance, a best effort."""
+    one instance, so this holds; elsewhere it is per instance, a best effort.
+    Why no reset when full: forgetting every key would let a flood of junk keys wipe the count
+    for the one being guessed. Keys past their window are dropped; if the table is still full,
+    new keys wait (existing ones keep their counts)."""
+
+    MAX_KEYS = 20000
 
     def __init__(self, limit: int, window: float, clock: Callable[[], float] = time.monotonic):
         self.limit, self.window, self.clock = limit, window, clock
@@ -283,12 +316,26 @@ class Limiter:
     def allow(self, key: str) -> bool:
         now = self.clock()
         with self._lock:
-            if len(self._hits) > 20000:
-                self._hits.clear()
-            hits = self._hits.setdefault(key, deque())
+            hits = self._hits.get(key)
+            if hits is None:
+                if len(self._hits) >= self.MAX_KEYS:
+                    for old in [k for k, h in self._hits.items() if not h or now - h[-1] > self.window]:
+                        del self._hits[old]
+                    if len(self._hits) >= self.MAX_KEYS:
+                        return False
+                hits = self._hits.setdefault(key, deque())
             while hits and now - hits[0] > self.window:
                 hits.popleft()
             if len(hits) >= self.limit:
                 return False
             hits.append(now)
             return True
+
+
+def client_ip(headers: Any, fallback: str | None) -> str:
+    """The caller's address for rate limits. Behind API Gateway, CloudFront or Render, the last
+    X-Forwarded-For entry is the one our own proxy added: a client can put anything in front of
+    it, but not after it. Without the header, the connection's own address."""
+    forwarded = str(headers.get("x-forwarded-for") or "")
+    last = forwarded.split(",")[-1].strip() if forwarded else ""
+    return last or fallback or "?"

@@ -99,9 +99,19 @@ class Router:
                 return
 
 
+# When the demo student gets a fresh morning each day, India time: before anyone is up.
+DEMO_REFRESH_AT = "05:00"
+
+
 def current_jobs(router: Router) -> list[Any]:
-    """The core app's jobs, each re-bound to whichever app the router holds when it runs."""
+    """The core app's jobs, each re-bound to whichever app the router holds when it runs, and
+    the demo's daily refresh (a warm Lambda or a long-running server may not restart for days)."""
     from dataclasses import replace
+
+    from mailfilter.config import parse_times
+
+    from . import demo
+    from .scheduler import Job
 
     def runner(name: str) -> Any:
         def run() -> object:
@@ -112,7 +122,10 @@ def current_jobs(router: Router) -> list[Any]:
 
         return run
 
-    return [replace(job, run=runner(job.name)) for job in router.app.jobs()]
+    jobs = [replace(job, run=runner(job.name)) for job in router.app.jobs()]
+    jobs.append(Job("demo-morning", lambda: demo.refresh_if_stale(router.app),
+                    at=parse_times(DEMO_REFRESH_AT)))
+    return jobs
 
 
 def public_url() -> str | None:
@@ -137,18 +150,6 @@ class PortalSignIn:
             return None
         row = self.router.app.db.student(sid)
         return str(row["portal_id"]) if row is not None and row["portal_id"] else None
-
-
-def lock_down_all(db: Any) -> None:
-    """Row level security on the core's, PortMax's and the mail filter's tables (Supabase)."""
-    from mailfilter.store import metadata as mail_tables
-    from portmax.store import metadata as portal_tables
-
-    from .db import CORE_TABLES, lock_down
-
-    changed = lock_down(db.conn, [*CORE_TABLES, *portal_tables.tables, *mail_tables.tables])
-    if changed:
-        print(f"row level security set on {len(changed)} tables", flush=True)
 
 
 def build_router(db_url: str | None = None) -> Router:
@@ -184,10 +185,10 @@ def build_router(db_url: str | None = None) -> Router:
     portal = create_app(config=PortalConfig(captcha="fixed"))
     router = Router(core, None, portal)
     router.app = app
-    # One store each, shared with the core's own reads (tools.portal_store, mail.store).
+    # One store each, shared with the core's own reads (tools.portal_store, mail.store); each
+    # locks its tables down on Supabase as it opens (db.open_store), as Database does the core's.
     router.portmax = create_api(portal_store(), PortalSignIn(router), connectors)
     mail.store()
-    lock_down_all(app.db)
     where = fixed or "the address each request arrives at"
     print(f"\n7even5ive is serving; portal pages must come from {where}", flush=True)
     from .mcp_server import http_app
@@ -225,8 +226,12 @@ def demo_api(router: Router) -> Any:
     from .config import settings
     from .gateway import Denied
 
+    from .auth import Limiter
+
     api = FastAPI(title="7even5ive demo tour", docs_url=None, redoc_url=None, openapi_url=None)
     resets = {"n": 0}
+    # The demo's token is public: a few resets a minute is plenty for a presenter.
+    reset_limit = Limiter(3, 60)
 
     def student(authorization: str | None) -> int:
         try:
@@ -293,7 +298,9 @@ def demo_api(router: Router) -> Any:
         Only the demo student's rows change. Its phones (wake-ups) and call settings stay; no
         other student is touched (on Supabase they share this database)."""
         student(authorization)
-        _, lines = demo.morning(router.app, router.core)
+        if not reset_limit.allow("reset"):
+            raise HTTPException(429, "The demo was reset a moment ago. Try again in a minute.")
+        _, lines = demo.morning(router.app)
         router.portal = create_app(config=PortalConfig(captcha="fixed"))
         resets["n"] += 1
         print(f"demo reset {resets['n']}: replayed {len(lines)} demo messages", flush=True)

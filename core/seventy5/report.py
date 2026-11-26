@@ -8,7 +8,7 @@ key's value, never a number, never an address that identifies a student.
 
 from __future__ import annotations
 
-from .config import settings
+from .config import DEV_BOT_SECRET, settings
 
 
 def lines() -> list[str]:
@@ -29,7 +29,8 @@ def lines() -> list[str]:
         ("Accounts (sign up, log in)", signing_in, "only the shared demo account"),
         ("Jev (message types, spam)", bool(s.jev_api_key), "every item goes to the LLM step"),
         ("LLM (dates, titles, mail judge)", llm, "recorded answers in the demo; real items need review"),
-        ("WhatsApp bot webhook", s.bot_secret != "dev-bot-secret", "dev secret: only the demo tour can sign"),
+        ("WhatsApp bot webhook", s.bot_secret != DEV_BOT_SECRET,
+         "public dev secret: only the demo student's events are accepted, no WhatsApp linking"),
         ("Bot's WhatsApp number (Link WhatsApp)", bool(s.bot_whatsapp_number),
          "the app shows the code to send, without a button"),
         ("Bot library (Files)", bool(s.library_url and s.library_service_token), "invented demo library"),

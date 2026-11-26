@@ -232,20 +232,16 @@ def check_all(db: Database, deadline: float | None = None) -> int:
     """The 1 PM and 9 PM job: every student's mailbox. One student's failure never stops the
     rest. Returns how many were checked."""
     done = 0
-    rows = db.conn.execute("SELECT id FROM students ORDER BY id").fetchall()
-    for row in rows:
-        if mode(db, int(row["id"])) == "none":
-            continue  # no mailbox to read
+    for sid in db.mailbox_students():
         if not _room(deadline):
             break  # mail-continue picks up whoever is left
         try:
-            check(db, int(row["id"]), "scheduled", deadline=deadline)
+            check(db, sid, "scheduled", deadline=deadline)
             done += 1
         except MailUnavailable as err:
-            log.info("mail check skipped", extra={"student": row["id"], "status": err.status})
+            log.info("mail check skipped", extra={"student": sid, "status": err.status})
         except Exception as err:  # noqa: BLE001 - logged by type only; it may quote mail
-            log.error("mail check crashed", extra={"student": row["id"],
-                                                   "error": type(err).__name__})
+            log.error("mail check crashed", extra={"student": sid, "error": type(err).__name__})
     return done
 
 
@@ -266,13 +262,12 @@ def continue_unfinished(db: Database, deadline: float | None = None) -> int:
     On Lambda each turn has about 20 seconds, so a big first Gmail check finishes over a few
     minutes."""
     done = 0
-    for row in db.conn.execute("SELECT id FROM students ORDER BY id").fetchall():
-        sid = int(row["id"])
+    for sid in db.mailbox_students():
+        if not _room(deadline):
+            break
         which = mode(db, sid)
         if which == "none" or not unfinished(mailbox_key(sid, which)):
             continue
-        if not _room(deadline):
-            break
         try:
             check(db, sid, "continue", deadline=deadline)
             done += 1

@@ -21,6 +21,9 @@ class ServerFinder(
     private val cards: CardsRepository,
     private val portmax: PortMaxApi,
     private val discovery: Discovery = Discovery(),
+    /** False while someone is signed in with an account: their session belongs to the server
+     * they signed in on, so it is never swapped for whatever answers on the Wi-Fi. */
+    private val mayMove: () -> Boolean = { true },
 ) {
     private val _searching = MutableStateFlow(false)
     val searching: StateFlow<Boolean> = _searching.asStateFlow()
@@ -39,7 +42,7 @@ class ServerFinder(
             val due = System.currentTimeMillis() - lastSearch > RETRY_MILLIS
             // Only a laptop setup is searched for: an online server that is briefly down (or
             // waking up) must not be swapped for whatever answers on the local Wi-Fi.
-            if (state.unreachable && due && !servers.config.value.isOnline) find(userAsked = false)
+            if (state.unreachable && due && !servers.config.value.isOnline && mayMove()) find(userAsked = false)
         }
     }
 
@@ -58,6 +61,10 @@ class ServerFinder(
                 return null
             }
             val current = runCatching { URI(servers.config.value.coreUrl).host }.getOrNull()
+            if (host != current && !mayMove()) {
+                if (userAsked) _messages.tryEmit("Found a laptop at $host: log out first to use it.")
+                return null
+            }
             if (host != current) {
                 servers.save(ServerConfig.forHost(host))
                 portmax.forget()

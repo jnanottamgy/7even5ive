@@ -15,8 +15,8 @@ from seventy5.llm import Proposal, ScriptedLLM
 from seventy5.notify import LogSender
 
 TABLES = ("audit, reminders, calendar, pending_approvals, used_approvals, notifications, devices,"
-          " calls, jobs, google_accounts, connect_codes, wa_link_codes, items, events, subjects,"
-          " students")
+          " calls, jobs, google_accounts, connect_codes, wa_link_codes, deleted_accounts, items,"
+          " events, subjects, students")
 
 
 @pytest.fixture

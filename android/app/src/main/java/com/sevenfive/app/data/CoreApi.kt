@@ -155,9 +155,9 @@ class CoreApi(private val http: Http, val baseUrl: () -> String) {
 
     suspend fun unlinkWhatsApp(): Me = AppJson.decodeFromString(http.post("${baseUrl()}/api/me/whatsapp/delete", "{}"))
 
-    /** This phone stops being woken for the student signing out. */
-    suspend fun removeDevice(token: String) {
-        http.post("${baseUrl()}/api/devices/remove", buildJsonObject { put("token", token) }.toString())
+    /** This phone stops being woken for the student signing out, as them ([bearer]). */
+    suspend fun removeDeviceAs(bearer: String, token: String) {
+        http.postAs("${baseUrl()}/api/devices/remove", buildJsonObject { put("token", token) }.toString(), bearer)
     }
 
     /** The status a request with no token gets (the gateway's 401). */

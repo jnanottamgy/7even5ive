@@ -80,10 +80,15 @@ class AuthViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    fun reloadConfig() {
-        if (_loadingConfig.value) return
+    private var configJob: Job? = null
+
+    /** Asks the server for its sign-in settings. [force]: a load already under way (perhaps to
+     * the previous address) is replaced. */
+    fun reloadConfig(force: Boolean = false) {
+        if (configJob?.isActive == true && !force) return
+        configJob?.cancel()
         _loadingConfig.value = true
-        viewModelScope.launch {
+        configJob = viewModelScope.launch {
             try {
                 accounts.loadConfig()
             } finally {
@@ -162,7 +167,7 @@ class AuthViewModel(private val container: AppContainer) : ViewModel() {
         container.servers.save(ServerConfig.parse(input))
         container.portmax.forget()
         container.cards.reset()
-        reloadConfig()
+        reloadConfig(force = true)
     }
 
     // --- the profile ----------------------------------------------------------------------------------

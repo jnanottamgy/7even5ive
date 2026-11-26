@@ -123,9 +123,11 @@ class Gateway:
     def _log(self, student_id: int | None, tool: str, decision: str, reason: str) -> None:
         self.db.audit(student_id, tool, decision, reason, clock.iso(clock.now()))
 
-    def identify(self, token: str | None) -> tuple[Any, Any]:
+    def identify(self, token: str | None, allow_deleted: bool = False) -> tuple[Any, Any]:
         """(Supabase identity or None, student row or None) for a token, without the scope
-        rules: /api/me uses it, for a signed-in student who has no profile yet."""
+        rules: /api/me uses it, for a signed-in student who has no profile yet. The session of
+        an account deleted a moment ago is refused (401 account_deleted), except for a retry of
+        the deletion itself (allow_deleted)."""
         from . import auth
 
         token = (token or "").strip()
@@ -138,7 +140,10 @@ class Gateway:
                 if err.status == 401:
                     self._log(None, "*", "deny", "invalid session")
                 raise Denied(str(err), err.status, err.code) from err
-            return identity, self.db.student_by_auth(identity.user_id)
+            row = self.db.student_by_auth(identity.user_id)
+            if row is None and not allow_deleted and self.db.is_deleted(identity.user_id):
+                raise Denied("This account was deleted.", 401, "account_deleted")
+            return identity, row
         row = self.db.student_by_token(token)
         if row is None:
             self._log(None, "*", "deny", "unknown caller")

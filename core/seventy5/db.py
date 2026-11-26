@@ -144,13 +144,18 @@ CREATE TABLE IF NOT EXISTS connect_codes (
 CREATE TABLE IF NOT EXISTS wa_link_codes (
   code TEXT PRIMARY KEY, student_id BIGINT NOT NULL, expires_at TEXT NOT NULL
 );
+-- Supabase users whose account was deleted: their access token stays valid for up to an hour,
+-- and must not make a new profile in that time. Ids only.
+CREATE TABLE IF NOT EXISTS deleted_accounts (
+  auth_user_id TEXT PRIMARY KEY, deleted_at TEXT NOT NULL
+);
 """
 
 # Every table above, in the order a student's rows are deleted (children before parents).
 STUDENT_TABLES = ("audit", "calendar", "pending_approvals", "notifications", "devices", "calls",
                   "reminders", "items", "events", "subjects", "google_accounts", "connect_codes",
                   "wa_link_codes")
-CORE_TABLES = (*STUDENT_TABLES, "students", "used_approvals", "jobs")
+CORE_TABLES = (*STUDENT_TABLES, "students", "used_approvals", "jobs", "deleted_accounts")
 
 # Columns added after the first release. A fresh database gets them from SCHEMA above only if
 # they are listed there too; an older database gets them here, once.
@@ -257,11 +262,18 @@ def sqlalchemy_engine(url: str) -> Any:
 
 def open_store(cls: Any, url: str, metadata: Any) -> Any:
     """A PortMax or mail filter Store on sqlalchemy_engine: built without its own engine, which
-    would know nothing of the pooler, then given ours and its tables."""
+    would know nothing of the pooler, then given ours and its tables, locked down like the
+    core's (lock_down) wherever the store is opened from."""
     store = cls(sqlalchemy_url(url), create=False)
     store.engine.dispose()
     store.engine = sqlalchemy_engine(url)
     metadata.create_all(store.engine)
+    if is_pg(url):
+        conn = _Conn(url)
+        try:
+            lock_down(conn, metadata.tables)
+        finally:
+            conn.close()
     return store
 
 
@@ -411,6 +423,18 @@ class _Conn:
 _NAME = re.compile(r"^[a-z_][a-z0-9_]*$")
 
 
+def _ddl(conn: _Conn, sql: str) -> None:
+    """A schema change. On Postgres it gives up after 5 s waiting for a lock (an idle
+    transaction elsewhere) instead of holding up the start and everyone queued behind it;
+    the next start tries again."""
+    if not conn.pg:
+        conn.execute(sql)
+        return
+    with conn.transaction() as c:
+        c.execute("SET LOCAL lock_timeout = '5s'")
+        c.execute(sql)
+
+
 def lock_down(conn: _Conn, tables: Iterable[str]) -> list[str]:
     """Supabase only: row level security on, and no grants to anon or authenticated, for each
     of these tables (only these: never another app's). Idempotent and cheap: three catalogue
@@ -438,9 +462,9 @@ def lock_down(conn: _Conn, tables: Iterable[str]) -> list[str]:
         if row["rls"] and not row["granted"]:
             continue
         if not row["rls"]:
-            conn.execute(f'ALTER TABLE public."{row["name"]}" ENABLE ROW LEVEL SECURITY')
+            _ddl(conn, f'ALTER TABLE public."{row["name"]}" ENABLE ROW LEVEL SECURITY')
         if row["granted"]:
-            conn.execute(f'REVOKE ALL ON TABLE public."{row["name"]}" FROM {", ".join(roles)}')
+            _ddl(conn, f'REVOKE ALL ON TABLE public."{row["name"]}" FROM {", ".join(roles)}')
         changed.append(row["name"])
     if roles:
         # The identity columns' sequences: nothing outside this service needs them either.
@@ -451,7 +475,7 @@ def lock_down(conn: _Conn, tables: Iterable[str]) -> list[str]:
                 " n.oid=c.relnamespace JOIN pg_depend d ON d.objid=c.oid AND d.deptype IN ('a','i')"
                 " JOIN pg_class t ON t.oid=d.refobjid WHERE n.nspname='public' AND c.relkind='S'"
                 f" AND t.relname IN ({marks}) AND ({seq_granted})", wanted).fetchall():
-            conn.execute(f'REVOKE ALL ON SEQUENCE public."{seq["name"]}" FROM {", ".join(roles)}')
+            _ddl(conn, f'REVOKE ALL ON SEQUENCE public."{seq["name"]}" FROM {", ".join(roles)}')
     return changed
 
 
@@ -474,17 +498,19 @@ class Database:
             have = self.conn.columns(table)
             for name, decl in wanted.items():
                 if name not in have:
-                    self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+                    _ddl(self.conn, f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
         # Tokens used to be stored as they are: keep only their hash, so they still work.
         for row in self.conn.execute("SELECT id, mcp_token FROM students WHERE mcp_token IS NOT"
                                      " NULL AND token_hash IS NULL").fetchall():
             self.conn.execute("UPDATE students SET token_hash=?, mcp_token=NULL WHERE id=?",
                               (token_hash(str(row["mcp_token"])), row["id"]))
-        if self.conn.pg:
+        if self.conn.pg and self.conn.execute(
+                "SELECT 1 FROM pg_constraint WHERE conname='events_idempotency_key_key'"
+                " AND conrelid='public.events'::regclass").fetchone() is not None:
             # Event keys used to be unique across all students (a classmate's Classroom work
             # would have been dropped as a repeat); now they are unique per student only.
-            self.conn.execute("ALTER TABLE events DROP CONSTRAINT IF EXISTS"
-                              " events_idempotency_key_key")
+            # Checked first: the ALTER locks the whole table, and is needed once in its life.
+            _ddl(self.conn, "ALTER TABLE events DROP CONSTRAINT events_idempotency_key_key")
 
     def close(self) -> None:
         self.conn.close()
@@ -553,6 +579,24 @@ class Database:
             for table in STUDENT_TABLES:
                 c.execute(f"DELETE FROM {table} WHERE student_id=?", (student_id,))
             return c.execute("DELETE FROM students WHERE id=?", (student_id,)).rowcount == 1
+
+    def mark_deleted(self, auth_user_id: str, now: str) -> None:
+        with self.tx() as c:
+            c.execute("INSERT INTO deleted_accounts VALUES (?,?) ON CONFLICT(auth_user_id)"
+                      " DO NOTHING", (auth_user_id, now))
+
+    def is_deleted(self, auth_user_id: str) -> bool:
+        return self.conn.execute("SELECT 1 FROM deleted_accounts WHERE auth_user_id=?",
+                                 (auth_user_id,)).fetchone() is not None
+
+    def mailbox_students(self) -> list[int]:
+        """Students with a mailbox to read: a Google account, or no account of their own (the
+        demo's invented mailbox). Real accounts without Google have none and cost no query."""
+        rows = self.conn.execute(
+            "SELECT s.id FROM students s WHERE s.auth_user_id IS NULL OR EXISTS"
+            " (SELECT 1 FROM google_accounts g WHERE g.student_id = s.id) ORDER BY s.id"
+        ).fetchall()
+        return [int(r["id"]) for r in rows]
 
     # --- WhatsApp linking ------------------------------------------------------------------
     def add_link_code(self, code: str, student_id: int, expires_at: str) -> None:

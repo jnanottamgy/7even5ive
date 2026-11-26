@@ -547,12 +547,17 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
 
     fun useOnline() = saveServers(container.servers.buildDefault)
 
-    fun saveServers(config: ServerConfig) {
+    fun saveServers(config: ServerConfig) = viewModelScope.launch {
+        // An account's session belongs to the server it was made on: log out there first (its
+        // phone registration goes with it), then move. The demo just moves.
+        val signedIn = container.accounts.session != null
+        if (signedIn) container.accounts.signOut()
         container.servers.save(config)
         container.portmax.forget()
         container.cards.reset()
-        refresh()
-        say("Saved. Connecting to ${config.coreUrl}")
+        container.accounts.loadConfig()
+        if (!signedIn) refresh()
+        say(if (signedIn) "Server changed to ${config.coreUrl}: log in there." else "Saved. Connecting to ${config.coreUrl}")
     }
 
     private fun action(key: String, block: suspend () -> Unit) {
@@ -561,6 +566,11 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         viewModelScope.launch {
             try {
                 block()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // An answer this app can't read, a WebView being updated: say so, never crash.
+                say("Something went wrong. Try again.")
             } finally {
                 _busy.update { it - key }
             }

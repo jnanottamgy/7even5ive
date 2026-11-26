@@ -27,6 +27,10 @@ def _load_dotenv(path: Path) -> None:
 ROOT = Path(__file__).resolve().parent.parent
 _load_dotenv(ROOT / ".env")
 
+# The bot webhook's development secret: in this repository, so anyone can sign with it. While it
+# is in use the webhook accepts events for the demo student only, and WhatsApp can't be linked.
+DEV_BOT_SECRET = "dev-bot-secret"
+
 _DATABASE_URL = (os.environ.get("DATABASE_URL") or str(ROOT / "data" / "75.db"))
 # On Supabase all three share one database (their tables have distinct names); locally each
 # has its own SQLite file. An explicit PORTMAX_/MAILFILTER_DATABASE_URL always wins.
@@ -54,7 +58,7 @@ class Settings:
         ch for ch in os.environ.get("BOT_WHATSAPP_NUMBER", "") if ch.isdigit())
 
     # Signed events from the WhatsApp bot. Dev default only; preflight refuses it in prod.
-    bot_secret: str = (os.environ.get("BOT_WEBHOOK_SECRET") or "dev-bot-secret")
+    bot_secret: str = (os.environ.get("BOT_WEBHOOK_SECRET") or DEV_BOT_SECRET)
     # Why 300 s: long enough for clock drift, short enough that a captured request
     # cannot be replayed later.
     bot_max_skew_seconds: int = 300

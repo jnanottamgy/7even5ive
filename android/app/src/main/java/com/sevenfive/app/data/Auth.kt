@@ -6,6 +6,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -98,7 +99,8 @@ data class WhatsAppLink(
     val link: String? = null,
 )
 
-/** What the profile form sends. Null fields are left as they are. */
+/** What the profile form sends. Null fields are left as they are, except the year when
+ * [sendYear] is set (the edit form sends it always, so it can be cleared). */
 data class ProfileForm(
     val username: String? = null,
     val name: String? = null,
@@ -107,6 +109,7 @@ data class ProfileForm(
     val year: Int? = null,
     val interests: String? = null,
     val subjects: List<String>? = null,
+    val sendYear: Boolean = false,
 )
 
 // --- Supabase Auth's own answers ------------------------------------------------------------------
@@ -296,9 +299,16 @@ class SupabaseAuth(private val client: OkHttpClient, private val now: () -> Long
             return ApiException(status, detail, code.ifBlank { null })
         }
 
+        /** Supabase's own words for "this session is over" (the current error codes, and the
+         * older `invalid_grant`). Nothing else ends a session: a 401 for a rotated API key, or a
+         * 403 page from Supabase's edge, is a problem to retry, not a reason to sign out. */
+        private val ENDED = setOf(
+            "refresh_token_not_found", "refresh_token_already_used", "session_not_found",
+            "session_expired", "user_not_found", "user_banned", "invalid_grant",
+        )
+
         /** A session that the refresh endpoint refused for good: sign in again. */
-        fun ended(e: ApiException): Boolean =
-            e.status in 400..403 && e.code != "over_request_rate_limit" && e.status != 429
+        fun ended(e: ApiException): Boolean = e.status in 400..403 && e.code in ENDED
     }
 }
 
@@ -308,7 +318,7 @@ fun ProfileForm.toJson(): JsonObject = buildJsonObject {
     name?.let { put("name", it) }
     college?.let { put("college", it) }
     branch?.let { put("branch", it) }
-    year?.let { put("year", it) }
+    if (year != null) put("year", year) else if (sendYear) put("year", JsonNull)
     interests?.let { put("interests", it) }
     subjects?.let { list -> put("subjects", JsonArray(list.map { JsonPrimitive(it) })) }
 }

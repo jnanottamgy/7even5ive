@@ -29,9 +29,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.toMutableStateList
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -93,7 +93,10 @@ private fun ProfileEditor(vm: AuthViewModel, initial: Profile?, button: String, 
     var branch by rememberSaveable { mutableStateOf(initial?.branch.orEmpty()) }
     var year by rememberSaveable { mutableStateOf(initial?.year ?: 0) }
     var interests by rememberSaveable { mutableStateOf(initial?.interests.orEmpty()) }
-    val subjects = remember { mutableStateListOf<String>().apply { addAll(initial?.subjects.orEmpty()) } }
+    // Saved across rotation like the other fields.
+    val subjects = rememberSaveable(saver = listSaver(save = { it.toList() }, restore = { it.toMutableStateList() })) {
+        initial?.subjects.orEmpty().toMutableStateList()
+    }
     var subject by rememberSaveable { mutableStateOf("") }
     var tried by rememberSaveable { mutableStateOf(false) }
     val focus = LocalFocusManager.current
@@ -130,6 +133,7 @@ private fun ProfileEditor(vm: AuthViewModel, initial: Profile?, button: String, 
                 year = year.takeIf { it in 1..6 },
                 interests = interests.trim(),
                 subjects = subjects.toList(),
+                sendYear = true, // so that clearing it clears it
             ),
             done = onSaved,
         )

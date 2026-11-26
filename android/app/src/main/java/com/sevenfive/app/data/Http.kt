@@ -40,6 +40,10 @@ class Http(private val tokens: TokenSource) {
 
     suspend fun post(url: String, json: String, auth: Boolean = true): String = text(url, json, auth)
 
+    /** As exactly [bearer], once: no token source, no refresh, no retry. For the one last call
+     * made for someone who is leaving ([Accounts.onSwitch]). */
+    suspend fun postAs(url: String, json: String, bearer: String): String = send(url, json, bearer) { it.string() }
+
     /** A binary answer (the briefing's mp3). Same errors as [get]. */
     suspend fun getBytes(url: String): ByteArray = exchange(url, null, true) { it.bytes() }
 

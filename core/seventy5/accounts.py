@@ -36,7 +36,10 @@ RESERVED = frozenset({
     "me", "settings", "login", "signup", "account", "accounts", "moderator", "security",
     "privacy", "terms", "anthropic", "claude", "supabase",
 })
-LINK_CODE = re.compile(r"^\s*(?:link\s*[:\-]?\s*)?(75-[A-Z0-9]{6})\s*$", re.IGNORECASE)
+# "LINK 75-ABC234" (any case; "link:", "link -" too). One character class between the word and
+# the code, so a long run of spaces can't make the match slow; and only short texts are tried.
+LINK_CODE = re.compile(r"^\s*(?:link\b[\s:\-]*)?(75-[A-Z0-9]{6})\s*$", re.IGNORECASE)
+LINK_MAX_CHARS = 40
 _CODE_LETTERS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # no 0/O, 1/I/L: read aloud or retyped
 LINK_MINUTES = 15
 TOKEN_PREFIX = "75p_"
@@ -235,8 +238,27 @@ def drop_token(db: Database, sid: int) -> None:
 
 
 # --- WhatsApp -------------------------------------------------------------------------------------
+def link_code_in(text: str | None) -> str | None:
+    """The code in a "LINK 75-XXXXXX" message, upper case, or None."""
+    if not text or len(text) > LINK_MAX_CHARS:
+        return None
+    match = LINK_CODE.match(text)
+    return match.group(1).upper() if match else None
+
+
+def whatsapp_ready() -> bool:
+    """Linking needs the bot's real secret: with the public development one, anyone could sign
+    a "LINK" message from any number and take that number over."""
+    from .config import DEV_BOT_SECRET
+
+    return settings.bot_secret != DEV_BOT_SECRET
+
+
 def start_whatsapp(db: Database, sid: int) -> dict[str, Any]:
     refuse_demo(db, sid, "link WhatsApp")
+    if not whatsapp_ready():
+        raise AccountError("Linking WhatsApp isn't set up on this server yet.", 503,
+                           "whatsapp_unavailable")
     code = "75-" + "".join(secrets.choice(_CODE_LETTERS) for _ in range(6))
     expires = clock.now() + timedelta(minutes=LINK_MINUTES)
     db.add_link_code(code, sid, clock.iso(expires))
@@ -252,10 +274,10 @@ def start_whatsapp(db: Database, sid: int) -> dict[str, Any]:
 def link_from_bot(db: Database, text: str, phone: str) -> int | None:
     """The bot forwarded "LINK 75-XXXXXX" from this number (its webhook is signed). Returns the
     student now linked, or None when the code is unknown, used or expired."""
-    match = LINK_CODE.match(text or "")
-    if match is None or not re.fullmatch(r"\d{8,15}", phone or ""):
+    code = link_code_in(text)
+    if code is None or not whatsapp_ready() or not re.fullmatch(r"\d{8,15}", phone or ""):
         return None
-    sid = db.link_whatsapp(match.group(1).upper(), phone, clock.iso(clock.now()))
+    sid = db.link_whatsapp(code, phone, clock.iso(clock.now()))
     if sid is not None:
         db.audit(sid, "whatsapp_link", "allow", "code from the bot", clock.iso(clock.now()))
     return sid

@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import threading
 import time
 from datetime import timedelta
 from typing import Any
@@ -169,7 +170,6 @@ def seed(app: Any) -> int:
             c.execute("INSERT INTO subjects(student_id, name) VALUES (?,?)", (sid, name))
     seed_portal()
     mail.reset_demo(sid)
-    db.job_ran(SEED_JOB, clock.iso(clock.now()), None)
     return sid
 
 
@@ -228,29 +228,50 @@ def live_models() -> bool:
     return bool(settings.jev_api_key and (settings.anthropic_api_key or settings.bedrock_model_id))
 
 
-def morning(app: Any, api: Any) -> tuple[int, list[str]]:
-    """Seed the demo student and replay the morning through this app: (sid, log lines).
+_morning_lock = threading.Lock()
 
-    The invented morning replays its recorded answers unless DEMO_LIVE_REPLAY=1 (a laptop
-    showing the models at work). On a cold Lambda start a live replay would spend its 29 s and
-    money on invented messages."""
+
+def morning(app: Any) -> tuple[int, list[str]]:
+    """Seed the demo student and replay the morning: (sid, log lines).
+
+    The replay runs on its own copy of the app: the same database and outbox, but its own queue
+    and a cascade of its own, with the recorded answers (or, with DEMO_LIVE_REPLAY=1 on a laptop,
+    the live models). The live app's models are never swapped, so a real student's message
+    arriving during a demo reset is decided as always. One morning at a time: two resets at once
+    would interleave their deletes and inserts. Only when the whole morning is in is it recorded
+    as today's (seeded_today), so a cold start cut short tries again at the next one.
+    On a cold Lambda start a live replay would spend its 29 s and money on invented messages,
+    which is why recorded answers are the default."""
     from fastapi.testclient import TestClient
 
     from . import mail, sync
+    from .api import create
+    from .app import App
+    from .cascade import Cascade
+    from .jobqueue import Queue
 
-    replay_live = live_models() and os.environ.get("DEMO_LIVE_REPLAY") == "1"
-    kept = (app.cascade.jev, app.cascade.llm)
-    if not replay_live:
-        app.cascade.jev, app.cascade.llm = recorded_answers()
-    try:
-        sid = seed(app)
-        lines = play(app, TestClient(api), sid)
-    finally:
-        app.cascade.jev, app.cascade.llm = kept
-    if app.db.student(sid)["wa_phone"]:
-        lines += sync.backfill(app.db, sid)
-    lines += mail.startup(app.db, sid)
-    return sid, lines
+    with _morning_lock:
+        if live_models() and os.environ.get("DEMO_LIVE_REPLAY") == "1":
+            jev, llm = app.cascade.jev, app.cascade.llm
+        else:
+            jev, llm = recorded_answers()
+        replay = App(db=app.db, queue=Queue(), cascade=Cascade(app.db, jev, llm),
+                     gateway=app.gateway, last=[], sender=app.sender, caller=app.caller)
+        sid = seed(replay)
+        lines = play(replay, TestClient(create(replay)), sid)
+        if app.db.student(sid)["wa_phone"]:
+            lines += sync.backfill(app.db, sid)
+        lines += mail.startup(app.db, sid)
+        app.db.job_ran(SEED_JOB, clock.iso(clock.now()), None)
+        return sid, lines
+
+
+def refresh_if_stale(app: Any) -> bool:
+    """The daily job: a new demo morning when today's hasn't been made yet. True if it was."""
+    if seeded_today(app.db):
+        return False
+    morning(app)
+    return True
 
 
 def prepare(db_url: str | None = None, run_jobs: bool = False,
@@ -274,7 +295,7 @@ def prepare(db_url: str | None = None, run_jobs: bool = False,
         sid = student_id(app.db)
         assert sid is not None
         return app, api, sid, live, ["demo      today's demo morning kept (seeded earlier today)"]
-    sid, lines = morning(app, api)
+    sid, lines = morning(app)
     return app, api, sid, live, lines
 
 

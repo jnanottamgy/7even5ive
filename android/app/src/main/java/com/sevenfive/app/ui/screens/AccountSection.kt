@@ -28,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -162,6 +163,7 @@ private fun copySecret(context: Context, text: String?) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
     if (text == null) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) clipboard.clearPrimaryClip()
+        else clipboard.setPrimaryClip(ClipData.newPlainText("", "")) // nothing to clear with before 9
         return
     }
     val clip = ClipData.newPlainText("7even5ive token", text)
@@ -172,7 +174,7 @@ private fun copySecret(context: Context, text: String?) {
 @Composable
 private fun TokenDialog(token: PersonalToken, onDone: () -> Unit) {
     val context = LocalContext.current
-    var copied by remember { mutableStateOf(false) }
+    var copied by rememberSaveable { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = {},
         title = { Text("Your personal token") },
