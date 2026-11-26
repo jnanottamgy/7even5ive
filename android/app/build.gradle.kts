@@ -22,6 +22,10 @@ android {
         buildConfigField("String", "DEFAULT_HOST", "\"${prop("sevenfive.defaultHost", "10.0.2.2")}\"")
         buildConfigField("String", "STUDENT_TOKEN", "\"${prop("sevenfive.studentToken", "demo-student-token")}\"")
         buildConfigField("String", "COLLEGE", "\"${prop("sevenfive.college", "mockcollege")}\"")
+        // When set, the portal login WebView opens this URL instead of the shared server address.
+        // Lets a build point at a real college portal (e.g. MSRIT) while core/PortMax stay on the
+        // cloud. Empty: use the server address, as before.
+        buildConfigField("String", "PORTAL_OVERRIDE", "\"${prop("sevenfive.portalUrl", "")}\"")
     }
 
     // One committed debug key, so every CI build signs the same way and installs as an update
@@ -87,6 +91,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.1")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.1")
     implementation("androidx.navigation:navigation-compose:2.9.0")
+    // WebViewCompat.addDocumentStartJavaScript, to neutralise the portal's WebView fingerprint
+    // before its own scripts run.
+    implementation("androidx.webkit:webkit:1.12.1")
     // Frosted glass: real backdrop blur on Android 12+, a translucent tint before. 1.6.10 is the
     // release built on Compose 1.8 and activity 1.10.1, the versions above.
     implementation("dev.chrisbanes.haze:haze:1.6.10")

@@ -5,6 +5,8 @@ import android.net.Uri
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import com.sevenfive.app.data.ApiException
 import com.sevenfive.app.data.CardsRepository
 import com.sevenfive.app.data.Connector
@@ -65,8 +67,21 @@ class PortalBridge {
 }
 
 /**
- * The portal's own page, unchanged: JavaScript and cookies on, the WebView's real
- * User-Agent, no file access. We never fill in or submit the login form.
+ * Injected before the portal's own scripts run. Contineo's `cs_env` detector flags an Android
+ * WebView through `navigator.userAgentData.brands` ("Android WebView") and submits it as a hidden
+ * field at login; an iOS WebView has no `userAgentData` at all and is accepted. So we make Android
+ * match iOS by removing `userAgentData`. It is redefined on `Navigator.prototype`, not on the
+ * `navigator` instance, so the page's own anti-tamper check — `getOwnPropertyDescriptor(navigator,
+ * "userAgentData")` — still sees no own property. Runs at document start in every frame.
+ */
+private const val HIDE_WEBVIEW_JS =
+    "(function(){try{Object.defineProperty(Navigator.prototype,'userAgentData'," +
+        "{get:function(){return undefined;},configurable:true});}catch(e){}})();"
+
+/**
+ * The portal's own page, unchanged: JavaScript and cookies on, a plain Chrome User-Agent (the
+ * portal refuses the WebView "wv" token), no file access. We never fill in or submit the login
+ * form.
  */
 @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
 fun WebView.configureForPortal(bridge: PortalBridge) {
@@ -83,6 +98,11 @@ fun WebView.configureForPortal(bridge: PortalBridge) {
     CookieManager.getInstance().setAcceptCookie(true)
     CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
     addJavascriptInterface(bridge, PortalBridge.NAME)
+    // Hide the Android-WebView tell before any portal script runs (see HIDE_WEBVIEW_JS). Needs a
+    // recent System WebView; where unavailable the UA fix alone still clears the other checks.
+    if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+        WebViewCompat.addDocumentStartJavaScript(this, HIDE_WEBVIEW_JS, setOf("*"))
+    }
 }
 
 suspend fun WebView.eval(script: String): String = suspendCancellableCoroutine { cont ->

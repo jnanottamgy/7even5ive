@@ -45,6 +45,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sevenfive.app.BuildConfig
 import com.sevenfive.app.data.ApiException
 import com.sevenfive.app.data.Connector
 import com.sevenfive.app.portal.PortalBridge
@@ -71,6 +72,9 @@ private enum class Phase { Loading, Login, Fetching, Failed }
 fun PortalScreen(vm: AppViewModel, onDone: () -> Unit) {
     val engine = vm.container.portal
     val servers by vm.servers.collectAsStateWithLifecycle()
+    // A build may point the login WebView at a real college portal (e.g. MSRIT) while core and
+    // PortMax stay on the server address. Empty override falls back to the server's portal URL.
+    val portalBase = BuildConfig.PORTAL_OVERRIDE.ifBlank { servers.portalUrl }
     val scope = rememberCoroutineScope()
     val bridge = remember { PortalBridge() }
 
@@ -124,7 +128,7 @@ fun PortalScreen(vm: AppViewModel, onDone: () -> Unit) {
                 SyncOutcome.SessionExpired -> {
                     phase = Phase.Login
                     hint = "You're not logged in yet. Finish logging in on the portal page."
-                    web.loadUrl(engine.loginUrl(servers.portalUrl, c))
+                    web.loadUrl(engine.loginUrl(portalBase, c))
                 }
                 is SyncOutcome.Failed -> {
                     phase = Phase.Failed
@@ -178,8 +182,8 @@ fun PortalScreen(vm: AppViewModel, onDone: () -> Unit) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 val c = connector
                 if (c != null) {
-                    val loginUrl = engine.loginUrl(servers.portalUrl, c)
-                    val portalOrigin = Uri.parse(servers.portalUrl)
+                    val loginUrl = engine.loginUrl(portalBase, c)
+                    val portalOrigin = Uri.parse(portalBase)
                     key(webKey) { AndroidView(
                         modifier = Modifier.fillMaxSize(),
                         factory = { ctx ->
@@ -191,7 +195,14 @@ fun PortalScreen(vm: AppViewModel, onDone: () -> Unit) {
                                 trail("WebView configured")
                                 webViewClient = object : WebViewClient() {
                                     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                                        if (sameOrigin(request.url, portalOrigin)) return false
+                                        // The portal itself, plus Google reCAPTCHA's own frames — the
+                                        // login page needs them to score the invisible challenge.
+                                        val host = request.url.host ?: ""
+                                        if (sameOrigin(request.url, portalOrigin) ||
+                                            host == "google.com" || host.endsWith(".google.com") ||
+                                            host == "gstatic.com" || host.endsWith(".gstatic.com") ||
+                                            host == "recaptcha.net" || host.endsWith(".recaptcha.net")
+                                        ) return false
                                         vm.say("This screen only opens your college portal.")
                                         return true
                                     }
@@ -224,7 +235,7 @@ fun PortalScreen(vm: AppViewModel, onDone: () -> Unit) {
                                     override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
                                         if (!request.isForMainFrame) return
                                         pageLoading = false
-                                        problem = "Couldn't open the portal at ${servers.portalUrl}: ${error.description}"
+                                        problem = "Couldn't open the portal at $portalBase: ${error.description}"
                                         phase = Phase.Failed
                                     }
                                 }
@@ -262,7 +273,7 @@ fun PortalScreen(vm: AppViewModel, onDone: () -> Unit) {
                                     webKey++
                                 } else {
                                     phase = Phase.Login
-                                    web.loadUrl(engine.loginUrl(servers.portalUrl, connector!!))
+                                    web.loadUrl(engine.loginUrl(portalBase, connector!!))
                                 }
                             })
                         }
