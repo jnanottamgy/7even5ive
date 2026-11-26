@@ -26,6 +26,8 @@ def main() -> None:
     skip = shutil.ignore_patterns("__pycache__", "*.pyc")
     shutil.copytree(HERE / "seventy5", BUILD / "seventy5", ignore=skip)
     shutil.copytree(HERE.parent / "portmax" / "src" / "portmax", BUILD / "portmax", ignore=skip)
+    shutil.copytree(HERE.parent / "mailfilter" / "src" / "mailfilter", BUILD / "mailfilter",
+                    ignore=skip)
     subprocess.run(
         [
             sys.executable, "-m", "pip", "install", "--quiet", "--target", str(BUILD),

@@ -528,3 +528,21 @@ def test_backfill_pulls_upcoming_deadlines_and_subjects(app, monkeypatch):
     assert "backfill 1 deadlines" in lines[0]
     assert a.db.item_by_external(sid, "bot:deadline:3")["title"] == "Mini project"
     assert "OS Lab" in a.db.subjects(sid)
+
+
+def test_the_demo_mornings_weekdays_always_fall_inside_the_week():
+    from datetime import datetime, timedelta
+
+    from seventy5 import clock
+
+    cases = [(datetime(2030, 1, 4, 0, 30), 4, 23, 59, "2030-01-04T23:59+05:30"),  # Fri, just past midnight
+             (datetime(2030, 1, 7, 10, 0), 0, 9, 0, "2030-01-14T09:00+05:30"),    # Mon, after 9
+             (datetime(2030, 1, 5, 9, 0), 5, 10, 0, "2030-01-05T10:00+05:30")]    # Sat, before 10
+    try:
+        for now, weekday, hour, minute, expected in cases:
+            clock.freeze(now.replace(tzinfo=clock.IST))
+            got = demo._next(weekday, hour, minute)
+            assert got == expected
+            assert clock.now() < datetime.fromisoformat(got) <= clock.now() + timedelta(days=7)
+    finally:
+        clock.freeze(None)

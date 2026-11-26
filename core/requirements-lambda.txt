@@ -1,11 +1,17 @@
 # What the Lambdas install (boto3 is already in the runtime). Kept apart from requirements.txt
-# because Lambda can't install ../portmax as an editable path; build_lambda.py copies it in.
+# because Lambda can't install ../portmax or ../mailfilter as editable paths; build_lambda.py and
+# build_lambda_zip.py copy their source in.
 fastapi>=0.115
 mangum>=0.19
 httpx>=0.27
+# Bedrock clients come from boto3/botocore, already in the runtime: no [bedrock] extra here.
 anthropic>=2.0
 psycopg[binary]>=3.2
-# PortMax's own runtime needs
+# MCP over HTTP at /mcp (mcp_server.py), and the mail filter's own MCP adapter
+mcp>=2.3,<3
+# Signs Firebase's token request; encrypts the stored Google refresh tokens
+cryptography>=42
+# PortMax's and the mail filter's runtime needs
 pydantic>=2.9
 sqlalchemy>=2.0
 pyyaml>=6.0

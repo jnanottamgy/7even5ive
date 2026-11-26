@@ -1,7 +1,8 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >-
-  7even5ive serverless demo: the self-contained demo (core, PortMax's phone API and the mock
-  college portal, with the recorded demo data) as one Lambda behind an API Gateway HTTP API.
+  7even5ive serverless demo: the self-contained demo (core, PortMax's phone API, the mock college
+  portal and MCP over HTTP, with the recorded demo data) as one Lambda behind an API Gateway HTTP
+  API, plus a once-a-minute tick for reminders, urgent calls, college mail and Classroom.
   Handler seventy5.lambda_demo.handler; code from core/build_lambda_zip.py. The production
   pipeline, several functions sharing Supabase, is core/template.yaml.
 
@@ -21,9 +22,24 @@ Parameters:
       true keeps the function to one instance at a time, which the demo needs: the mock
       portal's login and the demo data live in that instance. Needs a Lambda concurrency quota
       above 10 (see docs/online.md); false works on any account but two instances can disagree.
+  SettingsPath:
+    Type: String
+    Default: /7even5ive-demo
+    AllowedPattern: "^/[A-Za-z0-9_./-]+[A-Za-z0-9_-]$"
+    Description: >-
+      Parameter Store path (this region) holding the keys as SecureStrings, one per name, e.g.
+      /7even5ive-demo/ELEVENLABS_API_KEY. Read at every cold start. See docs/keys.md.
+  TickEnabled:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: >-
+      true runs the background jobs once a minute (reminders, calls, the 1 PM and 9 PM mail
+      check, Classroom). false: nothing fires on its own.
 
 Conditions:
   Pin: !Equals [!Ref PinToOneInstance, "true"]
+  Tick: !Equals [!Ref TickEnabled, "true"]
 
 Resources:
   FunctionRole:
@@ -35,14 +51,31 @@ Resources:
           - Effect: Allow
             Principal: { Service: lambda.amazonaws.com }
             Action: sts:AssumeRole
-      # Logs only: the demo calls no other AWS service.
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: settings-and-models
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # The keys: only this path, read-only. SecureStrings under the AWS-managed key
+              # (aws/ssm) need no KMS statement.
+              - Effect: Allow
+                Action: ssm:GetParametersByPath
+                Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${SettingsPath}
+              # Claude on Bedrock: the cascade (bedrock-runtime) and the mail judge
+              # (bedrock-mantle). Inference profiles route across regions, hence "*".
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                  - bedrock-mantle:*
+                Resource: "*"
 
   DemoFunction:
     Type: AWS::Lambda::Function
     Properties:
-      Description: 7even5ive demo - core, PortMax phone API and mock portal (seventy5.lambda_demo)
+      Description: 7even5ive demo - core, PortMax phone API, mock portal and MCP (seventy5.lambda_demo)
       Runtime: python3.12
       Architectures: [x86_64]   # what build_lambda_zip.py packages and what was tested
       Handler: seventy5.lambda_demo.handler
@@ -57,6 +90,7 @@ Resources:
         Variables:
           PORTMAX_DEV_TOKENS: demo-student-token:demo
           PYTHONDONTWRITEBYTECODE: "1"
+          SSM_PREFIX: !Ref SettingsPath
 
   # Kept a week; the app logs counts and ids only, never message or mail text.
   FunctionLogs:
@@ -66,7 +100,7 @@ Resources:
       RetentionInDays: 7
 
   # Quick create: a $default route to the function and an auto-deployed $default stage,
-  # so every path (/api, /v1, the portal's /index.php) reaches the one function.
+  # so every path (/api, /v1, /mcp, the portal's /index.php) reaches the one function.
   HttpApi:
     Type: AWS::ApiGatewayV2::Api
     Properties:
@@ -82,6 +116,27 @@ Resources:
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*
 
+  # The background loop of a long-running server, as a schedule. A tick that meets the one
+  # pinned instance busy is retried by Lambda's async queue a moment later.
+  TickRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: 7even5ive background jobs (reminders, calls, college mail, Classroom)
+      ScheduleExpression: rate(1 minute)
+      State: !If [Tick, ENABLED, DISABLED]
+      Targets:
+        - Id: tick
+          Arn: !GetAtt DemoFunction.Arn
+          Input: '{"seventy5": "tick"}'
+
+  TickPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref DemoFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt TickRule.Arn
+
 Outputs:
   AppUrl:
     Description: Put this in android/gradle.properties as sevenfive.defaultServer.
@@ -89,3 +144,15 @@ Outputs:
   HealthCheck:
     Description: Answers {"service":"7even5ive","version":1}; the first call takes a few seconds.
     Value: !Sub ${HttpApi.ApiEndpoint}/api/health
+  McpUrl:
+    Description: MCP over HTTP for Claude or ChatGPT (Authorization Bearer the student's token).
+    Value: !Sub ${HttpApi.ApiEndpoint}/mcp
+  GoogleRedirectUri:
+    Description: Add this as an Authorized redirect URI on the Google OAuth client (Web application).
+    Value: !Sub ${HttpApi.ApiEndpoint}/api/google/callback
+  CallWebhookUrl:
+    Description: ElevenLabs post-call webhook (HMAC) for the urgent call's outcome.
+    Value: !Sub ${HttpApi.ApiEndpoint}/api/calls/webhook
+  BotWebhookUrl:
+    Description: SEVENTY5_WEBHOOK_URL on the WhatsApp bot (SHELF).
+    Value: !Sub ${HttpApi.ApiEndpoint}/bot/webhook

@@ -32,6 +32,17 @@ PHONE = "".join(ch for ch in os.environ.get("DEMO_PHONE", "919900000001") if ch.
 TOKEN = "demo-student-token"
 
 
+def _next(weekday: int, hour: int, minute: int = 0) -> str:
+    """The next such weekday and time after now (Mon=0). Always within the coming 7 days, so the
+    demo's "due Fri" sits in "due this week" whatever day and hour the demo runs."""
+    now = clock.now()
+    days = (weekday - now.weekday()) % 7
+    at = (now + timedelta(days=days)).replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if at <= now:
+        at += timedelta(days=7)
+    return clock.iso(at)
+
+
 def _at(days: int, hour: int, minute: int = 0) -> str:
     day = clock.now() + timedelta(days=days)
     return clock.iso(day.replace(hour=hour, minute=minute, second=0, microsecond=0))
@@ -39,21 +50,20 @@ def _at(days: int, hour: int, minute: int = 0) -> str:
 
 def messages() -> list[dict[str, Any]]:
     """(source, message, what Jev says, what the LLM says) -- the LLM part only if reached."""
-    friday = (4 - clock.now().weekday()) % 7 or 7
     return [
         # The bot already filed this one: 7even5ive checks its answer and files it, no model.
         {"source": "whatsapp", "text": "DBMS Assignment 3 due Fri 11:59 pm",
          "decision": {"kind": "deadline", "subject": "Database Management Systems",
-                      "title": "DBMS Assignment 3", "due_at": _at(friday, 23, 59)},
+                      "title": "DBMS Assignment 3", "due_at": _next(4, 23, 59)},
          "jev": {"kind": ("deadline", .95), "subject": ("Database Management Systems", .93)},
-         "llm": Proposal("deadline", "Database Management Systems", "DBMS Assignment 3", _at(friday, 23, 59))},
+         "llm": Proposal("deadline", "Database Management Systems", "DBMS Assignment 3", _next(4, 23, 59))},
         {"source": "whatsapp", "text": "DBMS unit 3 notes", "attachment": "DBMS_Unit3_notes.pdf",
          "decision": {"kind": "material", "subject": "Database Management Systems"},
          "jev": {"kind": ("material", .96), "subject": ("Database Management Systems", .94)}},
         {"source": "whatsapp", "text": "CIE-2 for DCN on Monday, units 3 and 4",
          "jev": {"kind": ("exam", .91), "subject": ("Computer Networks", .62)},
          "llm": Proposal("exam", "Computer Networks", "DCN CIE-2 (units 3 and 4)",
-                         _at((7 - clock.now().weekday()) % 7 or 7, 9))},
+                         _next(0, 9))},
         {"source": "whatsapp", "text": "ok 👍", "jev": {"kind": ("chitchat", .97)}},
         {"source": "whatsapp", "text": "DCN lab manual, print it",
          "attachment": "DCN_Lab_Manual.docx",
@@ -70,7 +80,7 @@ def messages() -> list[dict[str, Any]]:
          "jev": {"kind": ("event", .9), "subject": ("Miscellaneous", .9), "spam": .04,
                  "relevant": .88},
          "llm": Proposal("event", "Miscellaneous", "IISc open hackathon",
-                         _at((5 - clock.now().weekday()) % 7 or 7, 10))},
+                         _next(5, 10))},
         {"source": "classroom", "text": "New assignment: OS mini project",
          "classroom": {"title": "OS mini project (10 marks)", "due_at": _at(3, 23, 59)},
          "jev": {"kind": ("deadline", .93), "subject": ("Operating Systems", .97)}},

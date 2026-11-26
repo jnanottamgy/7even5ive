@@ -59,7 +59,9 @@ health = call("/api/health")
 check("health", health["statusCode"] == 200 and json.loads(health["body"])["service"] == "7even5ive", health)
 cards = call("/api/cards", headers=TOKEN)
 body = json.loads(cards["body"]) if cards["statusCode"] == 200 else {}
-check("cards with the demo morning", len(body.get("due_this_week", [])) == 4, cards["statusCode"])
+check("cards with the demo morning",
+      len([c for c in body.get("due_this_week", []) if c["route"] != "mail"]) == 4,
+      cards["statusCode"])
 check("attendance seeded", len(body.get("attendance", {}).get("subjects", [])) == 6)
 check("no token is refused", call("/api/cards")["statusCode"] == 401)
 refused = call("/api/tools/send_email", "POST", {**TOKEN, "content-type": "application/json"},
@@ -80,5 +82,32 @@ check("a forged signature is refused", forged.get("webhook_status") == 401, forg
 reset = call("/demo/reset", "POST", TOKEN)
 check("demo reset", reset["statusCode"] == 200, reset)
 after = json.loads(call("/api/cards", headers=TOKEN)["body"])
-check("reset restores the morning", len(after["due_this_week"]) == 4, len(after["due_this_week"]))
+morning = [c for c in after["due_this_week"] if c["route"] != "mail"]
+check("reset restores the morning", len(morning) == 4, len(morning))
+
+# College mail, the briefing, voice and MCP, all through the same function.
+check("college mail cards in the Inbox",
+      {c.get("category") for c in after["opportunities"]} >= {"placement", "internship"},
+      after["opportunities"])
+check("mail status on the cards", after["mail"]["mode"] == "demo", after.get("mail"))
+JSON = {**TOKEN, "content-type": "application/json"}
+mail_now = call("/api/mail/check", "POST", JSON, "{}")
+check("check now finds the new mail", json.loads(mail_now["body"]).get("new") == 1, mail_now)
+briefing = call("/api/briefing", headers=TOKEN)
+check("briefing text", briefing["statusCode"] == 200 and
+      json.loads(briefing["body"])["text"].startswith("Good "), briefing)
+audio = call("/api/briefing/audio", headers=TOKEN)
+check("no voice key: the phone reads it", audio["statusCode"] == 503, audio["statusCode"])
+voice = json.loads(call("/api/voice/session", headers=TOKEN)["body"])
+check("no voice key: the assistant says why", voice.get("available") is False, voice)
+mcp = call("/mcp", "POST", {**JSON, "accept": "application/json, text/event-stream"},
+           json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}))
+tools = {t["name"] for t in json.loads(mcp["body"]).get("result", {}).get("tools", [])}
+check("MCP over HTTP lists the tools", {"due_this_week", "briefing"} <= tools, mcp)
+check("MCP needs the token", call("/mcp", "POST", {"content-type": "application/json"},
+                                  "{}")["statusCode"] == 401)
+
+# The once-a-minute tick that stands in for a server's background loop.
+ticked = handler({"seventy5": "tick"}, None)
+check("the tick runs the jobs", "reminders" in ticked.get("ran", []), ticked)
 print("smoke test passed")
