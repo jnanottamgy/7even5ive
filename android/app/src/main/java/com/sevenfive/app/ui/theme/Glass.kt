@@ -1,0 +1,103 @@
+package com.sevenfive.app.ui.theme
+
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.HazeStyle
+import dev.chrisbanes.haze.HazeTint
+import dev.chrisbanes.haze.hazeEffect
+import kotlin.math.max
+
+/**
+ * The room under the glass: the theme's base colour with three soft pools of light (brand warm,
+ * peach, a cool accent). Static on purpose: a moving backdrop would make every frosted bar
+ * re-blur on every frame, and scrolling must stay smooth on mid-range phones.
+ */
+@Composable
+fun AuroraBackground(modifier: Modifier = Modifier) {
+    val base = MaterialTheme.colorScheme.background
+    val app = LocalAppColors.current
+    Box(
+        modifier.fillMaxSize().drawBehind {
+            drawRect(base)
+            val r = max(size.width, size.height)
+            fun pool(color: Color, x: Float, y: Float, radius: Float) {
+                val center = Offset(size.width * x, size.height * y)
+                drawCircle(
+                    Brush.radialGradient(listOf(color, Color.Transparent), center = center, radius = r * radius),
+                    radius = r * radius,
+                    center = center,
+                )
+            }
+            pool(app.auroraWarm, 0.05f, 0.0f, 0.62f)
+            pool(app.auroraPeach, 1.0f, 0.22f, 0.55f)
+            pool(app.auroraCool, 0.15f, 1.0f, 0.65f)
+        },
+    )
+}
+
+/** Frosted glass for bars: blur what scrolls underneath, tinted; a plain tint before Android 12. */
+@Composable
+fun frostedStyle(): HazeStyle {
+    val app = LocalAppColors.current
+    return HazeStyle(
+        backgroundColor = MaterialTheme.colorScheme.background,
+        tint = HazeTint(app.glassTint),
+        blurRadius = 28.dp,
+        noiseFactor = 0.05f,
+        fallbackTint = HazeTint(app.glassFallback.copy(alpha = 0.97f)),
+    )
+}
+
+/**
+ * A glass card: a translucent fill over the backdrop and a hairline edge that is brighter on
+ * top, like light catching the rim. [strong] is for things that need more presence.
+ */
+@Composable
+fun Modifier.glassSurface(
+    shape: Shape = MaterialTheme.shapes.large,
+    strong: Boolean = false,
+    tint: Color = Color.Unspecified,
+    edgeWidth: Dp = 0.8.dp,
+): Modifier {
+    val app = LocalAppColors.current
+    val fill = if (strong) app.glassFill.copy(alpha = (app.glassFill.alpha + 0.18f).coerceAtMost(1f)) else app.glassFill
+    val edge = Brush.verticalGradient(listOf(app.glassEdge, app.hairline))
+    return this
+        .clip(shape)
+        .background(fill)
+        .then(if (tint != Color.Unspecified) Modifier.background(tint) else Modifier)
+        .border(BorderStroke(edgeWidth, edge), shape)
+}
+
+/**
+ * Real frosted glass for things that float over content (the tab bar, the demo guide): what is
+ * behind is blurred and tinted, with the same bright rim as [glassSurface].
+ */
+@Composable
+fun Modifier.frosted(state: HazeState, shape: Shape, edgeWidth: Dp = 0.8.dp): Modifier {
+    val app = LocalAppColors.current
+    val edge = Brush.verticalGradient(listOf(app.glassEdge, app.hairline))
+    return this
+        .clip(shape)
+        .hazeEffect(state = state, style = frostedStyle())
+        .border(BorderStroke(edgeWidth, edge), shape)
+}
+
+/** How much room the floating tab bar takes at the bottom, so lists can scroll under it. */
+val LocalBottomInset = staticCompositionLocalOf { 0.dp }

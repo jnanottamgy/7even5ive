@@ -3,6 +3,7 @@ package com.sevenfive.app.ui.screens
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,22 +13,21 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.EventAvailable
-import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.NotificationAdd
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,22 +35,33 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sevenfive.app.data.Approval
+import com.sevenfive.app.data.Cards
 import com.sevenfive.app.data.Item
 import com.sevenfive.app.data.Reminder
 import com.sevenfive.app.ui.AppViewModel
 import com.sevenfive.app.ui.DoneApproval
 import com.sevenfive.app.ui.components.AppCard
 import com.sevenfive.app.ui.components.EmptyState
+import com.sevenfive.app.ui.components.GlassPill
+import com.sevenfive.app.ui.components.IconTile
 import com.sevenfive.app.ui.components.KindChip
+import com.sevenfive.app.ui.components.PrimaryPill
 import com.sevenfive.app.ui.components.RouteBadge
-import com.sevenfive.app.ui.components.ScreenPadding
+import com.sevenfive.app.ui.components.ScreenIntro
 import com.sevenfive.app.ui.components.SectionHeader
 import com.sevenfive.app.ui.components.TabScaffold
+import com.sevenfive.app.ui.components.kindColor
+import com.sevenfive.app.ui.components.kindStyle
+import com.sevenfive.app.ui.theme.LocalAppColors
+import com.sevenfive.app.ui.theme.LocalStatusColors
+import com.sevenfive.app.ui.theme.Motion
+import com.sevenfive.app.ui.theme.glassSurface
 import com.sevenfive.app.util.Time
 import java.time.Duration
 import java.time.Instant
@@ -66,30 +77,38 @@ fun HomeScreen(vm: AppViewModel, onSettings: () -> Unit) {
 
     val subtitle = when {
         cards == null -> null
-        due.isEmpty() -> "Nothing due in the next 7 days"
-        due.size == 1 -> "1 thing due in the next 7 days"
-        else -> "${due.size} things due in the next 7 days"
+        due.isEmpty() -> "Nothing due in the next 7 days."
+        due.size == 1 -> "1 thing due in the next 7 days."
+        else -> "${due.size} things due in the next 7 days."
     }
 
-    TabScaffold(if (name != null) "Hi, $name" else "This week", vm, onSettings, subtitle) {
+    TabScaffold(if (name != null) "Hi, $name" else "This week", vm, onSettings) { padding ->
         if (cards == null) {
-            LoadingOrError(state.loading)
+            LoadingOrError(state.loading, padding)
             return@TabScaffold
         }
-        LazyColumn(contentPadding = ScreenPadding, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        LazyColumn(contentPadding = padding, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            item(key = "intro") { ScreenIntro(subtitle) }
+            item(key = "glance") { Glance(cards, Modifier.animateItem(placementSpec = Motion.item)) }
+
             if (cards.approvals.isNotEmpty() || approved.isNotEmpty()) {
-                item { SectionHeader("Needs your tap") }
+                item(key = "h-approvals") { SectionHeader("Needs your tap", Modifier.animateItem(placementSpec = Motion.item)) }
                 items(cards.approvals, key = { "a-" + it.token }) { approval ->
-                    ApprovalCard(approval, vm.titleFor(approval), approval.token in busy) { vm.approve(approval) }
+                    ApprovalCard(
+                        approval, vm.titleFor(approval), approval.token in busy,
+                        Modifier.animateItem(placementSpec = Motion.item),
+                    ) { vm.approve(approval) }
                 }
                 items(approved, key = { "d-" + it.approval.token }) { done ->
-                    DoneApprovalCard(done, done.approval.token in busy) { vm.approve(done.approval) }
+                    DoneApprovalCard(done, done.approval.token in busy, Modifier.animateItem(placementSpec = Motion.item)) {
+                        vm.approve(done.approval)
+                    }
                 }
             }
 
-            item { SectionHeader("Due this week") }
+            item(key = "h-due") { SectionHeader("Due this week", Modifier.animateItem(placementSpec = Motion.item)) }
             if (due.isEmpty()) {
-                item {
+                item(key = "empty") {
                     EmptyState(
                         Icons.Outlined.EventAvailable,
                         "A clear week",
@@ -99,68 +118,127 @@ fun HomeScreen(vm: AppViewModel, onSettings: () -> Unit) {
             }
             items(due, key = { "i-${it.id}" }) { item ->
                 val reminder = cards.reminders.firstOrNull { it.title == item.title && it.dueAt == item.dueAt }
-                DueCard(item, reminder, "item:${item.id}" in busy) { minutes -> vm.remind(item, minutes) }
+                DueCard(item, reminder, "item:${item.id}" in busy, Modifier.animateItem(placementSpec = Motion.item)) { minutes ->
+                    vm.remind(item, minutes)
+                }
             }
 
             if (cards.needsReview.isNotEmpty()) {
-                item { SectionHeader("Couldn't read these") }
-                items(cards.needsReview, key = { "r-${it.id}" }) { item -> NeedsReviewCard(item) }
+                item(key = "h-review") { SectionHeader("Couldn't read these", Modifier.animateItem(placementSpec = Motion.item)) }
+                items(cards.needsReview, key = { "r-${it.id}" }) { item ->
+                    NeedsReviewCard(item, Modifier.animateItem(placementSpec = Motion.item))
+                }
             }
         }
     }
 }
 
+/** Three numbers worth knowing before scrolling, like a row of iOS widgets. */
 @Composable
-internal fun LoadingOrError(loading: Boolean) {
-    Box(Modifier.fillMaxWidth().padding(top = 64.dp), contentAlignment = Alignment.TopCenter) {
+private fun Glance(cards: Cards, modifier: Modifier = Modifier) {
+    val status = LocalStatusColors.current
+    val worst = cards.attendance.subjects.minByOrNull { it.percent }
+    val soonest = cards.dueThisWeek.mapNotNull { Time.parse(it.dueAt) }.minOrNull()
+    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        GlanceTile(
+            value = "${cards.dueThisWeek.size}",
+            label = "Due this week",
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.weight(1f),
+        )
+        GlanceTile(
+            value = soonest?.let { Time.until(it) } ?: "—",
+            label = "Next deadline",
+            color = if (soonest != null && soonest.toInstant().isBefore(Instant.now().plus(Duration.ofHours(24))))
+                MaterialTheme.colorScheme.error else LocalAppColors.current.material,
+            modifier = Modifier.weight(1f),
+        )
+        GlanceTile(
+            value = worst?.let { "${it.percent.toInt()}%" } ?: "—",
+            label = worst?.code ?: "Attendance",
+            color = worst?.let { status.of(it.status) } ?: LocalAppColors.current.secondaryLabel,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun GlanceTile(value: String, label: String, color: Color, modifier: Modifier = Modifier) {
+    Column(
+        modifier
+            .glassSurface(shape = MaterialTheme.shapes.medium)
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+    ) {
+        Text(
+            value,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = color,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = LocalAppColors.current.secondaryLabel,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+internal fun LoadingOrError(loading: Boolean, padding: PaddingValues) {
+    Box(Modifier.fillMaxWidth().padding(padding).padding(top = 56.dp), contentAlignment = Alignment.TopCenter) {
         if (loading) {
-            CircularProgressIndicator()
+            CircularProgressIndicator(strokeWidth = 3.dp, color = MaterialTheme.colorScheme.primary)
         } else {
             EmptyState(
                 Icons.AutoMirrored.Outlined.HelpOutline,
                 "No cards yet",
-                "Start the 7even5ive demo on the laptop, then check the server address in Settings.",
+                "Check the server in Settings: the online demo needs no laptop.",
             )
         }
     }
 }
 
 @Composable
-private fun ApprovalCard(approval: Approval, title: String, busy: Boolean, onApprove: () -> Unit) {
-    AppCard {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.CalendarMonth, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(actionLabel(approval.action), style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text("Your AI asked for this. It only runs if you tap.", style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Spacer(Modifier.width(8.dp))
-            Button(onClick = onApprove, enabled = !busy) {
-                if (busy) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp) else Text("Approve")
-            }
+private fun ApprovalCard(approval: Approval, title: String, busy: Boolean, modifier: Modifier = Modifier, onApprove: () -> Unit) {
+    val app = LocalAppColors.current
+    Row(
+        modifier
+            .fillMaxWidth()
+            .glassSurface(strong = true, tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f))
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconTile(Icons.Outlined.CalendarMonth, app.exam)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(actionLabel(approval.action), style = MaterialTheme.typography.labelMedium, color = app.secondaryLabel)
+            Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text("Your AI asked. It only runs if you tap.", style = MaterialTheme.typography.bodySmall, color = app.secondaryLabel)
         }
+        Spacer(Modifier.width(8.dp))
+        PrimaryPill("Approve", onClick = onApprove, busy = busy)
     }
 }
 
 /** Kept after it ran: tapping again shows the gateway's "approval already used". */
 @Composable
-private fun DoneApprovalCard(done: DoneApproval, busy: Boolean, onTapAgain: () -> Unit) {
-    AppCard(muted = true) {
+private fun DoneApprovalCard(done: DoneApproval, busy: Boolean, modifier: Modifier = Modifier, onTapAgain: () -> Unit) {
+    val app = LocalAppColors.current
+    AppCard(modifier, muted = true) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary)
+            IconTile(Icons.Filled.CheckCircle, LocalStatusColors.current.safe)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text("Added to Google Calendar", style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Added to Google Calendar", style = MaterialTheme.typography.labelMedium, color = app.secondaryLabel)
                 Text(done.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text("Each approval works once.", style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Each approval works once.", style = MaterialTheme.typography.bodySmall, color = app.secondaryLabel)
             }
-            OutlinedButton(onClick = onTapAgain, enabled = !busy) { Text("Approved") }
+            Spacer(Modifier.width(8.dp))
+            GlassPill("Approved", onClick = onTapAgain, busy = busy, tint = LocalStatusColors.current.safe)
         }
     }
 }
@@ -173,40 +251,54 @@ private fun actionLabel(action: String) = when (action) {
 private val reminderChoices = listOf(24 * 60 to "1 day before", 3 * 60 to "3 hours before", 60 to "1 hour before")
 
 @Composable
-private fun DueCard(item: Item, reminder: Reminder?, busy: Boolean, onRemind: (Int) -> Unit) {
+private fun DueCard(item: Item, reminder: Reminder?, busy: Boolean, modifier: Modifier = Modifier, onRemind: (Int) -> Unit) {
     val due = Time.parse(item.dueAt)
-    AppCard {
+    val app = LocalAppColors.current
+    // Within a day reads red; later reads in the brand colour.
+    val urgent = due != null && due.toInstant().isBefore(Instant.now().plus(Duration.ofHours(24)))
+    AppCard(modifier) {
         Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                KindChip(item.kind)
-                Spacer(Modifier.width(8.dp))
-                RouteBadge(item.route)
-                Spacer(Modifier.weight(1f))
+            Row(verticalAlignment = Alignment.Top) {
+                IconTile(kindStyle(item.kind).icon, kindColor(item.kind))
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(item.title ?: "Untitled", style = MaterialTheme.typography.titleMedium)
+                    if (!item.subject.isNullOrBlank()) {
+                        Text(item.subject, style = MaterialTheme.typography.bodyMedium, color = app.secondaryLabel)
+                    }
+                }
                 if (due != null) {
-                    // Within a day reads red; later reads in the brand colour.
-                    val urgent = due.toInstant().isBefore(Instant.now().plus(Duration.ofHours(24)))
+                    Spacer(Modifier.width(8.dp))
+                    val tint = if (urgent) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                     Text(
                         Time.until(due),
-                        style = MaterialTheme.typography.labelLarge,
+                        style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
-                        color = if (urgent) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                        color = tint,
+                        modifier = Modifier
+                            .glassSurface(shape = CircleShape, tint = tint.copy(alpha = 0.12f))
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
                     )
                 }
             }
-            Spacer(Modifier.height(8.dp))
-            Text(item.title ?: "Untitled", style = MaterialTheme.typography.titleMedium)
-            if (!item.subject.isNullOrBlank()) {
-                Text(item.subject, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+            Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
+                KindChip(item.kind)
+                Spacer(Modifier.width(8.dp))
+                Icon(Icons.Outlined.Schedule, contentDescription = null, tint = app.tertiaryLabel, modifier = Modifier.size(13.dp))
+                Spacer(Modifier.width(3.dp))
                 Text(
                     due?.let { Time.dayAndTime(it) } ?: "No date",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = app.secondaryLabel,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                RemindButton(reminder, busy, onRemind)
+                RouteBadge(item.route)
             }
+            Spacer(Modifier.height(10.dp))
+            RemindButton(reminder, busy, onRemind)
         }
     }
 }
@@ -215,25 +307,21 @@ private fun DueCard(item: Item, reminder: Reminder?, busy: Boolean, onRemind: (I
 private fun RemindButton(reminder: Reminder?, busy: Boolean, onRemind: (Int) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
-        TextButton(onClick = { open = true }, enabled = !busy) {
-            if (busy) {
-                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-            } else {
-                Icon(
-                    if (reminder != null) Icons.Filled.NotificationsActive else Icons.Outlined.NotificationAdd,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-            Spacer(Modifier.width(6.dp))
-            Text(
-                if (reminder != null) Time.parse(reminder.firesAt)?.let { "Reminder ${Time.dayAndTime(it)}" } ?: "Reminder set"
-                else "Remind me"
-            )
-        }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        GlassPill(
+            if (reminder != null) Time.parse(reminder.firesAt)?.let { "Reminder ${Time.dayAndTime(it)}" } ?: "Reminder set"
+            else "Remind me",
+            onClick = { open = true },
+            busy = busy,
+            icon = if (reminder != null) Icons.Filled.NotificationsActive else Icons.Outlined.NotificationAdd,
+        )
+        DropdownMenu(
+            expanded = open,
+            onDismissRequest = { open = false },
+            shape = MaterialTheme.shapes.medium,
+            containerColor = LocalAppColors.current.glassFallback,
+        ) {
             reminderChoices.forEach { (minutes, label) ->
-                DropdownMenuItem(text = { Text(label) }, onClick = {
+                DropdownMenuItem(text = { Text(label, style = MaterialTheme.typography.bodyLarge) }, onClick = {
                     open = false
                     onRemind(minutes)
                 })
@@ -243,18 +331,21 @@ private fun RemindButton(reminder: Reminder?, busy: Boolean, onRemind: (Int) -> 
 }
 
 @Composable
-private fun NeedsReviewCard(item: Item) {
-    AppCard(muted = true) {
+private fun NeedsReviewCard(item: Item, modifier: Modifier = Modifier) {
+    val app = LocalAppColors.current
+    AppCard(modifier, muted = true) {
         Column {
             Text(
                 item.title ?: "Untitled message",
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text("Nobody could read this one for sure, so it wasn't filed.",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+            Text(
+                "Nobody could read this one for sure, so it wasn't filed.",
+                style = MaterialTheme.typography.bodySmall,
+                color = app.secondaryLabel,
+            )
         }
     }
 }

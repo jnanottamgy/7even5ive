@@ -1,78 +1,126 @@
 package com.sevenfive.app.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sevenfive.app.ui.AppViewModel
+import com.sevenfive.app.ui.theme.AuroraBackground
+import com.sevenfive.app.ui.theme.LocalAppColors
+import com.sevenfive.app.ui.theme.LocalBottomInset
+import com.sevenfive.app.ui.theme.frostedStyle
+import com.sevenfive.app.ui.theme.glassSurface
+import com.sevenfive.app.ui.theme.pressable
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-/** The frame every tab shares: a collapsing title, the offline banner, pull to refresh. */
+/**
+ * The frame every tab shares, the iOS way: a large bold title that collapses into a frosted bar
+ * as you scroll. The bar is clear at the top of the page and turns to frosted glass once content
+ * slides under it; the list scrolls under both the bar and the floating tab bar.
+ *
+ * [content] gets the padding that keeps its first and last items clear of the bars: pass it as
+ * the list's contentPadding, not as a modifier, so the content can scroll underneath.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TabScaffold(
     title: String,
     vm: AppViewModel,
     onSettings: () -> Unit,
-    subtitle: String? = null,
-    content: @Composable () -> Unit,
+    content: @Composable (PaddingValues) -> Unit,
 ) {
     val state by vm.cards.collectAsStateWithLifecycle()
     val searching by vm.searching.collectAsStateWithLifecycle()
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val haze = rememberHazeState()
     val scope = rememberCoroutineScope()
+    val pullState = rememberPullToRefreshState()
     var pulling by remember { mutableStateOf(false) }
+    val bottomInset = LocalBottomInset.current
+    val app = LocalAppColors.current
 
     Scaffold(
         modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
+        containerColor = Color.Transparent,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            LargeTopAppBar(
-                title = { Text(title, maxLines = 1) },
-                actions = {
-                    IconButton(onClick = onSettings) {
-                        Icon(Icons.Outlined.Settings, contentDescription = "Server settings")
-                    }
-                },
-                scrollBehavior = scroll,
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                ),
-            )
-        },
-    ) { inner ->
-        Column(Modifier.padding(inner).fillMaxSize()) {
-            OfflineBanner(state.error, state.updatedAt, onSettings, searching)
-            if (subtitle != null) {
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp),
+            Column(Modifier.hazeEffect(state = haze, style = frostedStyle()) { alpha = scroll.state.collapsedFraction }) {
+                LargeTopAppBar(
+                    title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    actions = {
+                        Box(
+                            Modifier
+                                .padding(end = 8.dp)
+                                .size(38.dp)
+                                .pressable(onClick = onSettings)
+                                .glassSurface(shape = CircleShape, strong = true),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                Icons.Outlined.Settings,
+                                contentDescription = "Settings",
+                                tint = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    },
+                    scrollBehavior = scroll,
+                    colors = TopAppBarDefaults.largeTopAppBarColors(
+                        containerColor = Color.Transparent,
+                        scrolledContainerColor = Color.Transparent,
+                    ),
+                )
+                OfflineBanner(state.error, state.updatedAt, onSettings, searching)
+                // The hairline under the bar appears only once content is underneath.
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(0.6.dp)
+                        .graphicsLayer { alpha = scroll.state.collapsedFraction }
+                        .background(app.hairline),
                 )
             }
+        },
+    ) { inner ->
+        Box(Modifier.fillMaxSize().hazeSource(haze)) {
+            AuroraBackground()
             PullToRefreshBox(
                 isRefreshing = pulling,
                 onRefresh = {
@@ -80,19 +128,46 @@ fun TabScaffold(
                     scope.launch {
                         val started = System.currentTimeMillis()
                         vm.container.cards.refresh(wait = true)
-                        // A laptop on the same Wi-Fi answers in ~50 ms: without a floor the
+                        // A laptop or a warm Lambda answers in tens of ms: without a floor the
                         // spinner pops up and snaps away before it can be seen turning.
                         val shown = System.currentTimeMillis() - started
                         if (shown < MIN_SPINNER_MILLIS) delay(MIN_SPINNER_MILLIS - shown)
                         pulling = false
                     }
                 },
+                state = pullState,
                 modifier = Modifier.fillMaxSize(),
+                indicator = {
+                    PullToRefreshDefaults.Indicator(
+                        state = pullState,
+                        isRefreshing = pulling,
+                        modifier = Modifier.align(Alignment.TopCenter).padding(top = inner.calculateTopPadding()),
+                    )
+                },
             ) {
-                Box(Modifier.fillMaxSize()) { content() }
+                content(
+                    PaddingValues(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = inner.calculateTopPadding() + 4.dp,
+                        bottom = bottomInset + 28.dp,
+                    ),
+                )
             }
         }
     }
+}
+
+/** The line under a large title: what this screen is, in a sentence. Scrolls with the content. */
+@Composable
+fun ScreenIntro(text: String?) {
+    if (text.isNullOrBlank()) return
+    Text(
+        text,
+        style = MaterialTheme.typography.bodyLarge,
+        color = LocalAppColors.current.secondaryLabel,
+        modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 6.dp),
+    )
 }
 
 private const val MIN_SPINNER_MILLIS = 800L
