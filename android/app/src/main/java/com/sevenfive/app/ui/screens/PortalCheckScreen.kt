@@ -46,6 +46,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.sevenfive.app.portal.PortalCheck
+import com.sevenfive.app.portal.hardenPortalWebView
 import com.sevenfive.app.ui.AppViewModel
 import com.sevenfive.app.ui.components.GlassPill
 import com.sevenfive.app.ui.components.PushTopBar
@@ -160,18 +161,25 @@ fun PortalCheckScreen(vm: AppViewModel, portalUrl: String, onBack: () -> Unit) {
                                 settings.domStorageEnabled = true
                                 settings.allowFileAccess = false
                                 settings.allowContentAccess = false
-                                CookieManager.getInstance().setAcceptCookie(true)
-                                CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+                                // Same WebView hardening as the login (clean UA, third-party cookies,
+                                // no X-Requested-With, userAgentData removed) so the portal's
+                                // "no third-party apps" checks pass. No JS bridge is added.
+                                hardenPortalWebView()
                                 webChromeClient = object : WebChromeClient() {
                                     override fun onReceivedTitle(view: WebView, t: String?) {
                                         title = t.orEmpty()
                                     }
                                 }
                                 webViewClient = object : WebViewClient() {
-                                    // Only the portal's own site opens here; anything else stays out.
+                                    // The portal's own site, plus Google reCAPTCHA's frames (the
+                                    // login's invisible challenge needs them); anything else stays out.
                                     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                                         val target = request.url
-                                        if (PortalCheck.sameSite(portalHost, target.host, target.scheme)) return false
+                                        val host = target.host ?: ""
+                                        val recaptcha = host == "google.com" || host.endsWith(".google.com") ||
+                                            host == "gstatic.com" || host.endsWith(".gstatic.com") ||
+                                            host == "recaptcha.net" || host.endsWith(".recaptcha.net")
+                                        if (recaptcha || PortalCheck.sameSite(portalHost, target.host, target.scheme)) return false
                                         problem = "Stayed on $portalHost: the page tried to open ${target.host ?: "another app"}"
                                         return true
                                     }

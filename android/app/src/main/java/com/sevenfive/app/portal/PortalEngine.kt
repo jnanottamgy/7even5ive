@@ -79,10 +79,36 @@ private const val HIDE_WEBVIEW_JS =
     "(function(){try{Object.defineProperty(Navigator.prototype,'userAgentData'," +
         "{get:function(){return undefined;},configurable:true});}catch(e){}})();"
 
+/** A plain Chrome-on-Android User-Agent, with no "wv" token for the portal to sniff. */
+const val PORTAL_USER_AGENT =
+    "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) " +
+        "Chrome/158.0.0.0 Mobile Safari/537.36"
+
 /**
- * The portal's own page, unchanged: JavaScript and cookies on, a plain Chrome User-Agent (the
- * portal refuses the WebView "wv" token), no file access. We never fill in or submit the login
- * form.
+ * Everything that gets an Android WebView past a Contineo-style "no third-party apps" wall, shared
+ * by the portal login and the portal test:
+ *  - a plain Chrome User-Agent (the portal refuses the WebView "wv" token),
+ *  - third-party cookies on (the invisible Google reCAPTCHA sets cookies on google.com),
+ *  - no X-Requested-With header (it carries the app's package — a WebView tell), and
+ *  - the `userAgentData` removal injected before the page's own scripts run (see HIDE_WEBVIEW_JS).
+ * Adds no JavaScript bridge, so it is safe for the test screen, which must touch nothing on the page.
+ */
+fun WebView.hardenPortalWebView() {
+    settings.userAgentString = PORTAL_USER_AGENT
+    CookieManager.getInstance().setAcceptCookie(true)
+    CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+    if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
+        WebSettingsCompat.setRequestedWithHeaderOriginAllowList(settings, emptySet())
+    }
+    // Needs a recent System WebView; where unavailable the UA fix alone still clears the UA check.
+    if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+        WebViewCompat.addDocumentStartJavaScript(this, HIDE_WEBVIEW_JS, setOf("*"))
+    }
+}
+
+/**
+ * The portal's own page, unchanged: JavaScript and cookies on, hardened against WebView sniffing,
+ * no file access. We never fill in or submit the login form.
  */
 @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
 fun WebView.configureForPortal(bridge: PortalBridge) {
@@ -90,27 +116,8 @@ fun WebView.configureForPortal(bridge: PortalBridge) {
     settings.domStorageEnabled = true
     settings.allowFileAccess = false
     settings.allowContentAccess = false
-    // Contineo (MSRIT's portal) refuses any User-Agent carrying the WebView "wv" token with
-    // "This portal cannot be used from third-party apps." A plain Chrome UA passes the check;
-    // nothing else about the request changes. Both login and the keep-alive run through here.
-    settings.userAgentString =
-        "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) " +
-            "Chrome/158.0.0.0 Mobile Safari/537.36"
-    CookieManager.getInstance().setAcceptCookie(true)
-    // Third-party cookies on: the invisible Google reCAPTCHA on the login page sets cookies on
-    // google.com and scores poorly (or fails) without them.
-    CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+    hardenPortalWebView()
     addJavascriptInterface(bridge, PortalBridge.NAME)
-    // Android WebView adds an X-Requested-With header carrying the app's package name — a WebView
-    // tell a portal can read server-side. Drop it so requests look like a browser's.
-    if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
-        WebSettingsCompat.setRequestedWithHeaderOriginAllowList(settings, emptySet())
-    }
-    // Hide the Android-WebView tell before any portal script runs (see HIDE_WEBVIEW_JS). Needs a
-    // recent System WebView; where unavailable the UA fix alone still clears the other checks.
-    if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-        WebViewCompat.addDocumentStartJavaScript(this, HIDE_WEBVIEW_JS, setOf("*"))
-    }
 }
 
 suspend fun WebView.eval(script: String): String = suspendCancellableCoroutine { cont ->

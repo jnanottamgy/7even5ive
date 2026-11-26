@@ -22,10 +22,6 @@ android {
         buildConfigField("String", "DEFAULT_HOST", "\"${prop("sevenfive.defaultHost", "10.0.2.2")}\"")
         buildConfigField("String", "STUDENT_TOKEN", "\"${prop("sevenfive.studentToken", "demo-student-token")}\"")
         buildConfigField("String", "COLLEGE", "\"${prop("sevenfive.college", "mockcollege")}\"")
-        // When set, the portal login WebView opens this URL instead of the shared server address.
-        // Lets a build point at a real college portal (e.g. MSRIT) while core/PortMax stay on the
-        // cloud. Empty: use the server address, as before.
-        buildConfigField("String", "PORTAL_OVERRIDE", "\"${prop("sevenfive.portalUrl", "")}\"")
     }
 
     // One committed debug key, so every CI build signs the same way and installs as an update
