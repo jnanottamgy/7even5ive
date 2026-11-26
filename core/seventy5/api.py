@@ -14,9 +14,9 @@ from pathlib import Path
 from typing import Any, AsyncIterator
 
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
-from . import calls, clock, notify, tools
+from . import briefing, calls, clock, notify, tools
 from .app import App, build
 from .config import settings
 from .gateway import Denied, read_token
@@ -105,6 +105,7 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
                            "token": r["token"]} for r in db.pending(sid) if live(r["token"])],
             "calendar": [dict(r) for r in db.calendar(sid)],
             "reminders": notify.list_reminders(db, sid),
+            "classes_today": tools.timetable_today(db, sid)["classes"],
             "audit": [dict(r) for r in db.audit_log(sid)][:12],
         }
 
@@ -213,6 +214,22 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
         if not isinstance(event, dict):
             raise HTTPException(400, "event must be an object")
         return calls.handle_webhook(state.db, state.sender, event)
+
+    # --- the morning briefing (in the app only, never a notification) -----------------------
+    @api.get("/api/briefing")
+    def get_briefing(authorization: str | None = Header(None)) -> dict[str, Any]:
+        return briefing.build(state.db, student_from(authorization))
+
+    @api.get("/api/briefing/audio")
+    def briefing_audio(authorization: str | None = Header(None)) -> Response:
+        sid = student_from(authorization)
+        try:
+            sound = briefing.audio(state.db, sid)
+        except briefing.VoiceUnavailable as err:
+            # The app says why and reads the text with the phone's own voice instead.
+            raise HTTPException(503, str(err)) from err
+        return Response(sound, media_type="audio/mpeg",
+                        headers={"Cache-Control": "private, max-age=600"})
 
     @api.get("/api/health")
     def health() -> dict[str, Any]:

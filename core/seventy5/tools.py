@@ -13,7 +13,7 @@ from typing import Any
 
 from portmax.errors import NotConnected
 from portmax.store import Store
-from portmax.tools import attendance_plan_answer
+from portmax.tools import answer, attendance_plan_answer
 
 from . import clock
 from .config import settings
@@ -67,6 +67,39 @@ def attendance(db: Database, student_id: int) -> dict[str, Any]:
         return {"connected": False, "subjects": []}
     return {"connected": True, "stale": plan.stale, "fetched_at": plan.fetched_at.isoformat(),
             "subjects": [s.model_dump(mode="json") for s in plan.data]}
+
+
+WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+
+
+def timetable_today(db: Database, student_id: int, now: Any = None) -> dict[str, Any]:
+    """Today's classes from PortMax's saved timetable, in order, with subject names where the
+    portal gave them (labs often only have a code)."""
+    now = now or clock.now()
+    day = WEEKDAYS[now.astimezone(clock.IST).weekday()]
+    student = db.student(student_id)
+    try:
+        table = answer(portal_store(), student["portal_id"], "get_timetable", now)
+    except NotConnected:
+        return {"connected": False, "day": day, "classes": []}
+    names: dict[str, str] = {}
+    try:
+        for row in answer(portal_store(), student["portal_id"], "get_attendance", now).data:
+            names[row.subject_code] = row.subject_name
+    except NotConnected:
+        pass
+    slots = sorted((s for s in table.data if s.day == day), key=lambda s: s.start)
+    return {"connected": True, "stale": table.stale, "day": day, "classes": [
+        {"start": s.start.strftime("%H:%M"), "end": s.end.strftime("%H:%M"),
+         "subject_code": s.subject_code, "subject": names.get(s.subject_code, s.subject_code),
+         "room": s.room} for s in slots]}
+
+
+def briefing(db: Database, student_id: int) -> dict[str, Any]:
+    """Today's briefing: the sections and the text the app (or its voice) reads out."""
+    from . import briefing as morning
+
+    return morning.build(db, student_id)
 
 
 def mark_done(db: Database, student_id: int, item_id: int) -> dict[str, Any]:
