@@ -169,3 +169,6 @@ data class GoogleStart(val url: String = "", @SerialName("expires_at") val expir
 
 @Serializable
 data class GoogleDisconnect(val disconnected: Boolean = false, val google: GoogleStatus = GoogleStatus())
+
+@Serializable
+data class GoogleFinish(val connected: Boolean = false, val google: GoogleStatus = GoogleStatus())

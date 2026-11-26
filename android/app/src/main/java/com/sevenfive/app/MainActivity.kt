@@ -1,5 +1,6 @@
 package com.sevenfive.app
 
+import android.content.Intent
 import android.os.Bundle
 import android.graphics.Color
 import androidx.activity.ComponentActivity
@@ -21,6 +22,7 @@ import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private lateinit var sync: ForegroundSync
+    private lateinit var viewModel: AppViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -33,7 +35,9 @@ class MainActivity : ComponentActivity() {
         sync = ForegroundSync(this, container.portal, container.portalStore, container.servers)
 
         val factory = viewModelFactory { initializer { AppViewModel(container) } }
-        val viewModel = ViewModelProvider(this, factory)[AppViewModel::class.java]
+        viewModel = ViewModelProvider(this, factory)[AppViewModel::class.java]
+        // A fresh start from Google's sign-in page (not a rotation, which replays the intent).
+        if (savedInstanceState == null) handleLink(intent)
 
         // Poll the cards and keep the portal fresh only while the app is on screen.
         lifecycleScope.launch {
@@ -50,6 +54,20 @@ class MainActivity : ComponentActivity() {
                 SevenFiveRoot(viewModel)
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleLink(intent)
+    }
+
+    /** sevenfive://google?code=…&state=… from the sign-in page: finish connecting Google. */
+    private fun handleLink(intent: Intent?) {
+        val link = intent?.data ?: return
+        if (link.scheme != "sevenfive" || link.host != "google") return
+        val code = link.getQueryParameter("code")
+        val state = link.getQueryParameter("state")
+        if (code != null && state != null) viewModel.finishGoogle(code, state)
     }
 
     override fun onStart() {

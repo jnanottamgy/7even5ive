@@ -181,8 +181,8 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
                 }
             }
             DemoAction.PLAY_BRIEFING -> {
-                val today = core.briefing().also { _briefing.value = it }
-                container.briefingPlayer.play(today)
+                val today = container.briefingPlayer.play { core.briefing().also { _briefing.value = it } }
+                    ?: return "The briefing is already loading."
                 if (today.audio.available) "Playing ElevenLabs' voice." else "Playing with the phone's own voice (no ElevenLabs key on the server)."
             }
             DemoAction.TEST_CALL -> {
@@ -249,8 +249,10 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
             val r = container.core.setReminder(item.id, beforeMinutes, channel)
             val at = Time.parse(r.firesAt)?.let { Time.dayAndTime(it) } ?: "later"
             say(if (r.channel == "call") "We'll call you $at" else "Reminder set for $at")
-            // The first reminder is when a notification permission makes sense to ask for.
-            if (Notifications.needsAsking(container.appContext)) _askNotifications.trySend(Unit)
+            // The first reminder is when a notification permission makes sense to ask for (once;
+            // after that the Settings row takes the student to the system settings).
+            val ctx = container.appContext
+            if (Notifications.needsAsking(ctx) && !Notifications.asked(ctx)) _askNotifications.trySend(Unit)
         } catch (e: ApiException) {
             say(e.detail)
         }
@@ -344,6 +346,19 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         }
     }
 
+    /** The browser brought Google's code back: finish connecting, as this student. */
+    fun finishGoogle(code: String, state: String) = action("google") {
+        try {
+            val out = container.core.googleFinish(code, state)
+            _settings.value = _settings.value?.copy(google = out.google)
+            say("Google connected" + (out.google.email?.let { ": $it" } ?: ""))
+            refreshSettings()
+        } catch (e: ApiException) {
+            say(e.detail)
+        }
+        container.cards.refresh()
+    }
+
     fun disconnectGoogle() = action("google") {
         try {
             val out = container.core.googleDisconnect()
@@ -399,13 +414,8 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     }
 
     fun playBriefing() = viewModelScope.launch {
-        val today = try {
-            container.core.briefing().also { _briefing.value = it }
-        } catch (e: ApiException) {
-            say(e.detail)
-            return@launch
-        }
-        container.briefingPlayer.play(today)
+        // The player shows "loading" at once, so a second tap while it fetches does nothing.
+        container.briefingPlayer.play { container.core.briefing().also { _briefing.value = it } }
     }
 
     fun stopBriefing() = container.briefingPlayer.stop()

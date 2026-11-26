@@ -20,11 +20,20 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize"
             android:enableOnBackInvokedCallback="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Back from Google's sign-in: the browser hands the code to the app, which finishes
+                 the sign-in with the student's own token (google.py). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="sevenfive" android:host="google" />
             </intent-filter>
         </activity>
 

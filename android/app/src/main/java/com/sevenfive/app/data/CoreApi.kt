@@ -87,6 +87,15 @@ class CoreApi(private val http: Http, val baseUrl: () -> String) {
     // --- Google and college mail -------------------------------------------------------------------
     suspend fun googleStart(): GoogleStart = AppJson.decodeFromString(http.post("${baseUrl()}/api/google/start", "{}"))
 
+    /** Back from Google: the app, with its own token, hands over the code (google.py). */
+    suspend fun googleFinish(code: String, state: String): GoogleFinish {
+        val body = buildJsonObject {
+            put("code", code)
+            put("state", state)
+        }
+        return AppJson.decodeFromString(http.post("${baseUrl()}/api/google/finish", body.toString()))
+    }
+
     suspend fun googleDisconnect(): GoogleDisconnect =
         AppJson.decodeFromString(http.post("${baseUrl()}/api/google/disconnect", "{}"))
 

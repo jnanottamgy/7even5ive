@@ -339,8 +339,14 @@ private fun NotificationsSection(vm: AppViewModel) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val keepAlive by vm.keepAlive.collectAsStateWithLifecycle()
     val context = vm.container.appContext
+    val activity = androidx.compose.ui.platform.LocalContext.current as? android.app.Activity
     val app = LocalAppColors.current
-    val permitted = Notifications.permitted(context)
+    // Read again whenever Settings comes back to the front (after the prompt or system settings).
+    var permitted by remember { mutableStateOf(Notifications.permitted(context)) }
+    LifecycleResumeEffect(Unit) {
+        permitted = Notifications.permitted(context)
+        onPauseOrDispose { }
+    }
     Group(
         header = "Notifications and background",
         footer = "Notifications are only your own reminders and a missed urgent call. The briefing and " +
@@ -353,7 +359,7 @@ private fun NotificationsSection(vm: AppViewModel) {
             detail = if (permitted) "Reminders reach you even when the app is closed" else "Reminders will only show in the app",
             chevron = !permitted,
         ) {
-            if (Notifications.needsAsking(context)) {
+            if (Notifications.needsAsking(context) && activity != null && Notifications.promptStillShows(activity)) {
                 vm.askForNotifications()
             } else {
                 context.startActivity(

@@ -42,6 +42,13 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sevenfive.app.ui.AppViewModel
 import com.sevenfive.app.ui.components.PrimaryPill
@@ -62,10 +69,22 @@ fun VoiceScreen(vm: AppViewModel, onBack: () -> Unit) {
     val mic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) vm.startVoice() else vm.say("The voice assistant needs the microphone")
     }
-    DisposableEffect(Unit) {
+    // The conversation ends when the student leaves this screen or the app, but not when the
+    // phone turns or the theme changes (the activity is only being rebuilt then).
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val activity = context.findActivity()
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP && activity?.isChangingConfigurations != true) vm.stopVoice()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
-            vm.stopVoice()
-            vm.clearVoice()
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            if (activity?.isChangingConfigurations != true) {
+                vm.stopVoice()
+                vm.clearVoice()
+            }
         }
     }
     val list = rememberLazyListState()
@@ -195,4 +214,10 @@ private fun Bubble(line: VoiceAssistant.Line) {
                 .padding(horizontal = 14.dp, vertical = 10.dp),
         )
     }
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }

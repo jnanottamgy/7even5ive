@@ -13,6 +13,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Firebase only wakes the phone; it never carries a title, a deadline or any words (fcm.py sends
@@ -62,11 +64,24 @@ object Push {
 
 /** Declared in the manifest; only ever called once Push.start has set Firebase up. */
 class WakeService : FirebaseMessagingService() {
+    /**
+     * Runs on Firebase's own background thread, with a few seconds Android grants for exactly
+     * this: pull the outbox here and now. If that fails or is slow, a worker pulls as soon as
+     * the network allows.
+     */
     override fun onMessageReceived(message: RemoteMessage) {
-        OutboxWorker.now(applicationContext)
+        val app = applicationContext as? SevenFiveApp ?: return
+        val pulled = runBlocking {
+            withTimeoutOrNull(PULL_MILLIS) { app.container.outbox.pull(); true } ?: false
+        }
+        if (!pulled) OutboxWorker.soon(applicationContext)
     }
 
     override fun onNewToken(token: String) {
         Push.register(applicationContext, token)
+    }
+
+    private companion object {
+        const val PULL_MILLIS = 8_000L
     }
 }

@@ -21,6 +21,9 @@ import java.util.Locale
  * Reads today's briefing aloud. ElevenLabs' voice when the server has it (made on the first tap,
  * cached there per day); otherwise the phone's own text-to-speech reads the same text, which the
  * plan accepts as the stand-in. The briefing is never a notification (decision 41).
+ *
+ * One briefing plays at a time: a second Play while one is loading is ignored, and while one is
+ * playing it starts over. Everything that touches the players runs on the main thread.
  */
 class BriefingPlayer(private val context: Context, private val core: CoreApi) {
     enum class Phase { IDLE, LOADING, PLAYING }
@@ -37,26 +40,45 @@ class BriefingPlayer(private val context: Context, private val core: CoreApi) {
     val state: StateFlow<State> = _state.asStateFlow()
     private var player: MediaPlayer? = null
     private var tts: TextToSpeech? = null
+    private var ttsReady = false
+    /** What to read once the phone's voice has started up. */
+    private var pending: Pair<String, String?>? = null
+    /** Each play's number: a slow fetch or a late callback from an earlier play does nothing. */
+    private var playId = 0
 
-    suspend fun play(briefing: Briefing) {
+    /** Fetches today's briefing with [load] and reads it. Call from the main thread. */
+    suspend fun play(load: suspend () -> Briefing): Briefing? {
+        if (_state.value.phase == Phase.LOADING) return null
         stop()
+        val id = ++playId
         _state.value = State(Phase.LOADING)
+        val briefing = try {
+            load()
+        } catch (e: ApiException) {
+            if (id == playId) _state.value = State(note = e.detail)
+            return null
+        }
         var note: String? = null
         if (briefing.audio.available) {
             try {
                 val bytes = core.briefingAudio()
-                val file = File(context.cacheDir, "briefing-${briefing.day}.mp3")
-                withContext(Dispatchers.IO) { file.writeBytes(bytes) }
-                withContext(Dispatchers.Main) { playFile(file) }
-                return
+                // A new file for every play: an earlier player may still hold the last one.
+                val file = withContext(Dispatchers.IO) {
+                    context.cacheDir.listFiles { f -> f.name.startsWith("briefing-") }?.forEach { it.delete() }
+                    File(context.cacheDir, "briefing-${briefing.day}-$id.mp3").apply { writeBytes(bytes) }
+                }
+                if (id == playId) playFile(file, id)
+                return briefing
             } catch (e: ApiException) {
                 note = e.detail
             }
         }
-        withContext(Dispatchers.Main) { speak(briefing.text, note) }
+        if (id == playId) speak(briefing.text, note)
+        return briefing
     }
 
-    private fun playFile(file: File) {
+    private fun playFile(file: File, id: Int) {
+        releasePlayer()
         val media = MediaPlayer()
         player = media
         media.setAudioAttributes(
@@ -67,12 +89,14 @@ class BriefingPlayer(private val context: Context, private val core: CoreApi) {
         )
         media.setDataSource(file.path)
         media.setOnPreparedListener {
-            it.start()
-            _state.value = State(Phase.PLAYING, voice = "ElevenLabs")
+            if (id == playId && player === it) {
+                it.start()
+                _state.value = State(Phase.PLAYING, voice = "ElevenLabs")
+            }
         }
-        media.setOnCompletionListener { stop() }
-        media.setOnErrorListener { _, _, _ ->
-            stop()
+        media.setOnCompletionListener { if (player === it) stop() }
+        media.setOnErrorListener { mp, _, _ ->
+            if (player === mp) stop()
             true
         }
         media.prepareAsync()
@@ -80,18 +104,26 @@ class BriefingPlayer(private val context: Context, private val core: CoreApi) {
 
     private fun speak(text: String, note: String?) {
         val engine = tts
-        if (engine != null) {
+        if (engine != null && ttsReady) {
             say(engine, text, note)
             return
         }
+        pending = text to note
+        if (engine != null) return  // still starting up: it reads `pending` when ready
         tts = TextToSpeech(context) { status ->
             val ready = tts
             if (status == TextToSpeech.SUCCESS && ready != null) {
-                ready.language = Locale("en", "IN")
-                say(ready, text, note)
+                ttsReady = true
+                ready.language = Locale.forLanguageTag("en-IN")
+                pending?.let { (t, n) -> say(ready, t, n) }
             } else {
+                // Gone, so the next Play tries again from scratch instead of waiting forever.
+                ready?.shutdown()
+                tts = null
+                ttsReady = false
                 _state.value = State(note = "This phone has no text-to-speech voice.")
             }
+            pending = null
         }
     }
 
@@ -99,7 +131,7 @@ class BriefingPlayer(private val context: Context, private val core: CoreApi) {
         engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) = Unit
             override fun onDone(utteranceId: String?) {
-                _state.update { if (it.phase == Phase.PLAYING) State(note = it.note) else it }
+                _state.update { if (it.phase == Phase.PLAYING && it.voice == PHONE) State(note = it.note) else it }
             }
 
             @Deprecated("Deprecated in Java")
@@ -107,17 +139,28 @@ class BriefingPlayer(private val context: Context, private val core: CoreApi) {
                 _state.value = State(note = "The phone's voice couldn't read it.")
             }
         })
-        _state.value = State(Phase.PLAYING, voice = "Phone voice", note = note)
+        _state.value = State(Phase.PLAYING, voice = PHONE, note = note)
         engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, "briefing")
     }
 
-    fun stop() {
+    private fun releasePlayer() {
         player?.let {
             runCatching { it.stop() }
             it.release()
         }
         player = null
+    }
+
+    /** Stops whatever is playing (main thread). */
+    fun stop() {
+        playId++
+        releasePlayer()
         tts?.stop()
+        pending = null
         _state.update { State(note = it.note) }
+    }
+
+    private companion object {
+        const val PHONE = "Phone voice"
     }
 }

@@ -19,9 +19,12 @@ object AppVisibility {
     @Volatile var foreground: Boolean = false
 }
 
-/** The student's switch for the background keep-alive (on by default, decision P7). */
+/**
+ * The student's switch for the background keep-alive (on by default, decision P7). Its own file:
+ * logging out of the portal clears the "portal" file, and must not switch this back on.
+ */
 class KeepAliveSettings(context: Context) {
-    private val prefs = context.getSharedPreferences("portal", Context.MODE_PRIVATE)
+    private val prefs = context.getSharedPreferences("portal_keepalive", Context.MODE_PRIVATE)
 
     var enabled: Boolean
         get() = prefs.getBoolean(KEY, true)

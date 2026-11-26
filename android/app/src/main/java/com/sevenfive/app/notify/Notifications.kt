@@ -52,6 +52,24 @@ object Notifications {
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
 
+    private fun prefs(context: Context) = context.getSharedPreferences("notifications", Context.MODE_PRIVATE)
+
+    /** Whether the app has shown Android's permission prompt before. */
+    fun asked(context: Context): Boolean = prefs(context).getBoolean("asked", false)
+
+    fun markAsked(context: Context) {
+        prefs(context).edit().putBoolean("asked", true).apply()
+    }
+
+    /**
+     * Whether a request would still show Android's prompt: never asked, or Android says a reason
+     * may be shown. Once the student has declined for good, only the system settings can change it.
+     */
+    fun promptStillShows(activity: android.app.Activity): Boolean =
+        !asked(activity) || androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale(
+            activity, Manifest.permission.POST_NOTIFICATIONS,
+        )
+
     /** One outbox message as one notification. The outbox id is the notification id, so a
      * message pulled twice (foreground and background at once) shows once. */
     fun show(context: Context, message: OutboxMessage) {

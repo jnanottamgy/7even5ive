@@ -7,7 +7,6 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.OutOfQuotaPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
@@ -95,11 +94,11 @@ class OutboxWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                 .enqueueUniquePeriodicWork(PERIODIC, ExistingPeriodicWorkPolicy.KEEP, request)
         }
 
-        /** Firebase said there is something: pull now (expedited, within Android's quota). */
-        fun now(context: Context) {
+        /** A pull as soon as the network allows: the fallback when a wake-up couldn't pull itself.
+         * Not expedited: before Android 12 that would need a foreground notification of its own. */
+        fun soon(context: Context) {
             val request = OneTimeWorkRequestBuilder<OutboxWorker>()
                 .setConstraints(online)
-                .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
                 .build()
             WorkManager.getInstance(context).enqueueUniqueWork(NOW, ExistingWorkPolicy.REPLACE, request)
         }

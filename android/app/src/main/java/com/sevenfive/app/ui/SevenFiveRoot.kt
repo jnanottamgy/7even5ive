@@ -168,7 +168,10 @@ fun SevenFiveRoot(vm: AppViewModel) {
     }
     LaunchedEffect(Unit) {
         vm.askNotifications.collect {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) askPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                com.sevenfive.app.notify.Notifications.markAsked(vm.container.appContext)
+                askPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
         }
     }
 

@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -45,6 +46,7 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
@@ -58,6 +60,11 @@ import java.util.concurrent.atomic.AtomicLong
  * the phone runs it through /api/tools with its own token, the same gateway as any tap, and sends
  * the answer back. Only the tools the server listed may run. Nothing said is stored: the
  * transcript lives here while the screen is open.
+ *
+ * Every conversation has a generation number. Ending one (End, leaving the screen, the server
+ * closing, a dropped connection) moves the generation on, under one lock, so a session that
+ * arrives late, a socket that opens late or a callback from an old socket finds itself stale and
+ * does nothing: the microphone can only ever be on for the conversation on screen.
  */
 class VoiceAssistant(
     private val context: Context,
@@ -85,12 +92,19 @@ class VoiceAssistant(
     val state: StateFlow<State> = _state.asStateFlow()
     private val lineIds = AtomicLong()
 
-    /** The live conversation's socket; null once it ends (by us or by ElevenLabs). */
+    private val lock = Any()
+    /** The conversation everything below belongs to; moves on whenever one ends. */
+    @Volatile private var generation = 0L
+    private var connectJob: Job? = null
     @Volatile private var socket: WebSocket? = null
     private var recorder: AudioRecord? = null
+    private var echo: AcousticEchoCanceler? = null
+    private var noise: NoiseSuppressor? = null
     private var track: AudioTrack? = null
-    private val jobs = java.util.concurrent.CopyOnWriteArrayList<Job>()
+    private var playbackJob: Job? = null
     private var playback = Channel<ByteArray>(Channel.UNLIMITED)
+    /** The timer, the microphone loop and the speaking watcher of the current conversation. */
+    private val jobs = CopyOnWriteArrayList<Job>()
     private var allowed: Set<String> = emptySet()
     @Volatile private var interruptedThrough = -1
     @Volatile private var lastAudioAt = 0L
@@ -100,43 +114,56 @@ class VoiceAssistant(
         ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
 
     fun start() {
-        if (_state.value.active) return
-        _state.value = State(Phase.CONNECTING)
-        scope.launch {
-            val session = try {
-                core.voiceSession()
-            } catch (e: ApiException) {
-                _state.value = State(Phase.ERROR, message = e.detail)
-                return@launch
-            }
+        val gen = synchronized(lock) {
+            if (_state.value.active) return
+            _state.value = State(Phase.CONNECTING)
+            ++generation
+        }
+        connectJob = scope.launch { connect(gen) }
+    }
+
+    private suspend fun connect(gen: Long) {
+        val session = try {
+            core.voiceSession()
+        } catch (e: ApiException) {
+            synchronized(lock) { if (gen == generation) _state.value = State(Phase.ERROR, message = e.detail) }
+            return
+        }
+        synchronized(lock) {
+            if (gen != generation) return  // ended or restarted while the server answered
             val url = session.signedUrl
             if (!session.available || url == null) {
                 _state.value = State(Phase.UNAVAILABLE, message = session.reason ?: "The voice assistant isn't available.")
-                return@launch
+                return
             }
             allowed = session.tools.toSet()
             interruptedThrough = -1
             playback = Channel(Channel.UNLIMITED)
-            jobs.clear()
-            socket = client.newWebSocket(Request.Builder().url(url).build(), Listener(session))
+            socket = client.newWebSocket(Request.Builder().url(url).build(), Listener(session, gen))
             // The agent ends the call itself at its limit; this is the phone's own backstop.
             jobs += scope.launch {
                 delay((session.maxSeconds + 15) * 1000L)
-                stop("That's the time limit for one conversation.")
+                if (gen == generation) stop("That's the time limit for one conversation.")
             }
         }
     }
 
+    /** End now: the student tapped End or left the screen. Safe to call at any moment. */
     fun stop(message: String? = null) {
-        val wasActive = _state.value.active
-        val open = socket
-        socket = null  // first, so the close that follows is known to be ours
-        open?.close(1000, "done")
-        jobs.forEach { it.cancel() }
-        jobs.clear()
-        stopAudio()
-        if (wasActive || message != null) {
-            _state.update { it.copy(phase = Phase.ENDED, working = null, message = message) }
+        synchronized(lock) {
+            val wasActive = _state.value.active
+            generation++
+            connectJob?.cancel()
+            connectJob = null
+            val open = socket
+            socket = null
+            open?.close(1000, "done")
+            cancelJobs()
+            stopMic()
+            releaseOutput()
+            if (wasActive || message != null) {
+                _state.update { it.copy(phase = Phase.ENDED, working = null, message = message) }
+            }
         }
     }
 
@@ -148,8 +175,12 @@ class VoiceAssistant(
         socket?.send(json.toString())
     }
 
-    private inner class Listener(private val session: VoiceSession) : WebSocketListener() {
+    private inner class Listener(private val session: VoiceSession, private val gen: Long) : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
+            if (gen != generation) {
+                webSocket.close(1000, "done")
+                return
+            }
             // Sent on the socket handed to us: it may open before newWebSocket has even returned.
             webSocket.send(buildJsonObject {
                 put("type", "conversation_initiation_client_data")
@@ -160,30 +191,55 @@ class VoiceAssistant(
         }
 
         override fun onMessage(webSocket: WebSocket, text: String) {
-            if (socket !== webSocket) return  // a conversation that already ended
+            if (gen != generation) return
             val message = runCatching { AppJson.parseToJsonElement(text).jsonObject }.getOrNull() ?: return
-            handle(message)
+            handle(message, gen)
+        }
+
+        /** ElevenLabs ended it (the agent said goodbye, or its time limit): answer and wind down. */
+        override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+            webSocket.close(1000, null)
+            finishFromServer(gen)
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-            ended(webSocket, Phase.ERROR, "The conversation dropped. Try again.")
-        }
-
-        override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-            ended(webSocket, Phase.ENDED, null)
-        }
-
-        private fun ended(webSocket: WebSocket, phase: Phase, message: String?) {
-            if (socket !== webSocket) return  // we closed it ourselves, or it is an older one
-            socket = null
-            stopAudio()
-            jobs.forEach { it.cancel() }
-            jobs.clear()
-            _state.update { it.copy(phase = phase, working = null, message = message) }
+            synchronized(lock) {
+                if (gen != generation) return  // ours, already ended
+                generation++
+                socket = null
+                cancelJobs()
+                stopMic()
+                releaseOutput()
+                _state.update { it.copy(phase = Phase.ERROR, working = null, message = "The conversation dropped. Try again.") }
+            }
         }
     }
 
-    private fun handle(message: JsonObject) {
+    /** The microphone stops at once; what the agent already said (its goodbye) plays out. */
+    private fun finishFromServer(gen: Long) {
+        val consumer: Job?
+        synchronized(lock) {
+            if (gen != generation) return
+            socket = null
+            cancelJobs()
+            stopMic()
+            playback.close()  // queued audio still plays, then the player finishes
+            consumer = playbackJob
+            _state.update { it.copy(phase = Phase.SPEAKING, working = null) }
+        }
+        scope.launch {
+            withTimeoutOrNull(DRAIN_MILLIS) { consumer?.join() }
+            delay(TAIL_MILLIS)  // the last half second still in the player's own buffer
+            synchronized(lock) {
+                if (gen != generation) return@launch  // End was tapped meanwhile: already clean
+                generation++
+                releaseOutput()
+                _state.update { it.copy(phase = Phase.ENDED, working = null) }
+            }
+        }
+    }
+
+    private fun handle(message: JsonObject, gen: Long) {
         when (message.str("type")) {
             "conversation_initiation_metadata" -> {
                 val event = message.obj("conversation_initiation_metadata_event")
@@ -193,8 +249,9 @@ class VoiceAssistant(
                     stop("This voice uses an audio format the app can't play.")
                     return
                 }
-                if (!startAudio(input, output)) return
-                _state.update { it.copy(phase = Phase.LISTENING) }
+                if (startAudio(gen, input, output)) {
+                    _state.update { if (it.phase == Phase.CONNECTING) it.copy(phase = Phase.LISTENING) else it }
+                }
             }
             "audio" -> {
                 val event = message.obj("audio_event") ?: return
@@ -208,7 +265,7 @@ class VoiceAssistant(
             "interruption" -> {
                 interruptedThrough = message.obj("interruption_event")?.int("event_id") ?: interruptedThrough
                 drainPlayback()
-                _state.update { it.copy(phase = Phase.LISTENING) }
+                _state.update { if (it.phase == Phase.SPEAKING) it.copy(phase = Phase.LISTENING) else it }
             }
             "agent_response" ->
                 message.obj("agent_response_event")?.str("agent_response")?.let { add(fromAgent = true, it) }
@@ -229,7 +286,7 @@ class VoiceAssistant(
                     put("event_id", id)
                 })
             }
-            "client_tool_call" -> message.obj("client_tool_call")?.let { runTool(it) }
+            "client_tool_call" -> message.obj("client_tool_call")?.let { runTool(it, gen) }
         }
     }
 
@@ -238,7 +295,7 @@ class VoiceAssistant(
     }
 
     /** One tool the agent asked for, run through the gateway with the student's token. */
-    private fun runTool(call: JsonObject) {
+    private fun runTool(call: JsonObject, gen: Long) {
         val name = call.str("tool_name") ?: return
         val id = call.str("tool_call_id") ?: return
         val args = (call["parameters"] as? JsonObject) ?: JsonObject(emptyMap())
@@ -254,6 +311,7 @@ class VoiceAssistant(
                     e.detail to true
                 }
             }
+            if (gen != generation) return@launch  // the conversation ended while the tool ran
             send(buildJsonObject {
                 put("type", "client_tool_result")
                 put("tool_call_id", id)
@@ -266,7 +324,9 @@ class VoiceAssistant(
     }
 
     // --- audio ------------------------------------------------------------------------------------
-    private fun startAudio(inputRate: Int, outputRate: Int): Boolean {
+    /** Opens the speaker and the microphone for this conversation, unless it already ended. */
+    private fun startAudio(gen: Long, inputRate: Int, outputRate: Int): Boolean = synchronized(lock) {
+        if (gen != generation || track != null) return false
         if (!hasMicPermission()) {
             stop("7even5ive needs the microphone to hear you.")
             return false
@@ -274,7 +334,7 @@ class VoiceAssistant(
         val audio = context.getSystemService(AudioManager::class.java)
         if (audio != null) {
             // A call-style session: the phone's echo canceller hears what the speaker plays.
-            savedMode = audio.mode
+            if (savedMode == null) savedMode = audio.mode
             audio.mode = AudioManager.MODE_IN_COMMUNICATION
             routeToSpeaker(audio)
         }
@@ -298,6 +358,10 @@ class VoiceAssistant(
             .build()
         out.play()
         track = out
+        val queue = playback
+        playbackJob = scope.launch(Dispatchers.IO) {
+            for (pcm in queue) out.write(pcm, 0, pcm.size)  // this conversation's own player
+        }
 
         val chunkBytes = inputRate / 10 * 2  // 100 ms of 16-bit mono
         val inMin = AudioRecord.getMinBufferSize(inputRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
@@ -315,38 +379,33 @@ class VoiceAssistant(
             stop("The microphone is busy in another app.")
             return false
         }
-        if (AcousticEchoCanceler.isAvailable()) AcousticEchoCanceler.create(mic.audioSessionId)?.enabled = true
-        if (NoiseSuppressor.isAvailable()) NoiseSuppressor.create(mic.audioSessionId)?.enabled = true
+        // Held in fields: an audio effect nobody holds is released by the garbage collector.
+        echo = if (AcousticEchoCanceler.isAvailable()) AcousticEchoCanceler.create(mic.audioSessionId)?.also { it.enabled = true } else null
+        noise = if (NoiseSuppressor.isAvailable()) NoiseSuppressor.create(mic.audioSessionId)?.also { it.enabled = true } else null
         mic.startRecording()
         recorder = mic
 
-        jobs += listOf(
-            scope.launch(Dispatchers.IO) {
-                val buffer = ByteArray(chunkBytes)
-                while (isActive && recorder === mic) {
-                    val read = mic.read(buffer, 0, buffer.size)
-                    if (read > 0) {
-                        send(buildJsonObject { put("user_audio_chunk", Base64.encodeToString(buffer, 0, read, Base64.NO_WRAP)) })
-                    }
+        jobs += scope.launch(Dispatchers.IO) {
+            val buffer = ByteArray(chunkBytes)
+            while (isActive && gen == generation) {
+                val read = mic.read(buffer, 0, buffer.size)
+                if (read > 0 && gen == generation) {
+                    send(buildJsonObject { put("user_audio_chunk", Base64.encodeToString(buffer, 0, read, Base64.NO_WRAP)) })
+                } else if (read < 0) {
+                    break  // released under us: the conversation ended
                 }
-            },
-            scope.launch(Dispatchers.IO) {
-                for (pcm in playback) {
-                    val player = track ?: break
-                    player.write(pcm, 0, pcm.size)
+            }
+        }
+        jobs += scope.launch {
+            // No new audio for a moment: the agent has finished speaking.
+            while (isActive) {
+                delay(250)
+                if (_state.value.phase == Phase.SPEAKING && System.currentTimeMillis() - lastAudioAt > 700) {
+                    _state.update { if (it.phase == Phase.SPEAKING) it.copy(phase = Phase.LISTENING) else it }
                 }
-            },
-            scope.launch {
-                // No new audio for a moment: the agent has finished speaking.
-                while (isActive) {
-                    delay(250)
-                    if (_state.value.phase == Phase.SPEAKING && System.currentTimeMillis() - lastAudioAt > 700) {
-                        _state.update { if (it.phase == Phase.SPEAKING) it.copy(phase = Phase.LISTENING) else it }
-                    }
-                }
-            },
-        )
-        return true
+            }
+        }
+        true
     }
 
     private fun drainPlayback() {
@@ -360,22 +419,39 @@ class VoiceAssistant(
         }
     }
 
-    private fun stopAudio() {
+    private fun cancelJobs() {
+        jobs.forEach { it.cancel() }
+        jobs.clear()
+    }
+
+    /** Called with the lock held. */
+    private fun stopMic() {
         recorder?.let {
             runCatching { it.stop() }
             it.release()
         }
         recorder = null
+        echo?.release()
+        echo = null
+        noise?.release()
+        noise = null
+    }
+
+    /** Called with the lock held. The speaker, the player and the phone's audio mode. */
+    private fun releaseOutput() {
         playback.close()
+        playbackJob?.cancel()
+        playbackJob = null
         track?.let {
             runCatching { it.stop() }
             it.release()
         }
         track = null
         val audio = context.getSystemService(AudioManager::class.java)
-        if (audio != null && savedMode != null) {
+        val mode = savedMode
+        if (audio != null && mode != null) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) audio.clearCommunicationDevice() else legacySpeaker(audio, false)
-            savedMode?.let { audio.mode = it }
+            audio.mode = mode
         }
         savedMode = null
     }
@@ -397,6 +473,8 @@ class VoiceAssistant(
 
     companion object {
         private const val MAX_RESULT_CHARS = 8_000
+        private const val DRAIN_MILLIS = 4_000L
+        private const val TAIL_MILLIS = 600L
         private val CHANGES_CARDS = setOf("set_reminder", "cancel_reminder", "mark_done", "reopen", "add_to_calendar")
 
         /** "pcm_16000" -> 16000. Anything else (μ-law is for phone lines) the app can't play. */
