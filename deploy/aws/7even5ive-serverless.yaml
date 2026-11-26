@@ -1,0 +1,91 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  7even5ive serverless demo: the self-contained demo (core, PortMax's phone API and the mock
+  college portal, with the recorded demo data) as one Lambda behind an API Gateway HTTP API.
+  Handler seventy5.lambda_demo.handler; code from core/build_lambda_zip.py. The production
+  pipeline, several functions sharing Supabase, is core/template.yaml.
+
+Parameters:
+  CodeBucket:
+    Type: String
+    Description: S3 bucket, in this same region, holding 7even5ive-lambda.zip.
+  CodeKey:
+    Type: String
+    Default: 7even5ive-lambda.zip
+    Description: The zip's name in that bucket.
+  PinToOneInstance:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: >-
+      true keeps the function to one instance at a time, which the demo needs: the mock
+      portal's login and the demo data live in that instance. Needs a Lambda concurrency quota
+      above 10 (see docs/online.md); false works on any account but two instances can disagree.
+
+Conditions:
+  Pin: !Equals [!Ref PinToOneInstance, "true"]
+
+Resources:
+  FunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      # Logs only: the demo calls no other AWS service.
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  DemoFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: 7even5ive demo - core, PortMax phone API and mock portal (seventy5.lambda_demo)
+      Runtime: python3.12
+      Architectures: [x86_64]   # what build_lambda_zip.py packages and what was tested
+      Handler: seventy5.lambda_demo.handler
+      Code:
+        S3Bucket: !Ref CodeBucket
+        S3Key: !Ref CodeKey
+      Role: !GetAtt FunctionRole.Arn
+      MemorySize: 1024          # more memory is more CPU: a quicker cold start
+      Timeout: 29               # API Gateway answers within 30 s
+      ReservedConcurrentExecutions: !If [Pin, 1, !Ref "AWS::NoValue"]
+      Environment:
+        Variables:
+          PORTMAX_DEV_TOKENS: demo-student-token:demo
+          PYTHONDONTWRITEBYTECODE: "1"
+
+  # Kept a week; the app logs counts and ids only, never message or mail text.
+  FunctionLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${DemoFunction}
+      RetentionInDays: 7
+
+  # Quick create: a $default route to the function and an auto-deployed $default stage,
+  # so every path (/api, /v1, the portal's /index.php) reaches the one function.
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: 7even5ive-demo
+      ProtocolType: HTTP
+      Target: !GetAtt DemoFunction.Arn
+
+  ApiInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref DemoFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*
+
+Outputs:
+  AppUrl:
+    Description: Put this in android/gradle.properties as sevenfive.defaultServer.
+    Value: !GetAtt HttpApi.ApiEndpoint
+  HealthCheck:
+    Description: Answers {"service":"7even5ive","version":1}; the first call takes a few seconds.
+    Value: !Sub ${HttpApi.ApiEndpoint}/api/health

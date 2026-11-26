@@ -41,12 +41,13 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sevenfive.app.BuildConfig
 import com.sevenfive.app.data.ServerConfig
+import com.sevenfive.app.portal.PortalCheck
 import com.sevenfive.app.ui.AppViewModel
 import com.sevenfive.app.util.Diagnostics
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
+fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPortalCheck: () -> Unit = {}) {
     val current by vm.servers.collectAsStateWithLifecycle()
     var host by remember { mutableStateOf(current.coreUrl.substringAfter("://").substringBefore(':').substringBefore('/')) }
     var core by remember { mutableStateOf(current.coreUrl) }
@@ -117,6 +118,38 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
                 enabled = listOf(core, portmax, portal).all { it.startsWith("http://") || it.startsWith("https://") },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Save and reconnect") }
+
+            HorizontalDivider()
+            val checkStart by vm.portalCheckUrl.collectAsStateWithLifecycle()
+            var checkUrl by remember { mutableStateOf(checkStart) }
+            val checkTarget = PortalCheck.normalise(checkUrl)
+            Text("Test a college portal", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Opens your college's real portal in the app, to see whether it lets you log in " +
+                    "from an app. You log in yourself; nothing is read from the page or sent anywhere, " +
+                    "and the demo keeps using its own portal.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedTextField(
+                value = checkUrl,
+                onValueChange = { checkUrl = it.trim() },
+                label = { Text("Portal address") },
+                placeholder = { Text(PortalCheck.DEFAULT_URL) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedButton(
+                onClick = {
+                    if (checkTarget != null) {
+                        vm.setPortalCheckUrl(checkTarget)
+                        onPortalCheck()
+                    }
+                },
+                enabled = checkTarget != null,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Open portal test") }
 
             HorizontalDivider()
             Text("Portal session", style = MaterialTheme.typography.titleMedium)

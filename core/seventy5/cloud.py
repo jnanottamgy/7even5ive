@@ -89,8 +89,9 @@ def build_router() -> Router:
     fixed = public_url()
     os.environ.setdefault("PORTMAX_DEV_TOKENS", f"{demo.TOKEN}:{demo.PORTAL_ID}")
     _, core, _, live, lines = demo.prepare()
-    print(f"mode: {'LIVE Jev + Claude' if live else 'offline, recorded answers'}")
-    print("\n".join(lines))
+    # Counts only: logs never carry message or mail text (the hosts' logs may be CloudWatch).
+    mode = "LIVE Jev + Claude" if live else "offline, recorded answers"
+    print(f"mode: {mode}; replayed {len(lines)} demo messages", flush=True)
 
     def connectors(college: str) -> Connector:
         # The mock portal is this service. Pages must come from the address the phone uses for

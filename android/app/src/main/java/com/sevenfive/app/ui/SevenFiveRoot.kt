@@ -41,6 +41,7 @@ import com.sevenfive.app.ui.screens.AttendanceScreen
 import com.sevenfive.app.ui.screens.HomeScreen
 import com.sevenfive.app.ui.screens.InboxScreen
 import com.sevenfive.app.ui.screens.MaterialsScreen
+import com.sevenfive.app.ui.screens.PortalCheckScreen
 import com.sevenfive.app.ui.screens.PortalScreen
 import com.sevenfive.app.ui.screens.RemindersScreen
 import com.sevenfive.app.ui.screens.SettingsScreen
@@ -53,6 +54,7 @@ object Routes {
     const val REMINDERS = "reminders"
     const val PORTAL = "portal"
     const val SETTINGS = "settings"
+    const val PORTAL_CHECK = "portal-check"
 }
 
 private data class Tab(val route: String, val label: String, val on: ImageVector, val off: ImageVector)
@@ -116,7 +118,12 @@ fun SevenFiveRoot(vm: AppViewModel) {
                 composable(Routes.INBOX) { InboxScreen(vm, settings) }
                 composable(Routes.REMINDERS) { RemindersScreen(vm, settings) }
                 composable(Routes.PORTAL) { PortalScreen(vm, onDone = { nav.popBackStack() }) }
-                composable(Routes.SETTINGS) { SettingsScreen(vm, onBack = { nav.popBackStack() }) }
+                composable(Routes.SETTINGS) {
+                    SettingsScreen(vm, onBack = { nav.popBackStack() }, onPortalCheck = { nav.navigate(Routes.PORTAL_CHECK) })
+                }
+                composable(Routes.PORTAL_CHECK) {
+                    PortalCheckScreen(vm, vm.portalCheckUrl.value, onBack = { nav.popBackStack() })
+                }
             }
         }
     }

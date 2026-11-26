@@ -23,7 +23,10 @@ from portmax.store import Store
 from portmax.tools import answer
 from tests.conftest import IDLE_TIMEOUT, PHONE_UA, LivePortal
 
-os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", "/opt/pw-browsers")
+# Some Linux machines share one browser install there; everywhere else (Windows, macOS)
+# Playwright's own default location is the right one.
+if os.path.isdir("/opt/pw-browsers"):
+    os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", "/opt/pw-browsers")
 playwright = pytest.importorskip("playwright.sync_api")
 
 pytestmark = pytest.mark.browser
