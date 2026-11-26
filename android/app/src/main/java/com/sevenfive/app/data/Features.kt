@@ -28,6 +28,8 @@ data class MailStatus(
     @SerialName("check_now_after") val checkNowAfter: String? = null,
     /** Mails the filter read and left out (not a placement, internship or exam notice). */
     @SerialName("left_out") val leftOut: Int = 0,
+    /** Google stopped accepting the connection (7 days in Testing, or revoked): sign in again. */
+    @SerialName("needs_reconnect") val needsReconnect: Boolean = false,
 ) {
     val isDemo: Boolean get() = mode == "demo"
 
@@ -85,6 +87,9 @@ data class GoogleStatus(
     val gmail: Boolean = false,
     val calendar: Boolean = false,
     val classroom: Boolean = false,
+    /** Linked, but Google stopped accepting it (7 days in Testing, or revoked): Settings asks
+     * the student to connect again. Older servers don't send it. */
+    @SerialName("needs_reconnect") val needsReconnect: Boolean = false,
 )
 
 @Serializable

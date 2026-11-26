@@ -1,12 +1,17 @@
 package com.sevenfive.app
 
 import android.media.AudioDeviceInfo
+import com.sevenfive.app.data.AppJson
+import com.sevenfive.app.data.GoogleStatus
+import com.sevenfive.app.data.MailStatus
 import com.sevenfive.app.data.ServerSettings
 import com.sevenfive.app.ui.auth.AuthStep
 import com.sevenfive.app.ui.components.uniqueKeys
 import com.sevenfive.app.voice.VoiceAssistant
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** The small rules behind the fixes: each one pure, so it is checked here on its own. */
@@ -63,5 +68,17 @@ class AppRulesTest {
         assertEquals(0, VoiceAssistant.preferredOutput(listOf(AudioDeviceInfo.TYPE_BLUETOOTH_SCO, speaker, AudioDeviceInfo.TYPE_WIRED_HEADSET)))
         assertEquals(2, VoiceAssistant.preferredOutput(listOf(speaker, earpiece, AudioDeviceInfo.TYPE_BLE_HEADSET)))
         assertNull(VoiceAssistant.preferredOutput(listOf(earpiece)))
+    }
+
+    @Test
+    fun `a Google connection Google stopped accepting is read, and older servers still decode`() {
+        val dead = AppJson.decodeFromString<GoogleStatus>(
+            """{"configured": true, "connected": true, "email": "a@b.in", "needs_reconnect": true}""")
+        assertTrue(dead.connected && dead.needsReconnect)
+        val older = AppJson.decodeFromString<GoogleStatus>("""{"configured": true, "connected": true}""")
+        assertFalse(older.needsReconnect)
+        val mail = AppJson.decodeFromString<MailStatus>(
+            """{"mode": "gmail", "status": "needs_reconnect", "needs_reconnect": true}""")
+        assertTrue(mail.needsReconnect && !mail.connected)
     }
 }

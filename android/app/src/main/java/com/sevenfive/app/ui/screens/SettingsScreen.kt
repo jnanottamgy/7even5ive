@@ -237,8 +237,16 @@ private fun GoogleSection(vm: AppViewModel, demo: Boolean) {
                 detail = "The team adds a Google OAuth client (docs/keys.md). College mail uses the demo mailbox until then.",
             )
             google.connected -> {
-                GroupRow("Connected", icon = Icons.Outlined.AccountCircle, iconColor = LocalStatusColors.current.safe,
-                    detail = google.email ?: "Google account")
+                if (google.needsReconnect) {
+                    GroupRow("Reconnect Google", icon = Icons.Outlined.AccountCircle,
+                        iconColor = MaterialTheme.colorScheme.error, titleColor = MaterialTheme.colorScheme.error,
+                        chevron = true, busy = "google" in busy,
+                        detail = "Google stopped accepting the connection" + (google.email?.let { " for $it" } ?: "") +
+                            ". Sign in again to keep college mail, Calendar and Classroom coming.") { vm.connectGoogle() }
+                } else {
+                    GroupRow("Connected", icon = Icons.Outlined.AccountCircle, iconColor = LocalStatusColors.current.safe,
+                        detail = google.email ?: "Google account")
+                }
                 GroupDivider()
                 val parts = listOfNotNull(
                     "Gmail (read-only)".takeIf { google.gmail },

@@ -148,6 +148,7 @@ private fun MailboxCard(mail: MailStatus, checking: Boolean, modifier: Modifier 
             Text(
                 when {
                     mail.needsGoogle -> "Connect Google in Settings: placements, internships and exam notices from your college mail land here."
+                    mail.needsReconnect -> "Google stopped accepting the connection: reconnect it in Settings to keep your college mail coming."
                     mail.isDemo -> leftOutLine(mail.leftOut) + " · invented mail until you connect Google in Settings"
                     else -> leftOutLine(mail.leftOut)
                 },
