@@ -51,6 +51,8 @@ import com.sevenfive.app.ui.theme.LocalAppColors
 import com.sevenfive.app.ui.theme.frostedStyle
 import com.sevenfive.app.ui.theme.glassSurface
 import com.sevenfive.app.ui.theme.pressable
+import dev.chrisbanes.haze.ExperimentalHazeApi
+import dev.chrisbanes.haze.HazeInputScale
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
@@ -109,7 +111,7 @@ fun PushTopBar(
  * A pushed screen with a large title that collapses into a frosted bar, over the same backdrop as
  * the tabs. [content] gets padding for its scrolling column (top bar above, gesture bar below).
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalHazeApi::class)
 @Composable
 fun PushScaffold(title: String, onBack: () -> Unit, content: @Composable (PaddingValues) -> Unit) {
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -121,7 +123,10 @@ fun PushScaffold(title: String, onBack: () -> Unit, content: @Composable (Paddin
         containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            Column(Modifier.hazeEffect(state = haze, style = frostedStyle()) { alpha = scroll.state.collapsedFraction }) {
+            Column(Modifier.hazeEffect(state = haze, style = frostedStyle()) {
+                alpha = scroll.state.collapsedFraction
+                inputScale = HazeInputScale.Auto
+            }) {
                 LargeTopAppBar(
                     title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     navigationIcon = { BackButton(onBack) },
@@ -135,7 +140,10 @@ fun PushScaffold(title: String, onBack: () -> Unit, content: @Composable (Paddin
                     Modifier
                         .fillMaxWidth()
                         .height(0.6.dp)
-                        .graphicsLayer { alpha = scroll.state.collapsedFraction }
+                        .graphicsLayer {
+                alpha = scroll.state.collapsedFraction
+                inputScale = HazeInputScale.Auto
+            }
                         .background(app.hairline),
                 )
             }

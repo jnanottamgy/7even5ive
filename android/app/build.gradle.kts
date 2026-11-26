@@ -42,7 +42,20 @@ android {
             // APK still installs if someone builds it.
             signingConfig = signingConfigs.getByName("debug")
         }
+        // The build to install on a phone. Debug builds run Compose without ART's optimisations
+        // and without R8, which shows as lag and dropped frames in the blur and the springs; this
+        // is a release build (optimised, Compose's baseline profiles installed) that keeps the
+        // debug build's network rules, so the laptop fallback still works. Same key as debug, so
+        // it installs as an update over a debug build.
+        create("demo") {
+            initWith(getByName("release"))
+            isMinifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
+        }
     }
+    sourceSets.getByName("demo").res.srcDirs("src/debug/res")
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

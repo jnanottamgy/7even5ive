@@ -44,6 +44,8 @@ import com.sevenfive.app.ui.theme.LocalBottomInset
 import com.sevenfive.app.ui.theme.frostedStyle
 import com.sevenfive.app.ui.theme.glassSurface
 import com.sevenfive.app.ui.theme.pressable
+import dev.chrisbanes.haze.ExperimentalHazeApi
+import dev.chrisbanes.haze.HazeInputScale
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
@@ -58,7 +60,7 @@ import kotlinx.coroutines.launch
  * [content] gets the padding that keeps its first and last items clear of the bars: pass it as
  * the list's contentPadding, not as a modifier, so the content can scroll underneath.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalHazeApi::class)
 @Composable
 fun TabScaffold(
     title: String,
@@ -81,7 +83,10 @@ fun TabScaffold(
         containerColor = Color.Transparent,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            Column(Modifier.hazeEffect(state = haze, style = frostedStyle()) { alpha = scroll.state.collapsedFraction }) {
+            Column(Modifier.hazeEffect(state = haze, style = frostedStyle()) {
+                alpha = scroll.state.collapsedFraction
+                inputScale = HazeInputScale.Auto
+            }) {
                 LargeTopAppBar(
                     title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     actions = {
@@ -113,7 +118,10 @@ fun TabScaffold(
                     Modifier
                         .fillMaxWidth()
                         .height(0.6.dp)
-                        .graphicsLayer { alpha = scroll.state.collapsedFraction }
+                        .graphicsLayer {
+                alpha = scroll.state.collapsedFraction
+                inputScale = HazeInputScale.Auto
+            }
                         .background(app.hairline),
                 )
             }

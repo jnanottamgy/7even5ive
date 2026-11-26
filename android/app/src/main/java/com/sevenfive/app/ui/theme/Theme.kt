@@ -1,6 +1,5 @@
 package com.sevenfive.app.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
@@ -190,8 +189,9 @@ private val AppShapes = Shapes(
     extraLarge = RoundedCornerShape(28.dp),
 )
 
+/** Light only, by design: the app always looks the way it was designed, whatever the phone's setting. */
 @Composable
-fun SevenFiveTheme(dark: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
+fun SevenFiveTheme(dark: Boolean = false, content: @Composable () -> Unit) {
     CompositionLocalProvider(
         LocalStatusColors provides if (dark) DarkStatus else LightStatus,
         LocalAppColors provides if (dark) DarkApp else LightApp,

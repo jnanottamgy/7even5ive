@@ -7,11 +7,12 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
@@ -70,6 +71,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -234,21 +236,24 @@ private typealias Nav = AnimatedContentTransitionScope<NavBackStackEntry>
 
 private val NavBackStackEntry.isPushed get() = destination.route in pushed
 
+private val tabFadeIn = tween<Float>(durationMillis = 180, easing = FastOutSlowInEasing)
+private val tabFadeOut = tween<Float>(durationMillis = 120, easing = FastOutSlowInEasing)
+
 private fun Nav.enter(): EnterTransition =
     if (targetState.isPushed) slideInHorizontally(Motion.screen) { it }
-    else fadeIn(Motion.fade) + scaleIn(Motion.fade, initialScale = 0.985f)
+    else fadeIn(tabFadeIn)
 
 private fun Nav.exit(): ExitTransition =
     if (targetState.isPushed) slideOutHorizontally(Motion.screen) { -it / 4 } + fadeOut(Motion.fade, targetAlpha = 0.7f)
-    else fadeOut(Motion.fade)
+    else fadeOut(tabFadeOut)
 
 private fun Nav.popEnter(): EnterTransition =
     if (initialState.isPushed) slideInHorizontally(Motion.screen) { -it / 4 } + fadeIn(Motion.fade, initialAlpha = 0.7f)
-    else fadeIn(Motion.fade) + scaleIn(Motion.fade, initialScale = 0.985f)
+    else fadeIn(tabFadeIn)
 
 private fun Nav.popExit(): ExitTransition =
     if (initialState.isPushed) slideOutHorizontally(Motion.screen) { it }
-    else fadeOut(Motion.fade)
+    else fadeOut(tabFadeOut)
 
 /**
  * The tab bar, iOS style: a frosted capsule floating over the content, with a soft selection
@@ -269,7 +274,7 @@ private fun GlassTabBar(haze: HazeState, selected: Int, badge: (Tab) -> Int, onS
         val pillX by animateDpAsState(itemWidth * selected, Motion.glide, label = "tab pill")
         Box(
             Modifier
-                .offset(x = pillX)
+                .offset { IntOffset(pillX.roundToPx(), 0) }
                 .width(itemWidth)
                 .fillMaxHeight()
                 .padding(5.dp)
