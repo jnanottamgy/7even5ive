@@ -21,6 +21,14 @@ What each scope is for: Gmail read-only feeds the mail filter (mail.py); Calenda
 event a student approves (add_to_calendar); Classroom brings coursework with its own due date
 into the cascade (decision 29). Google's verification is needed before real students (decision
 54); the demo runs in Testing mode, where a sign-in lasts 7 days.
+
+When Google refuses the grant for good (invalid_grant: revoked, or the Testing-mode week passed)
+the account is marked: status says needs_reconnect (the app says "Reconnect Google"), Gmail,
+Classroom and Calendar wait without asking Google again, and the student is told once, in the
+outbox. Signing in again clears it. A grant this server cannot decrypt (its key changed) is not
+marked: that is the server's fault, and fixing the key brings every account back.
+Classroom has its own job (app.sync_classroom): every connected student once per mail slot,
+least recently read first, over as many ticks as it takes.
 """
 
 from __future__ import annotations
@@ -38,11 +46,13 @@ from typing import Any
 from urllib.parse import urlencode
 
 import httpx
+from mailfilter.config import parse_times
 from mailfilter.errors import GmailUnavailable, NeedsReconnect, NotConnected
 
 from . import clock
 from .config import settings
 from .db import Database
+from .scheduler import latest_slot
 
 log = logging.getLogger(__name__)
 
@@ -61,12 +71,24 @@ CODE_MINUTES = 10
 EARLY = 60.0  # refresh an access token this long before it expires
 # Classroom only starts a new piece of coursework (it may need the LLM) with this much time left.
 CLASSROOM_RESERVE = 15.0
+# A Classroom read that failed (Google down, a refused course list) is tried again this much later
+# in the same slot; one cut short by the tick's budget goes on at the next tick.
+CLASSROOM_RETRY_AFTER = timedelta(minutes=10)
+# Said once in the outbox when Google refuses a student's grant for good.
+RECONNECT_TITLE = "Reconnect Google"
+RECONNECT_BODY = ("Google stopped letting 7even5ive read your college mail and Classroom. "
+                  "Open Settings and connect Google again.")
 # Development only: a fixed key, so a laptop restart can still read what it stored.
 DEV_KEY = base64.urlsafe_b64encode(hashlib.sha256(b"7even5ive-dev-only").digest())
 
 
 class GoogleUnavailable(RuntimeError):
     """Said to the student as it is (the sign-in page or the app shows it)."""
+
+
+class ClassroomRefused(GoogleUnavailable):
+    """Classroom answered, and refused (a 4xx other than 429): the college's admin, or an
+    account without Classroom. Asked again at the next slot, not minutes later."""
 
 
 def _http() -> httpx.Client:
@@ -194,6 +216,7 @@ def finish(db: Database, code: str | None, state: str | None, student_id: int,
     sid = int(row["student_id"])
     email = _email_from(body.get("id_token"))
     db.save_google(sid, email, str(body.get("scope") or ""), seal(refresh), clock.iso(clock.now()))
+    db.google_reconnected(sid)  # a refused grant is forgotten; Classroom is read again soon
     _tokens.drop(sid)
     from . import mail
 
@@ -230,7 +253,17 @@ def account_email(db: Database, sid: int) -> str | None:
     return row["email"] if row is not None else None
 
 
+def needs_reconnect(db: Database, sid: int) -> str | None:
+    """Why Google refused this student's grant, until they connect again; None while it works."""
+    row = db.google_account(sid)
+    if row is None or not row["needs_reconnect_at"]:
+        return None
+    return str(row["reconnect_reason"] or "needs_reconnect")
+
+
 def status(db: Database, sid: int) -> dict[str, Any]:
+    """What Settings shows. connected: an account is linked (the app shows it, and Disconnect);
+    needs_reconnect: Google refused its grant, so the app says "Reconnect Google"."""
     row = db.google_account(sid)
     scopes = set(str(row["scopes"]).split()) if row is not None else set()
     return {
@@ -241,6 +274,7 @@ def status(db: Database, sid: int) -> dict[str, Any]:
         "gmail": GMAIL_SCOPE in scopes,
         "calendar": CALENDAR_SCOPE in scopes,
         "classroom": {COURSES_SCOPE, COURSEWORK_SCOPE} <= scopes,
+        "needs_reconnect": row is not None and bool(row["needs_reconnect_at"]),
     }
 
 
@@ -290,6 +324,10 @@ class _Tokens:
         row = db.google_account(sid)
         if row is None:
             raise NotConnected("no_google_account")
+        if row["needs_reconnect_at"]:
+            # Google refused this grant already: it is not asked again until the student
+            # connects again (every Gmail, Classroom and Calendar call comes through here).
+            raise NeedsReconnect(str(row["reconnect_reason"] or "needs_reconnect"))
         client = http or _http()
         try:
             resp = client.post(TOKEN_URL, data={
@@ -307,6 +345,7 @@ class _Tokens:
             except ValueError:
                 pass
             if error == "invalid_grant":  # revoked at Google, or a Testing-mode week passed
+                _grant_lost(db, sid, str(row["refresh_token"]), error)
                 raise NeedsReconnect("invalid_grant")
             raise GmailUnavailable(error or f"token_http_{resp.status_code}")
         body = resp.json()
@@ -317,6 +356,26 @@ class _Tokens:
 
 
 _tokens = _Tokens()
+
+
+def _grant_lost(db: Database, sid: int, sealed: str, reason: str) -> bool:
+    """Google refused the student's grant (`sealed`, as stored) for good: the account is marked
+    and the student told, once, in the outbox, with a wake-up for their phone. Nothing happens
+    when a reconnect already replaced that grant. Returns whether this call marked it."""
+    _tokens.drop(sid)
+    if not db.google_grant_lost(sid, sealed, reason, clock.iso(clock.now()), RECONNECT_TITLE,
+                                RECONNECT_BODY):
+        return False
+    log.info("google grant refused", extra={"student": sid, "reason": reason})
+    try:
+        from . import fcm
+
+        account = fcm.load_account()
+        if account is not None:
+            fcm.FcmWaker(db, account, background=False).wake(sid)
+    except Exception as err:  # noqa: BLE001 - the message is saved; the phone's next pull has it
+        log.warning("wake-up failed", extra={"student": sid, "error": type(err).__name__})
+    return True
 
 
 def access_token(db: Database, sid: int, fresh: bool = False,
@@ -348,6 +407,8 @@ def _authorized(db: Database, sid: int, http: httpx.Client, method: str, url: st
 def calendar_upsert(db: Database, sid: int, key: str, title: str, starts_at: str,
                     http: httpx.Client | None = None) -> dict[str, Any]:
     """Writes the event with our fixed id; a retry (409: the id exists) rewrites the same event."""
+    if (refused := needs_reconnect(db, sid)) is not None:
+        raise NeedsReconnect(refused)  # Google is not asked until the student reconnects
     client = http or _http()
     start_at = datetime.fromisoformat(starts_at)
     event = {
@@ -390,7 +451,9 @@ def coursework(db: Database, sid: int, http: httpx.Client | None = None) -> list
     courses = _authorized(db, sid, client, "GET", f"{CLASSROOM}/courses",
                           params={"studentId": "me", "courseStates": "ACTIVE", "pageSize": 50})
     if courses.status_code != 200:
-        raise GoogleUnavailable(f"Classroom refused the course list ({courses.status_code}).")
+        busy = courses.status_code == 429 or courses.status_code >= 500
+        raise (GoogleUnavailable if busy else ClassroomRefused)(
+            f"Classroom refused the course list ({courses.status_code}).")
     found = []
     for course in courses.json().get("courses", []):
         works = _authorized(db, sid, client, "GET",
@@ -414,35 +477,86 @@ def classroom_sync(app: Any, sid: int, http: httpx.Client | None = None,
                    deadline: float | None = None) -> int:
     """Coursework into cards. A new piece goes through the cascade (Jev or the LLM names the
     subject); Classroom's own due date always wins. A moved due date moves the card and its
-    reminders. A new piece is only started with CLASSROOM_RESERVE seconds left before the
-    deadline (the rest waits for the next check). Returns how many pieces were new."""
+    reminders. A piece whose card was left for review, or that never got one (skipped, or its
+    run was cut off), goes through the cascade again: its card is filed in place of the one
+    for review, never beside it. A piece is only started with CLASSROOM_RESERVE seconds left
+    before the deadline (the rest waits for the next turn). Returns how many were filed."""
+    return _classroom(app, sid, http, deadline)[0]
+
+
+def _follow(db: Database, sid: int, card: Any, work: dict[str, Any]) -> None:
+    if card["due_at"] != work["due_at"]:
+        db.move_item_due(sid, card["id"], work["due_at"], clock.iso(clock.now()))
+
+
+def _classroom(app: Any, sid: int, http: httpx.Client | None,
+               deadline: float | None) -> tuple[int, bool]:
+    """classroom_sync: (pieces filed, whether every piece was seen to: False when cut short)."""
     db = app.db
-    if not (settings.classroom_enabled and has_classroom(db, sid)):
-        return 0
-    from .ingress import accept
+    if not (settings.classroom_enabled and has_classroom(db, sid)) or needs_reconnect(db, sid):
+        return 0, True
+    from .ingress import accept, accept_again
 
     new = 0
     for work in coursework(db, sid, http):
         external = f"classroom:{work['id']}"
-        item = db.item_by_external(sid, external)
-        if item is not None:
-            if item["due_at"] != work["due_at"]:
-                db.move_item_due(sid, item["id"], work["due_at"], clock.iso(clock.now()))
+        card = db.item_by_external(sid, external)
+        if card is not None and card["status"] != "needs_review":
+            _follow(db, sid, card, work)
             continue
         if deadline is not None and deadline - time.monotonic() < CLASSROOM_RESERVE:
-            break
+            return new, False
         due_text = datetime.fromisoformat(work["due_at"]).strftime("%A %d %B %Y %I:%M %p")
         payload = {"text": f"{work['course']}: {work['title']} (due {due_text})",
-                   "classroom": {"title": work["title"], "due_at": work["due_at"]}}
+                   "classroom": {"title": work["title"], "due_at": work["due_at"],
+                                 "external_id": external}}
         event_id = accept(db, app.queue, sid, "classroom", external, payload)
         if event_id is None:
-            continue
+            # Seen at an earlier sync, with no filed card to show for it: run it again.
+            event_id = accept_again(db, app.queue, sid, "classroom", external, payload)
+            if event_id is None:
+                continue
         app.work()
-        # This event's own card, never another one the same drain happened to file.
-        filed = db.conn.execute("SELECT id FROM items WHERE event_id=? AND student_id=? AND"
-                                " status='filed'", (event_id, sid)).fetchone()
-        if filed is not None:
-            db.update_item(sid, filed["id"], external_id=external)
-            db.move_item_due(sid, filed["id"], work["due_at"], clock.iso(clock.now()))
+        # The cascade gives the card this piece's id; a card filed before it did is linked now.
+        card = db.item_by_external(sid, external) or db.link_event_card(sid, event_id, external)
+        if card is not None and card["status"] == "filed":
+            _follow(db, sid, card, work)
             new += 1
-    return new
+    return new, True
+
+
+def classroom_due(db: Database, now: datetime | None = None) -> list[int]:
+    """Students whose Classroom has not been read completely since the latest mail slot (1 PM,
+    9 PM), least recently tried first. One that failed waits CLASSROOM_RETRY_AFTER; a grant
+    Google refused waits for the student to reconnect."""
+    if not settings.classroom_enabled:
+        return []
+    now = now or clock.now()
+    slot = latest_slot(now, parse_times(settings.mail_check_times))
+    rows = db.classroom_due(clock.iso(slot), clock.iso(now - CLASSROOM_RETRY_AFTER))
+    return [int(r["student_id"]) for r in rows
+            if {COURSES_SCOPE, COURSEWORK_SCOPE} <= set(str(r["scopes"]).split())]
+
+
+def classroom_turn(app: Any, sid: int, http: httpx.Client | None = None,
+                   deadline: float | None = None) -> bool:
+    """One student's Classroom for the background job, claimed first so two instances never
+    read it in the same minute, then recorded: complete (done until the next slot), cut short
+    (goes on at the next turn, behind the others), failed (Google busy or unreachable: tried
+    again CLASSROOM_RETRY_AFTER later) or refused (asked again at the next slot). Never raises.
+    Returns whether it is done for this slot."""
+    db = app.db
+    started = clock.iso(clock.now())
+    if not db.claim_classroom(sid, started):
+        return False
+    try:
+        _, complete = _classroom(app, sid, http, deadline)
+    except Exception as err:  # noqa: BLE001 - logged by type only; one student never stops another
+        refused = isinstance(err, ClassroomRefused)
+        code = "classroom_refused" if refused else str(getattr(err, "code", "")
+                                                       or type(err).__name__)[:40]
+        log.warning("classroom sync failed", extra={"student": sid, "error": code})
+        db.classroom_tried(sid, started, refused, code)
+        return refused
+    db.classroom_tried(sid, started, complete, None)
+    return complete

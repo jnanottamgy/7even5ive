@@ -14,7 +14,12 @@ urgent call, the calendar and the briefing. A card is copied by its id (external
 mail:<mailbox>:<card id>), updated in place when a newer mail changes it, and its reminders move
 with a moved deadline. A card the student marked done stays done.
 When: at 1 PM and 9 PM India time (scheduler job "mail"), on "Check now" (5-minute cooldown),
-and once at startup so the Inbox is never empty on a fresh demo.
+and once at startup so the Inbox is never empty on a fresh demo. On Lambda a turn has about 20
+seconds, so the 1 PM job checks whom it can and "mail-continue" takes the rest over the next
+turns: every mailbox not checked since the latest 1 PM or 9 PM, one cut short, or one Claude or
+Gmail could not serve (tried again RETRY_AFTER later), least recently checked first (due()).
+A mailbox whose Google grant was refused waits for the student to reconnect.
+One card per mail card, even with two instances: the database allows one per external id.
 """
 
 from __future__ import annotations
@@ -23,7 +28,7 @@ import logging
 import threading
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 from mailfilter import tools as mail_tools
@@ -50,6 +55,10 @@ JUDGE_TIMEOUT = 9.0
 MAIL_RESERVE = 12.0
 # "Check now" answers within this, then the rest goes on in the background (mail-continue).
 CHECK_NOW_SECONDS = 20.0
+# A check stopped by these (Claude timing out, overloaded or rate limited; Gmail or Google's
+# sign-in down) is tried again this long after it started, still in the same slot.
+RETRY_ERRORS = frozenset({"judge_unavailable", "gmail_unavailable"})
+RETRY_AFTER = timedelta(minutes=10)
 _sync_lock = threading.Lock()
 
 
@@ -167,6 +176,9 @@ def _parts(db: Database, sid: int, now: datetime,
         return key, demo.box, ScriptedJudge(demo.answers), first
     from . import google
 
+    if google.needs_reconnect(db, sid) is not None:
+        raise MailUnavailable("Reconnect Google in Settings: Google stopped letting 7even5ive "
+                              "read your mail.", 409)
     judge = live_judge()
     if judge is None:
         raise MailUnavailable("Reading real mail needs Claude: set BEDROCK_MODEL_ID or "
@@ -228,52 +240,125 @@ def _room(deadline: float | None) -> bool:
     return deadline is None or deadline - time.monotonic() >= MAIL_RESERVE
 
 
-def check_all(db: Database, deadline: float | None = None) -> int:
-    """The 1 PM and 9 PM job: every student's mailbox. One student's failure never stops the
-    rest. Returns how many were checked."""
+def _aware(value: datetime | None) -> datetime | None:
+    """The mail filter writes UTC; SQLite gives it back without the zone."""
+    if value is None:
+        return None
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+def due(db: Database, now: datetime | None = None) -> list[int]:
+    """The students whose mailbox the current slot has not finished, least recently checked
+    first: not checked since the latest 1 PM or 9 PM (or never), cut short (the turn's time,
+    the 200-mail cap), or stopped by Claude or Gmail being unreachable at least RETRY_AFTER ago.
+    Left out: a mailbox Google cut off (it waits for the student to reconnect), and Gmail while
+    this server has no Claude to read it. A few queries, whatever the number of students."""
+    from sqlalchemy import select
+
+    from mailfilter.store import connections, runs
+
+    from . import google
+    from .scheduler import latest_slot
+
+    now = now or clock.now()
+    slot = latest_slot(now, mail_settings().check_times)
+    keys: dict[str, int] = {}
+    claude: bool | None = None
+    for row in db.mail_owners():  # mode() for everyone at once
+        sid = int(row["id"])
+        if google.GMAIL_SCOPE in str(row["scopes"] or "").split():
+            if row["needs_reconnect_at"]:
+                continue
+            claude = live_judge() is not None if claude is None else claude
+            if not claude:
+                continue
+            keys[mailbox_key(sid, "gmail")] = sid
+        elif not row["auth_user_id"]:
+            keys[mailbox_key(sid, "demo")] = sid
+    boxes: dict[str, Any] = {}
+    last_run: dict[str, Any] = {}
+    names = list(keys)
+    with store().engine.connect() as c:
+        for start in range(0, len(names), 500):
+            for r in c.execute(select(connections.c.student_id, connections.c.status,
+                                      connections.c.last_run_at, connections.c.lease_until)
+                               .where(connections.c.student_id.in_(names[start:start + 500]))):
+                boxes[r.student_id] = r
+        recent = [k for k, r in boxes.items() if r.last_run_at and _aware(r.last_run_at) >= slot]
+        for start in range(0, len(recent), 500):
+            for r in c.execute(select(runs.c.student_id, runs.c.started_at, runs.c.more,
+                                      runs.c.error)
+                               .where(runs.c.student_id.in_(recent[start:start + 500]),
+                                      runs.c.started_at >= slot.astimezone(timezone.utc))
+                               .order_by(runs.c.id)):
+                last_run[r.student_id] = r  # the latest wins
+    never = datetime.min.replace(tzinfo=timezone.utc)
+    todo: list[tuple[datetime, int]] = []
+    for key, sid in keys.items():
+        box = boxes.get(key)
+        if box is None:  # never checked (the mailbox is connected at its first check)
+            todo.append((never, sid))
+            continue
+        last = _aware(box.last_run_at)
+        if box.status != "connected":
+            continue
+        if last is None or last < slot:
+            todo.append((last or never, sid))
+            continue
+        run = last_run.get(key)
+        if run is None:
+            # A check started since the slot and recorded nothing yet: still running, or it
+            # was killed, and then it is due once its lease has run out.
+            lease = _aware(box.lease_until)
+            if lease is None or lease < now:
+                todo.append((last, sid))
+        elif run.more or (run.error in RETRY_ERRORS
+                          and _aware(run.started_at) <= now - RETRY_AFTER):
+            todo.append((last, sid))
+    return [sid for _, sid in sorted(todo)]
+
+
+def _sweep(db: Database, deadline: float | None, trigger: str) -> int:
     done = 0
-    for sid in db.mailbox_students():
+    for sid in due(db):
         if not _room(deadline):
-            break  # mail-continue picks up whoever is left
+            break  # still due at the next turn, which carries on from here
         try:
-            check(db, sid, "scheduled", deadline=deadline)
+            check(db, sid, trigger, deadline=deadline)
             done += 1
         except MailUnavailable as err:
-            log.info("mail check skipped", extra={"student": sid, "status": err.status})
+            log.info("mail check skipped", extra={"student": sid, "status": err.status,
+                                                  "trigger": trigger})
         except Exception as err:  # noqa: BLE001 - logged by type only; it may quote mail
             log.error("mail check crashed", extra={"student": sid, "error": type(err).__name__})
     return done
 
 
+def check_all(db: Database, deadline: float | None = None) -> int:
+    """The 1 PM and 9 PM job: every student's mailbox the slot has not finished (due()), as far
+    as this turn's time goes; mail-continue takes the rest. One student's failure never stops
+    the rest. Returns how many were checked."""
+    return _sweep(db, deadline, "scheduled")
+
+
 def unfinished(sid_key: str) -> bool:
-    """True when this mailbox's last check stopped early (its time budget, or the 200-mail cap)."""
+    """True when this mailbox's last check stopped before the end: its time budget, the
+    200-mail cap, or Claude or Gmail unreachable (RETRY_ERRORS)."""
     from sqlalchemy import select
 
     from mailfilter.store import runs
 
     with store().engine.connect() as c:
-        last = c.execute(select(runs.c.more).where(runs.c.student_id == sid_key)
+        last = c.execute(select(runs.c.more, runs.c.error).where(runs.c.student_id == sid_key)
                          .order_by(runs.c.id.desc()).limit(1)).first()
-    return bool(last is not None and last.more)
+    return bool(last is not None and (last.more or last.error in RETRY_ERRORS))
 
 
 def continue_unfinished(db: Database, deadline: float | None = None) -> int:
-    """A check cut short goes on at the next turn of the loop, not at the next 1 PM or 9 PM.
-    On Lambda each turn has about 20 seconds, so a big first Gmail check finishes over a few
-    minutes."""
-    done = 0
-    for sid in db.mailbox_students():
-        if not _room(deadline):
-            break
-        which = mode(db, sid)
-        if which == "none" or not unfinished(mailbox_key(sid, which)):
-            continue
-        try:
-            check(db, sid, "continue", deadline=deadline)
-            done += 1
-        except MailUnavailable as err:
-            log.info("mail continue skipped", extra={"student": sid, "status": err.status})
-    return done
+    """Every turn after a slot: the mailboxes it has not finished (due()), so a 1 PM check that
+    ran out of time, or found Claude down, finishes long before 9 PM. On Lambda each turn has
+    about 20 seconds, so a big first Gmail check finishes over a few minutes."""
+    return _sweep(db, deadline, "continue")
 
 
 # --- cards into items -----------------------------------------------------------------------------
@@ -338,10 +423,15 @@ def _upsert(db: Database, sid: int, external: str, fields: dict[str, Any], now: 
             event_id = int(db.conn.execute("SELECT id FROM events WHERE student_id=? AND"
                                            " idempotency_key=?", (sid, external)).fetchone()["id"])
         db.mark_event(event_id, "done")
-        db.insert_item(student_id=sid, event_id=event_id, source="gmail", route="mail",
-                       relevance=None, created_at=clock.iso(now), external_id=external,
-                       status="filed", **fields)
-        return
+        # _sync_lock only covers this process: another instance copying the same card at the
+        # same moment is stopped by the database (one card per external id).
+        if db.insert_item_once(student_id=sid, event_id=event_id, source="gmail", route="mail",
+                               relevance=None, created_at=clock.iso(now), external_id=external,
+                               status="filed", **fields) is not None:
+            return
+        item = db.item_by_external(sid, external)  # theirs: brought up to date below
+        if item is None:  # and already gone again (the student disconnected Gmail meanwhile)
+            return
     changed = {k: v for k, v in fields.items() if item[k] != v}
     if item["status"] == "cancelled":
         # Retired when the student switched mailboxes, and current again (switched back).
@@ -396,6 +486,8 @@ def status(db: Database, sid: int) -> dict[str, Any]:
     from mailfilter.schedule import next_check
     from mailfilter.store import seen
 
+    from . import google
+
     now = clock.now()
     which = mode(db, sid)
     key = mailbox_key(sid, which)
@@ -405,10 +497,16 @@ def status(db: Database, sid: int) -> dict[str, Any]:
             seen.c.student_id == key, seen.c.outcome.in_(("dropped", "skipped")))).scalar() or 0)
     last_run = connection.last_run_at if connection else None
     cooldown = mail_settings().check_now_cooldown
+    box = connection.status if connection else "not_connected"
+    # Google refused the grant (found by Classroom or Calendar as often as by Gmail): the
+    # mailbox waits for the student to reconnect, whatever the mail filter last saw.
+    if which == "gmail" and google.needs_reconnect(db, sid) is not None:
+        box = "needs_reconnect"
     return {
         "mode": which,
-        "connected": connection is not None and connection.status == "connected",
-        "status": connection.status if connection else "not_connected",
+        "connected": box == "connected",
+        "status": box,
+        "needs_reconnect": box == "needs_reconnect",
         "address": connection.email if connection and which == "gmail" else None,
         "checked_at": clock.iso(connection.last_ok_at) if connection and connection.last_ok_at
         else None,

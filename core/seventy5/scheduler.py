@@ -1,7 +1,9 @@
 """The background loop inside the one web service.
 
-Jobs: reminders and urgent calls every 30 seconds; college mail at 1 PM and 9 PM India time;
-Classroom with each mail check. Started by the online service (cloud.py) and the laptop demo.
+Jobs: reminders and urgent calls every 30 seconds; college mail at 1 PM and 9 PM India time,
+finished over the next turns by mail-continue; Classroom once per mail slot, in its own job;
+events a killed run left queued, every 5 minutes (app.App.jobs). Started by the online service
+(cloud.py) and the laptop demo.
 
 Why in-process: the prototype is one service on a free host, with no EventBridge; on AWS the
 same jobs are scheduled Lambdas (decision 44) calling the same functions.

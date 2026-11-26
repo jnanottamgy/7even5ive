@@ -4,7 +4,8 @@ The bot tells us when a deadline is created, changed or deleted (an event per ch
 we backfill every upcoming one when the service starts, which also repairs any event lost
 while we were down.
 Why a version on every card: two deliveries can arrive out of order; the newer one always
-wins, so a stale "due Friday" can never overwrite "moved to Monday".
+wins, so a stale "due Friday" can never overwrite "moved to Monday". Two arriving at once still
+make one card: the database allows one card per external id (db.insert_item_once).
 Why move reminders with the deadline: a reminder set "an hour before" must still be an hour
 before after the date changes, and a deleted deadline must never fire one.
 """
@@ -65,10 +66,18 @@ def apply(db: Database, sid: int, event_id: int, payload: dict[str, Any]) -> Out
     fields = {"kind": "deadline", "subject": subject, "title": str(body.get("title") or ""),
               "due_at": due, "status": "filed", "external_version": version}
     if item is None:
-        new_id = db.insert_item(student_id=sid, event_id=event_id, source="whatsapp",
-                                route="bot", relevance=None, created_at=clock.iso(clock.now()),
-                                external_id=external, **fields)
-        return Outcome("bot", "filed", new_id)
+        new_id = db.insert_item_once(student_id=sid, event_id=event_id, source="whatsapp",
+                                     route="bot", relevance=None,
+                                     created_at=clock.iso(clock.now()), external_id=external,
+                                     **fields)
+        if new_id is not None:
+            return Outcome("bot", "filed", new_id)
+        # Another delivery of this deadline filed it a moment ago: the newer one still wins.
+        item = db.item_by_external(sid, external)
+        if item is None:  # and it is gone again (the student's data was deleted meanwhile)
+            return Outcome("bot", "skipped")
+        if (item["external_version"] or 0) >= version:
+            return Outcome("bot", "stale", item["id"])
     if item["due_at"] != due:
         _move_reminders(db, sid, item, due)
     db.update_item(sid, item["id"], **fields)

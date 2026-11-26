@@ -129,9 +129,15 @@ CREATE TABLE IF NOT EXISTS jobs (
 );
 -- One Google account per student (google.py): the refresh token encrypted at rest, the
 -- scopes Google actually granted, and the address it belongs to. The phone never holds it.
+-- needs_reconnect_at: when Google refused the grant for good (revoked, or a Testing-mode week
+-- passed), and why; Gmail, Classroom and Calendar wait until the student connects again.
+-- classroom_*: the Classroom job's progress through the current mail slot: its last complete
+-- sync, its last attempt, and why that attempt failed (NULL when it did not).
 CREATE TABLE IF NOT EXISTS google_accounts (
   student_id BIGINT PRIMARY KEY, email TEXT, scopes TEXT NOT NULL,
-  refresh_token TEXT NOT NULL, connected_at TEXT NOT NULL
+  refresh_token TEXT NOT NULL, connected_at TEXT NOT NULL,
+  needs_reconnect_at TEXT, reconnect_reason TEXT,
+  classroom_synced_at TEXT, classroom_tried_at TEXT, classroom_error TEXT
 );
 -- A sign-in in progress: the one-time `state` Google hands back, the PKCE verifier and where
 -- Google must return to. Spent on first use; worthless after expires_at.
@@ -191,6 +197,9 @@ CREATE INDEX IF NOT EXISTS oauth_grants_student ON oauth_grants(student_id, id);
 # Columns added after the first release. A fresh database gets them from SCHEMA above only if
 # they are listed there too; an older database gets them here, once.
 COLUMNS: dict[str, dict[str, str]] = {
+    "google_accounts": {"needs_reconnect_at": "TEXT", "reconnect_reason": "TEXT",
+                        "classroom_synced_at": "TEXT", "classroom_tried_at": "TEXT",
+                        "classroom_error": "TEXT"},
     "items": {"external_id": "TEXT", "external_version": "BIGINT", "category": "TEXT",
               "organisation": "TEXT", "role": "TEXT", "link": "TEXT", "mail_link": "TEXT",
               "summary": "TEXT", "event_at": "TEXT"},
@@ -210,6 +219,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS students_auth_user ON students(auth_user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS students_username ON students(username);
 CREATE UNIQUE INDEX IF NOT EXISTS students_token_hash ON students(token_hash);
 CREATE UNIQUE INDEX IF NOT EXISTS events_student_key ON events(student_id, idempotency_key);
+CREATE INDEX IF NOT EXISTS items_event ON items(event_id);
+CREATE INDEX IF NOT EXISTS events_queued ON events(created_at) WHERE status='queued';
 """
 
 try:  # psycopg is only needed against Postgres
@@ -580,7 +591,17 @@ class Database:
             have = self.conn.columns(table)
             for name, decl in wanted.items():
                 if name not in have:
-                    _ddl(self.conn, f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+                    # Two instances starting at once may both find it missing: the second one
+                    # must not fail its start over a column the first just added.
+                    if self.conn.pg:
+                        _ddl(self.conn,
+                             f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {name} {decl}")
+                        continue
+                    try:
+                        _ddl(self.conn, f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+                    except sqlite3.OperationalError as err:
+                        if "duplicate column" not in str(err):
+                            raise
         # Tokens used to be stored as they are: keep only their hash, so they still work.
         for row in self.conn.execute("SELECT id, mcp_token FROM students WHERE mcp_token IS NOT"
                                      " NULL AND token_hash IS NULL").fetchall():
@@ -593,6 +614,10 @@ class Database:
             # would have been dropped as a repeat); now they are unique per student only.
             # Checked first: the ALTER locks the whole table, and is needed once in its life.
             _ddl(self.conn, "ALTER TABLE events DROP CONSTRAINT events_idempotency_key_key")
+        # One card per external id (a mail card, a Classroom piece, a bot deadline): copies two
+        # instances made at once fold into the first, then a unique index stops it for good.
+        # Here, not in INDEXES: it can only be made once the copies are gone.
+        self._unique_external_ids()
 
     def close(self) -> None:
         self.conn.close()
@@ -1161,3 +1186,241 @@ class Database:
         return self.conn.execute(
             "SELECT * FROM audit WHERE student_id=? ORDER BY id DESC LIMIT 50", (student_id,)
         ).fetchall()
+
+    # --- reliability (mail, Classroom, events) ------------------------------------------
+    # What a later run of an event writes over the card it left for review (file_item).
+    _REFILED = ("kind", "subject", "title", "due_at", "status", "route", "relevance",
+                "event_id", "source", "external_id")
+
+    def _index_exists(self, name: str) -> bool:
+        sql = ("SELECT 1 FROM pg_indexes WHERE schemaname='public' AND indexname=?" if self.conn.pg
+               else "SELECT 1 FROM sqlite_master WHERE type='index' AND name=?")
+        return self.conn.execute(sql, (name,)).fetchone() is not None
+
+    def _unique_external_ids(self) -> None:
+        """Once in a database's life: every set of cards with the same student and external id
+        (two instances copied one mail card at once, before this index existed) folds into its
+        first card, then items_external_unique is made. One transaction, with the table closed
+        to writes on Postgres, so no new copy slips in between; given up after 5 s waiting for
+        that lock and tried again at the next start, like the other migrations."""
+        if self._index_exists("items_external_unique"):
+            return
+        with self.tx() as c:
+            if self.conn.pg:
+                c.execute("SET LOCAL lock_timeout = '5s'")
+                c.execute("LOCK TABLE items IN SHARE ROW EXCLUSIVE MODE")
+            groups = c.execute(
+                "SELECT student_id, external_id, MIN(id) AS keep FROM items WHERE external_id"
+                " IS NOT NULL GROUP BY student_id, external_id HAVING COUNT(*) > 1").fetchall()
+            for group in groups:
+                keep = c.execute("SELECT id, due_at FROM items WHERE id=?",
+                                 (group["keep"],)).fetchone()
+                for copy in c.execute("SELECT id, due_at FROM items WHERE student_id=? AND"
+                                      " external_id=? AND id<>? ORDER BY id",
+                                      (group["student_id"], group["external_id"],
+                                       keep["id"])).fetchall():
+                    self._fold(c, int(group["student_id"]), copy, keep)
+            c.execute("CREATE UNIQUE INDEX IF NOT EXISTS items_external_unique ON"
+                      " items(student_id, external_id) WHERE external_id IS NOT NULL")
+
+    @staticmethod
+    def _fold(c: _Conn, student_id: int, copy: Any, keep: Any) -> None:
+        """One copy of a card into the card it copies. Its reminders move over, as far before
+        the card's date as they were before the copy's (the first card is the one later mail
+        updated); one landing on a moment the card already has is dropped. Calls and messages
+        about it point at the card. An approval waiting on the copy is dropped: its signed
+        token names the copy. Then the copy goes."""
+        from datetime import datetime
+
+        copy_id, keep_id = int(copy["id"]), int(keep["id"])
+        shift = None
+        if copy["due_at"] and keep["due_at"] and copy["due_at"] != keep["due_at"]:
+            shift = datetime.fromisoformat(keep["due_at"]) - datetime.fromisoformat(copy["due_at"])
+        taken = {r["fire_at"] for r in c.execute("SELECT fire_at FROM reminders WHERE item_id=?",
+                                                 (keep_id,)).fetchall()}
+        for r in c.execute("SELECT id, fire_at, status FROM reminders WHERE item_id=? ORDER BY"
+                           " id", (copy_id,)).fetchall():
+            fire_at = r["fire_at"]
+            if shift is not None and r["status"] == "pending":
+                fire_at = clock.iso(datetime.fromisoformat(fire_at) + shift)
+            if fire_at in taken:
+                c.execute("DELETE FROM reminders WHERE id=?", (r["id"],))
+                continue
+            taken.add(fire_at)
+            c.execute("UPDATE reminders SET item_id=?, fire_at=? WHERE id=?",
+                      (keep_id, fire_at, r["id"]))
+        c.execute("UPDATE calls SET item_id=? WHERE item_id=?", (keep_id, copy_id))
+        c.execute("UPDATE notifications SET item_id=? WHERE item_id=?", (keep_id, copy_id))
+        for p in c.execute("SELECT nonce, args FROM pending_approvals WHERE student_id=?",
+                           (student_id,)).fetchall():
+            try:
+                named = json.loads(p["args"]).get("item_id")
+            except (ValueError, AttributeError):
+                continue
+            if named is not None and str(named) == str(copy_id):
+                c.execute("DELETE FROM pending_approvals WHERE nonce=?", (p["nonce"],))
+        c.execute("DELETE FROM items WHERE id=?", (copy_id,))
+
+    def insert_item_once(self, **row: Any) -> int | None:
+        """A card with an external id, inserted once: None when the student already has a card
+        with that id (another instance or another delivery made it a moment ago). The unique
+        index decides, so two at once can never both insert."""
+        cols = ", ".join(row)
+        marks = ", ".join("?" for _ in row)
+        with self.tx() as c:
+            new = c.execute(f"INSERT INTO items({cols}) VALUES ({marks}) ON CONFLICT DO NOTHING"
+                            " RETURNING id", tuple(row.values())).fetchone()
+        return int(new["id"]) if new is not None else None
+
+    def file_item(self, **row: Any) -> int:
+        """The cascade's write: one card per event, and one per external id (a Classroom piece).
+        A card already there is kept as it is, except one left for review, which this outcome
+        replaces in place: an event run again (Classroom work retried, an event re-driven after
+        a killed Lambda) files its card where the unreadable one was. Returns the card's id."""
+        sid, event_id, external = row["student_id"], row.get("event_id"), row.get("external_id")
+        with self.tx() as c:
+            old = None
+            if external is not None:
+                old = c.execute("SELECT id, status FROM items WHERE student_id=? AND"
+                                " external_id=?", (sid, external)).fetchone()
+            if old is None and event_id is not None:
+                old = c.execute("SELECT id, status FROM items WHERE student_id=? AND event_id=?"
+                                " AND status='needs_review' ORDER BY id LIMIT 1",
+                                (sid, event_id)).fetchone()
+            if old is not None:
+                if old["status"] == "needs_review" and row.get("status", "filed") != "needs_review":
+                    fields = {k: row[k] for k in self._REFILED if k in row}
+                    fields["status"] = row.get("status", "filed")  # the column's own default
+                    sets = ", ".join(f"{k}=?" for k in fields)
+                    c.execute(f"UPDATE items SET {sets} WHERE id=?", (*fields.values(), old["id"]))
+                return int(old["id"])
+            cols = ", ".join(row)
+            marks = ", ".join("?" for _ in row)
+            once = " ON CONFLICT DO NOTHING" if external is not None else ""
+            new = c.execute(f"INSERT INTO items({cols}) VALUES ({marks}){once} RETURNING id",
+                            tuple(row.values())).fetchone()
+            if new is None:  # another worker filed this external id since the SELECT above
+                new = c.execute("SELECT id FROM items WHERE student_id=? AND external_id=?",
+                                (sid, external)).fetchone()
+            return int(new["id"])
+
+    def card_of_event(self, event_id: int) -> Any | None:
+        """The card this event filed, unless it is only one left for review."""
+        return self.conn.execute("SELECT * FROM items WHERE event_id=? AND status<>'needs_review'"
+                                 " ORDER BY id LIMIT 1", (event_id,)).fetchone()
+
+    def link_event_card(self, student_id: int, event_id: int, external_id: str) -> Any | None:
+        """The card an event filed without its external id (filed before the cascade kept
+        them) gets it, so later syncs find it. Returns the card, or None when there is none."""
+        try:
+            with self.tx() as c:
+                row = c.execute("SELECT id FROM items WHERE student_id=? AND event_id=? AND"
+                                " external_id IS NULL ORDER BY id LIMIT 1",
+                                (student_id, event_id)).fetchone()
+                if row is None:
+                    return None
+                c.execute("UPDATE items SET external_id=? WHERE id=?", (external_id, row["id"]))
+        except INTEGRITY:  # another card has the id already
+            return None
+        return self.item_by_external(student_id, external_id)
+
+    def stale_events(self, before: str, tries: int, limit: int) -> list[Any]:
+        """Events still queued that arrived at or before `before` and were tried fewer than
+        `tries` times, oldest first."""
+        return self.conn.execute(
+            "SELECT id, student_id, attempts FROM events WHERE status='queued' AND created_at <= ?"
+            " AND attempts < ? ORDER BY id LIMIT ?", (before, tries, limit)).fetchall()
+
+    def claim_event(self, event_id: int) -> int | None:
+        """Counts one more try of a queued event: its tries so far, or None when it is no longer
+        queued (another worker finished it)."""
+        with self.tx() as c:
+            row = c.execute("UPDATE events SET attempts=attempts+1 WHERE id=? AND status='queued'"
+                            " RETURNING attempts", (event_id,)).fetchone()
+        return int(row["attempts"]) if row is not None else None
+
+    def requeue_event(self, student_id: int, key: str, payload: dict[str, Any]) -> int | None:
+        """An event seen before goes back on the queue with its latest payload, as a fresh try.
+        Returns its id, or None when there is no such event."""
+        with self.tx() as c:
+            row = c.execute("UPDATE events SET status='queued', attempts=0, last_error=NULL,"
+                            " payload=? WHERE student_id=? AND idempotency_key=? RETURNING id",
+                            (json.dumps(payload), student_id, key)).fetchone()
+        return int(row["id"]) if row is not None else None
+
+    def take_lease(self, name: str, now: str, free_before: str) -> bool:
+        """One instance at a time for a job. True when the caller now holds `name`: nobody did,
+        or the holder took it at or before `free_before` and has run out of time. A jobs row:
+        its last_run_at is when the holder took the lease."""
+        with self.tx() as c:
+            row = c.execute("INSERT INTO jobs(name, last_run_at) VALUES (?,?) ON CONFLICT(name)"
+                            " DO UPDATE SET last_run_at=excluded.last_run_at WHERE"
+                            " jobs.last_run_at <= ? RETURNING name",
+                            (name, now, free_before)).fetchone()
+        return row is not None
+
+    def mail_owners(self) -> list[Any]:
+        """mailbox_students with what decides each one's mailbox (mail.mode), in one query:
+        an account of their own or not, the Google scopes, and a grant Google refused."""
+        return self.conn.execute(
+            "SELECT s.id, s.auth_user_id, g.scopes, g.needs_reconnect_at FROM students s"
+            " LEFT JOIN google_accounts g ON g.student_id = s.id"
+            " WHERE s.auth_user_id IS NULL OR g.student_id IS NOT NULL ORDER BY s.id").fetchall()
+
+    def google_grant_lost(self, student_id: int, refresh_token: str, reason: str, now: str,
+                          title: str, body: str) -> bool:
+        """Google refused this grant for good. True for the first caller only, and only while
+        `refresh_token` (sealed) is still the stored grant: the refusal of a grant a reconnect
+        already replaced changes nothing. That caller's message to the student is written in
+        the same transaction, so it is said exactly once."""
+        with self.tx() as c:
+            cur = c.execute("UPDATE google_accounts SET needs_reconnect_at=?, reconnect_reason=?"
+                            " WHERE student_id=? AND refresh_token=? AND needs_reconnect_at IS"
+                            " NULL", (now, reason, student_id, refresh_token))
+            if cur.rowcount != 1:
+                return False
+            c.execute("INSERT INTO notifications(student_id, kind, title, body, item_id,"
+                      " created_at) VALUES (?,?,?,?,NULL,?)",
+                      (student_id, "google", title, body, now))
+            return True
+
+    def google_reconnected(self, student_id: int) -> None:
+        """A new grant: Google's refusal is forgotten, and Classroom is read again soon."""
+        with self.tx() as c:
+            c.execute("UPDATE google_accounts SET needs_reconnect_at=NULL, reconnect_reason=NULL,"
+                      " classroom_synced_at=NULL, classroom_tried_at=NULL, classroom_error=NULL"
+                      " WHERE student_id=?", (student_id,))
+
+    def classroom_due(self, slot: str, retry_after: str) -> list[Any]:
+        """Google accounts whose Classroom has not been read completely since `slot`, least
+        recently tried first. One whose last try failed waits until `retry_after`; a grant
+        Google refused waits for the student."""
+        return self.conn.execute(
+            "SELECT student_id, scopes FROM google_accounts WHERE needs_reconnect_at IS NULL"
+            " AND (classroom_synced_at IS NULL OR classroom_synced_at < ?)"
+            " AND (classroom_error IS NULL OR classroom_tried_at IS NULL"
+            " OR classroom_tried_at <= ?)"
+            " ORDER BY COALESCE(classroom_tried_at, ''), student_id", (slot, retry_after)
+        ).fetchall()
+
+    def claim_classroom(self, student_id: int, now: str) -> bool:
+        """This student's Classroom for one caller per minute: two instances never read the
+        same Classroom at once."""
+        with self.tx() as c:
+            cur = c.execute("UPDATE google_accounts SET classroom_tried_at=? WHERE student_id=?"
+                            " AND needs_reconnect_at IS NULL AND (classroom_tried_at IS NULL OR"
+                            " classroom_tried_at < ?)", (now, student_id, now))
+            return cur.rowcount == 1
+
+    def classroom_tried(self, student_id: int, started: str, done: bool,
+                        error: str | None) -> None:
+        """How a Classroom read went: done until the next slot (read completely, or refused:
+        `error` says which), cut short (goes on at the next turn) or failed (`error`, tried
+        again later)."""
+        with self.tx() as c:
+            if done:
+                c.execute("UPDATE google_accounts SET classroom_synced_at=?, classroom_error=?"
+                          " WHERE student_id=?", (started, error, student_id))
+            else:
+                c.execute("UPDATE google_accounts SET classroom_error=? WHERE student_id=?",
+                          (error, student_id))

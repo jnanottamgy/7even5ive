@@ -11,6 +11,9 @@ runs last, only to read a date and title or when Jev is unsure.
 Not: a third outcome such as "drop when unsure". Dropping (chit-chat, spam) needs Jev at
 0.9; anything less confident goes to the LLM, because losing a real deadline is worse
 than paying for one call.
+Why every card goes through db.file_item: an event may run again (Classroom work the LLM could
+not read, retried by the next sync; an event a killed Lambda left queued). Its card then takes
+the place of the one left for review, and a card with the same Classroom id is never copied.
 """
 
 from __future__ import annotations
@@ -114,6 +117,10 @@ class Cascade:
     def run(self, event_id: int) -> Outcome:
         ev = self.db.event(event_id)
         payload: dict[str, Any] = json.loads(ev["payload"])
+        if "mail_card" in payload or payload.get("type") == "backfill":
+            # Rows mail.py and sync.backfill write whole: only ever here when a run was cut off
+            # before they marked them done, and they finish their own work when they run again.
+            return Outcome("mail" if "mail_card" in payload else "bot", "skipped")
         student = self.db.student(ev["student_id"])
         from .tools import subjects as subjects_of
 
@@ -121,6 +128,11 @@ class Cascade:
         source = ev["source"]
         base = {"student_id": student["id"], "event_id": event_id, "source": source,
                 "created_at": clock.iso(clock.now())}
+        cr = payload.get("classroom")
+        if isinstance(cr, dict) and cr.get("external_id"):
+            # Classroom work carries its own id: whatever this run files (or leaves for review)
+            # is found by the next sync, which moves its date or tries it again.
+            base["external_id"] = str(cr["external_id"])
 
         # -1. A deadline the bot saved, changed or deleted: applied as it is, no model.
         if str(payload.get("type", "")).startswith("deadline."):
@@ -133,9 +145,9 @@ class Cascade:
         if (bot := self._from_bot(payload, subjects)) is not None:
             if bot.kind == "chitchat":
                 return Outcome("bot", "skipped")
-            item = self.db.insert_item(**base, kind=bot.kind, subject=bot.subject,
-                                       title=bot.title, due_at=_parse_due(bot.due_at),
-                                       route="bot", relevance=None)
+            item = self.db.file_item(**base, kind=bot.kind, subject=bot.subject,
+                                     title=bot.title, due_at=_parse_due(bot.due_at),
+                                     route="bot", relevance=None)
             return Outcome("bot", "filed", item)
 
         state = {"source": source, "text": payload.get("text", ""),
@@ -152,28 +164,27 @@ class Cascade:
         relevance = _yes(answers.get("relevant"))
 
         # 1. Classroom: the API's own due date wins; Jev only names the subject.
-        cr = payload.get("classroom")
         if cr and cr.get("due_at") and subject:
-            item = self.db.insert_item(**base, kind="deadline", subject=subject,
-                                       title=cr["title"], due_at=_parse_due(cr["due_at"]),
-                                       route="classroom", relevance=relevance)
+            item = self.db.file_item(**base, kind="deadline", subject=subject,
+                                     title=cr["title"], due_at=_parse_due(cr["due_at"]),
+                                     route="classroom", relevance=relevance)
             return Outcome("classroom", "filed", item, tokens)
 
         # 2. Jev drops only with high confidence.
         spam = _yes(answers.get("spam"))
         if spam is not None and spam >= drop_at:
-            item = self.db.insert_item(**base, kind="notice", subject="Miscellaneous",
-                                       title=_display_title(payload), due_at=None,
-                                       status="filtered", route="jev", relevance=relevance)
+            item = self.db.file_item(**base, kind="notice", subject="Miscellaneous",
+                                     title=_display_title(payload), due_at=None,
+                                     status="filtered", route="jev", relevance=relevance)
             return Outcome("jev", "filtered", item, tokens)
         if _confident(answers.get("kind"), drop_at) == "chitchat":
             return Outcome("jev", "skipped", None, tokens)
 
         # 3. Jev files undated items alone.
         if kind in {"material", "notice"} and subject and _display_title(payload):
-            item = self.db.insert_item(**base, kind=kind, subject=subject,
-                                       title=_display_title(payload), due_at=None,
-                                       route="jev", relevance=relevance)
+            item = self.db.file_item(**base, kind=kind, subject=subject,
+                                     title=_display_title(payload), due_at=None,
+                                     route="jev", relevance=relevance)
             return Outcome("jev", "filed", item, tokens)
 
         # 4. The LLM: with Jev's hints when it was sure, from scratch when it was not.
@@ -190,9 +201,9 @@ class Cascade:
         if p.kind == "chitchat":
             return Outcome(route, "skipped", None, tokens)
         status = "filtered" if p.spam else "filed"
-        item = self.db.insert_item(**base, kind=p.kind, subject=p.subject, title=p.title,
-                                   due_at=_parse_due(p.due_at), status=status, route=route,
-                                   relevance=relevance)
+        item = self.db.file_item(**base, kind=p.kind, subject=p.subject, title=p.title,
+                                 due_at=_parse_due(p.due_at), status=status, route=route,
+                                 relevance=relevance)
         return Outcome(route, status, item, tokens)
 
     @staticmethod
@@ -213,8 +224,8 @@ class Cascade:
                 tokens: int) -> Outcome:
         # Never silent: an item nobody could read becomes a card the student can fix.
         log.info("needs review", extra={"reason": reason})
-        item = self.db.insert_item(**base, kind="notice", subject="Miscellaneous",
-                                   title=_display_title(payload) or "Unreadable message",
-                                   due_at=None, status="needs_review", route="review",
-                                   relevance=None)
+        item = self.db.file_item(**base, kind="notice", subject="Miscellaneous",
+                                 title=_display_title(payload) or "Unreadable message",
+                                 due_at=None, status="needs_review", route="review",
+                                 relevance=None)
         return Outcome("review", "needs_review", item, tokens)
