@@ -13,7 +13,8 @@ import java.util.concurrent.TimeUnit
 
 /**
  * A failed call. [detail] is the server's own `detail`, shown to the student as it is
- * ("approval already used"). [code] is PortMax's machine code (`session_expired`).
+ * ("approval already used"). [code] is the machine code: PortMax's (`session_expired`) or the
+ * core's (`profile_required`, `demo_account`, ...).
  */
 class ApiException(val status: Int, val detail: String, val code: String? = null) : Exception(detail)
 
@@ -22,8 +23,12 @@ private val JSON_TYPE = "application/json; charset=utf-8".toMediaType()
 /**
  * The one HTTP door. Deliberately no logging interceptor: requests carry the token and
  * responses carry message and mail text, and neither may reach logcat.
+ *
+ * The token comes from [tokens] for each request (the signed-in session, refreshed as needed,
+ * or the demo's). When the server refuses it, [TokenSource.rejected] may hand over a fresh one
+ * and the request is sent once more; never more than once.
  */
-class Http(private val token: String) {
+class Http(private val tokens: TokenSource) {
     val client: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         // A free online server sleeps when idle and takes up to a minute to wake: wait for it.
@@ -31,42 +36,49 @@ class Http(private val token: String) {
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    suspend fun get(url: String, auth: Boolean = true): String = send(url, null, auth)
+    suspend fun get(url: String, auth: Boolean = true): String = text(url, null, auth)
+
+    suspend fun post(url: String, json: String, auth: Boolean = true): String = text(url, json, auth)
 
     /** A binary answer (the briefing's mp3). Same errors as [get]. */
-    suspend fun getBytes(url: String): ByteArray = withContext(Dispatchers.IO) {
-        val request = try {
-            Request.Builder().url(url).header("Authorization", "Bearer $token").build()
-        } catch (e: IllegalArgumentException) {
-            throw ApiException(0, "Bad server address: $url")
-        }
-        try {
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) throw errorFrom(response.code, response.body?.string().orEmpty())
-                response.body?.bytes() ?: ByteArray(0)
-            }
-        } catch (e: IOException) {
-            throw ApiException(0, "Can't reach ${request.url.host}:${request.url.port}")
+    suspend fun getBytes(url: String): ByteArray = exchange(url, null, true) { it.bytes() }
+
+    private suspend fun text(url: String, json: String?, auth: Boolean): String =
+        exchange(url, json, auth) { it.string() }
+
+    private suspend fun <T> exchange(
+        url: String,
+        json: String?,
+        auth: Boolean,
+        read: (okhttp3.ResponseBody) -> T,
+    ): T {
+        val first = if (auth) tokens.token() ?: throw ApiException(401, "Log in first.", "signed_out") else null
+        return try {
+            send(url, json, first, read)
+        } catch (e: ApiException) {
+            if (first == null || (e.status != 401 && e.status != 403)) throw e
+            val again = tokens.rejected(first, e.status, e.code)
+            if (again == null || again == first) throw e
+            send(url, json, again, read)
         }
     }
 
-    suspend fun post(url: String, json: String): String = send(url, json, true)
-
-    private suspend fun send(url: String, json: String?, auth: Boolean): String =
+    private suspend fun <T> send(url: String, json: String?, token: String?, read: (okhttp3.ResponseBody) -> T): T =
         withContext(Dispatchers.IO) {
-            val builder = Request.Builder().url(url)
-            if (auth) builder.header("Authorization", "Bearer $token")
-            if (json != null) builder.post(json.toRequestBody(JSON_TYPE))
-            val request = try {
-                builder.build()
+            val builder = try {
+                Request.Builder().url(url)
             } catch (e: IllegalArgumentException) {
                 throw ApiException(0, "Bad server address: $url")
             }
+            if (token != null) builder.header("Authorization", "Bearer $token")
+            if (json != null) builder.post(json.toRequestBody(JSON_TYPE))
+            val request = builder.build()
             try {
                 client.newCall(request).execute().use { response ->
-                    val body = response.body?.string().orEmpty()
-                    if (!response.isSuccessful) throw errorFrom(response.code, body)
-                    body
+                    val body = response.body
+                    if (!response.isSuccessful) throw errorFrom(response.code, body?.string().orEmpty())
+                    if (body == null) throw ApiException(response.code, "Empty answer from the server")
+                    read(body)
                 }
             } catch (e: IOException) {
                 throw ApiException(0, "Can't reach ${request.url.host}:${request.url.port}")

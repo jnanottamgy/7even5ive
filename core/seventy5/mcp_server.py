@@ -169,7 +169,7 @@ def http_app(app: Callable[[], Any]) -> Callable[..., Any]:
                    for k, v in scope.get("headers", [])}
         token = headers.get("authorization", "").removeprefix("Bearer ").strip()
         try:
-            sid = app().gateway.authenticate(token)
+            sid = app().gateway.authenticate(token, scope="mcp")
         except Denied:
             await reply(send, 401, {"error": "unknown caller: send Authorization: Bearer "
                                              "<your 7even5ive token>"},
@@ -196,7 +196,8 @@ def main() -> None:
 
     def student(current: Any) -> int:
         try:
-            return int(current.gateway.authenticate(os.environ.get("SEVENTY5_TOKEN", "")))
+            return int(current.gateway.authenticate(os.environ.get("SEVENTY5_TOKEN", ""),
+                                                    scope="mcp"))
         except Denied as err:
             raise ToolError(f"denied: {err}") from err
 

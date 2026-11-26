@@ -34,6 +34,9 @@ Never commit a key, never put one in the template, the APK or a chat.
 | 10 | `ELEVENLABS_ASSISTANT_AGENT_ID` | The in-app voice assistant | The app says voice isn't set up |
 | 11 | `ELEVENLABS_AGENT_ID`, `ELEVENLABS_PHONE_NUMBER_ID`, `CALL_PROVIDER`, `ELEVENLABS_WEBHOOK_SECRET`, `DEMO_STUDENT_PHONE` | The urgent call rings a real phone, and its outcome comes back | Calls are recorded, not rung |
 | 12 | `FCM_SERVICE_ACCOUNT_JSON` (server) + four `sevenfive.fcm*` values (app) | Notifications arrive at once | Within 15 minutes when the app is closed |
+| 13 | `DATABASE_URL` (Supabase's transaction pooler) | Data that lasts: accounts, cards, mail, portal answers | SQLite in `/tmp`: everything starts over at each cold start |
+| 14 | `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY` (+ `SUPABASE_JWT_SECRET` only for a legacy-secret project) | Real accounts: sign up with an email code, username, profile, delete account | Only the shared demo account |
+| 15 | `BOT_WHATSAPP_NUMBER` | The app's **Link WhatsApp** opens WhatsApp with the code typed | The app shows the code to send |
 | — | `ELEVENLABS_VOICE_ID`, `ELEVENLABS_API`, `BEDROCK_REGION`, `MAILFILTER_MODEL`, `LLM_MODEL`, `CALL_QUIET_START`, `CALL_QUIET_END`, `CALL_MAX_PER_DAY`, `CALL_LEAD_MINUTES`, `MAIL_CHECK_TIMES`, `PUBLIC_URL` | Tuning (optional) | Sensible defaults ([`config.py`](../core/seventy5/config.py)) |
 
 The stack's **Outputs** tab lists the addresses the steps below ask for: `AppUrl`, `McpUrl`,
@@ -51,12 +54,16 @@ then redeploy): `SEVENTY5_SERVICE_TOKEN=A`, `SEVENTY5_WEBHOOK_SECRET=B`,
 `LIBRARY_URL=<the bot's public base URL>`, `LIBRARY_SERVICE_TOKEN=A`, `BOT_WEBHOOK_SECRET=B`,
 `DEMO_PHONE=91XXXXXXXXXX`. Details and checks: [`library-link.md`](library-link.md).
 
-**6. Claude.** Either an Anthropic API key (`ANTHROPIC_API_KEY`, simplest), or Bedrock: enable
-Claude Haiku 5.5 in the Bedrock console, then `BEDROCK_MODEL_ID` = its model or
-inference-profile id, `BEDROCK_REGION` if it is not the stack's region, and `MAILFILTER_MODEL`
-for the mail judge (default `anthropic.claude-haiku-5-5`). The stack already grants Bedrock;
-the mail judge's `bedrock-mantle` permission could not be checked against AWS's own page from
-here, so if real mail fails with an access error on Bedrock, use the Anthropic key.
+**6. Claude.** Either an Anthropic API key (simplest), or Bedrock.
+- **Anthropic API:** [platform.claude.com](https://platform.claude.com) → **API keys** →
+  **Create key** (an ordinary API key, `sk-ant-…`; add a payment method or credits under
+  **Billing**). Put it in `ANTHROPIC_API_KEY`. Both the cascade and the mail judge then use
+  Claude Haiku 5.5, model id `claude-haiku-5-5` (the default `LLM_MODEL`).
+- **Bedrock:** enable Claude Haiku 5.5 in the Bedrock console (model access) in the region the
+  code calls, then `BEDROCK_MODEL_ID=anthropic.claude-haiku-5-5` (and `BEDROCK_REGION` if Bedrock
+  is in another region than the stack). The cascade and the mail judge both call Bedrock's
+  Messages API with that id; the SDK signs those requests for the service `bedrock-mantle`, which
+  the stack grants (`bedrock-mantle:*`). `MAILFILTER_MODEL` only if the judge should differ.
 
 **7. Jev.** An OpenRouter key with access to `typesafe/jev-1.14`.
 
@@ -96,13 +103,22 @@ key, the Project ID and the Project number go in `android/gradle.properties` as
 (not secrets); rebuild the APK. **Service accounts** → **Generate new private key**: the whole
 JSON goes in `FCM_SERVICE_ACCOUNT_JSON` (a SecureString; it fits the 4 KB limit).
 
+**13, 14, 15. Supabase and accounts.** Step by step in [`supabase.md`](supabase.md): the
+project in the **same region as the stack**, the transaction pooler's URI as `DATABASE_URL`, the
+three keys, the two email templates with the code, and your own SMTP before real students.
+
 ## The app
 
 `android/gradle.properties`: `sevenfive.defaultServer` = `AppUrl` (already the current
-stack's), the four optional Firebase values, and nothing secret. The APK is rebuilt by
-GitHub Actions on every push that touches `android/` (release `apk-latest`).
+stack's), the four optional Firebase values, and nothing secret. The Supabase project's address
+and publishable key are not in the APK: the app asks the server (`/api/auth/config`), so adding
+Supabase needs no new APK. The APK is rebuilt by GitHub Actions on every push that touches
+`android/` (release `apk-latest`).
 
 ## The student's own AI (MCP)
 
-Claude Code: `claude mcp add --transport http 7even5ive <McpUrl> --header "Authorization: Bearer demo-student-token"`.
-Any MCP client that can send a header works the same way; every tool goes through the gateway.
+With an account: **Settings** → **Connect Claude or ChatGPT** shows the MCP address and a personal
+token, once. Claude Code: `claude mcp add --transport http 7even5ive <McpUrl> --header
+"Authorization: Bearer <the token>"`. The demo student's token works the same way:
+`--header "Authorization: Bearer demo-student-token"`. Any MCP client that can send a header
+works; every tool goes through the gateway.

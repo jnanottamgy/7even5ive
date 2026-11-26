@@ -29,11 +29,42 @@ def portal_store() -> Store:
     # minimum from its manifest). 75 only reads its saved answers -- one implementation.
     global _portal
     if _portal is None:
-        _portal = Store(settings.portmax_database_url)
+        from portmax.store import metadata
+
+        from .db import open_store
+
+        _portal = open_store(Store, settings.portmax_database_url, metadata)
     return _portal
 
 
 MAIL_FIELDS = ("category", "organisation", "role", "link", "mail_link", "summary", "event_at")
+
+
+def subjects(db: Database, student_id: int) -> list[str]:
+    """The subjects a message can be filed under: the student's own list (set up with their
+    profile, or the bot's), then the subjects of their college portal's attendance once it has
+    been read, so a new student needs to type none of them."""
+    names = db.subjects(student_id)
+    student = db.student(student_id)
+    if student is None or not student["portal_id"]:
+        return names
+    try:
+        rows = answer(portal_store(), student["portal_id"], "get_attendance", clock.now()).data
+    except NotConnected:
+        return names
+    except Exception as err:  # noqa: BLE001 - the portal's answer is a bonus, never a blocker
+        import logging
+
+        logging.getLogger(__name__).warning("portal subjects unreadable",
+                                            extra={"error": type(err).__name__})
+        return names
+    known = {n.lower() for n in names}
+    for row in rows:
+        name = " ".join(str(row.subject_name or "").split())
+        if name and name.lower() not in known:
+            names.append(name)
+            known.add(name.lower())
+    return names
 
 
 def _card(row: Any) -> dict[str, Any]:

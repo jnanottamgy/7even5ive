@@ -2,6 +2,7 @@ package com.sevenfive.app
 
 import com.sevenfive.app.data.ApiException
 import com.sevenfive.app.data.CoreApi
+import com.sevenfive.app.data.FixedToken
 import com.sevenfive.app.data.Http
 import com.sevenfive.app.data.ServerConfig
 import kotlinx.coroutines.test.runTest
@@ -23,7 +24,7 @@ class CoreApiTest {
         server = MockWebServer()
         server.start()
         val base = server.url("/").toString().trimEnd('/')
-        api = CoreApi(Http("demo-student-token")) { base }
+        api = CoreApi(Http(FixedToken("demo-student-token"))) { base }
     }
 
     @After
@@ -124,7 +125,7 @@ class CoreApiTest {
 
     @Test
     fun `an unreachable server says which host`() = runTest {
-        val dead = CoreApi(Http("t")) { "http://127.0.0.1:9" }
+        val dead = CoreApi(Http(FixedToken("t"))) { "http://127.0.0.1:9" }
         try {
             dead.cards()
             fail("expected a failure")

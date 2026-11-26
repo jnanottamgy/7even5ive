@@ -72,7 +72,13 @@ import com.sevenfive.app.ui.theme.LocalStatusColors
 import com.sevenfive.app.util.Diagnostics
 
 @Composable
-fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPortalCheck: () -> Unit = {}) {
+fun SettingsScreen(
+    vm: AppViewModel,
+    onBack: () -> Unit,
+    onPortalCheck: () -> Unit = {},
+    onEditProfile: () -> Unit = {},
+    onCreateAccount: () -> Unit = {},
+) {
     val current by vm.servers.collectAsStateWithLifecycle()
     var host by remember { mutableStateOf(current.coreUrl.substringAfter("://").substringBefore(':').substringBefore('/')) }
     var core by remember { mutableStateOf(current.coreUrl) }
@@ -82,17 +88,21 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPortalCheck: () -> Un
     val status = LocalStatusColors.current
 
     LifecycleResumeEffect(Unit) {
-        // Also on coming back from Google's sign-in page in the browser.
+        // Also on coming back from Google's sign-in page in the browser, or from WhatsApp.
         vm.refreshSettings()
+        vm.refreshProfile()
         onPauseOrDispose { }
     }
+    val account by vm.account.collectAsStateWithLifecycle()
+    val demo = account is com.sevenfive.app.data.AccountState.Demo
 
     PushScaffold("Settings", onBack) { padding ->
         Column(
             Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(padding),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
-            GoogleSection(vm)
+            AccountSection(vm, onEditProfile, onCreateAccount)
+            GoogleSection(vm, demo)
             CallsSection(vm)
             NotificationsSection(vm)
             VoiceSection(vm)
@@ -130,7 +140,7 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPortalCheck: () -> Un
                 GroupAction("Connect", onClick = { vm.connectTo(host); onBack() }, enabled = host.isNotBlank())
             }
 
-            Group(header = "Demo tour", footer = "Runs the whole demo from this phone, step by step: each step opens " +
+            if (demo) Group(header = "Demo tour", footer = "Runs the whole demo from this phone, step by step: each step opens " +
                 "the right tab, says what to tell the audience, and makes the live moments happen. Works with " +
                 "the online demo server.") {
                 GroupRow("Start the tour (fresh)", icon = Icons.Outlined.PlayArrow, iconColor = MaterialTheme.colorScheme.primary,
@@ -204,7 +214,7 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPortalCheck: () -> Un
 }
 
 @Composable
-private fun GoogleSection(vm: AppViewModel) {
+private fun GoogleSection(vm: AppViewModel, demo: Boolean) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
     val app = LocalAppColors.current
@@ -215,6 +225,10 @@ private fun GoogleSection(vm: AppViewModel) {
             "you approve, Classroom for coursework due dates. This phone never holds a Google token.",
     ) {
         when {
+            demo -> GroupRow(
+                "Not for the demo account", icon = Icons.Outlined.AccountCircle, iconColor = app.tertiaryLabel,
+                detail = "Everyone trying the app shares the demo student. Create your own account to connect your Google.",
+            )
             google == null -> GroupRow("Checking…", icon = Icons.Outlined.AccountCircle, iconColor = app.tertiaryLabel)
             !google.configured -> GroupRow(
                 "Not set up on the server yet", icon = Icons.Outlined.AccountCircle, iconColor = app.tertiaryLabel,

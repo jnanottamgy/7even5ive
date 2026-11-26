@@ -1,6 +1,7 @@
 """The gateway: every tool call, from any client, passes these checks in this order.
 
-1. inbound auth   -- the caller is a known student (MCP token / signed-in phone)
+1. inbound auth   -- the caller is a known student: a Supabase access token (the app, checked
+                     in auth.py), a personal token (an MCP client), or the demo's token
 2. interceptor    -- a write's arguments must point at rows 75 filed itself (provenance),
                      and an 'ask' action needs a valid one-time approval token
 3. policy         -- deny by default; each tool is allow, ask or deny (Cedar-shaped)
@@ -76,7 +77,13 @@ WRITES: dict[str, Callable[..., Any]] = {"add_to_calendar": tools.add_to_calenda
 
 
 class Denied(Exception):
-    pass
+    """Refused. status/code tell the app what to do: 401 session_expired (refresh the session,
+    else sign in again), 403 profile_required (finish the profile), 503 (try again later)."""
+
+    def __init__(self, message: str, status: int = 401, code: str = "unauthorized") -> None:
+        super().__init__(message)
+        self.status = status
+        self.code = code
 
 
 def _b64(raw: bytes) -> str:
@@ -116,11 +123,37 @@ class Gateway:
     def _log(self, student_id: int | None, tool: str, decision: str, reason: str) -> None:
         self.db.audit(student_id, tool, decision, reason, clock.iso(clock.now()))
 
-    def authenticate(self, mcp_token: str | None) -> int:
-        row = self.db.student_by_token(mcp_token) if mcp_token else None
+    def identify(self, token: str | None) -> tuple[Any, Any]:
+        """(Supabase identity or None, student row or None) for a token, without the scope
+        rules: /api/me uses it, for a signed-in student who has no profile yet."""
+        from . import auth
+
+        token = (token or "").strip()
+        if not token:
+            raise Denied("unknown caller")
+        if auth.looks_like_jwt(token):
+            try:
+                identity = auth.verify(token)
+            except auth.AuthError as err:
+                if err.status == 401:
+                    self._log(None, "*", "deny", "invalid session")
+                raise Denied(str(err), err.status, err.code) from err
+            return identity, self.db.student_by_auth(identity.user_id)
+        row = self.db.student_by_token(token)
         if row is None:
             self._log(None, "*", "deny", "unknown caller")
             raise Denied("unknown caller")
+        return None, row
+
+    def authenticate(self, token: str | None, scope: str = "app") -> int:
+        """The student behind a token. scope "app": the app's API and PortMax; "mcp": an MCP
+        client. A real account's personal token is for MCP only."""
+        identity, row = self.identify(token)
+        if row is None:
+            raise Denied("Finish setting up your account first.", 403, "profile_required")
+        if identity is None and scope != "mcp" and row["auth_user_id"]:
+            self._log(int(row["id"]), "*", "deny", "personal token outside MCP")
+            raise Denied("This token is for MCP clients. Sign in to the app instead.")
         return int(row["id"])
 
     def _provenance(self, student_id: int, tool: str, args: dict[str, Any]) -> None:

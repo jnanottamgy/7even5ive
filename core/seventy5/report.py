@@ -17,10 +17,21 @@ def lines() -> list[str]:
            else "Claude (Anthropic API)" if s.anthropic_api_key else None)
     eleven = bool(s.elevenlabs_api_key)
     call_ready = eleven and s.elevenlabs_agent_id and s.elevenlabs_phone_number_id
+    database = ("Supabase Postgres" if s.database_url.startswith(("postgres://", "postgresql://"))
+                else None)
+    signing_in = None
+    if s.supabase_url and s.supabase_publishable_key:
+        checks = ("JWKS + legacy secret" if s.supabase_jwt_secret else "JWKS (ES256/RS256)")
+        signing_in = f"Supabase Auth, {checks}" + ("" if s.supabase_secret_key
+                                                   else "; no secret key: accounts can't be deleted")
     rows = [
+        ("Database", database, "SQLite files: data starts over when the server does"),
+        ("Accounts (sign up, log in)", signing_in, "only the shared demo account"),
         ("Jev (message types, spam)", bool(s.jev_api_key), "every item goes to the LLM step"),
         ("LLM (dates, titles, mail judge)", llm, "recorded answers in the demo; real items need review"),
         ("WhatsApp bot webhook", s.bot_secret != "dev-bot-secret", "dev secret: only the demo tour can sign"),
+        ("Bot's WhatsApp number (Link WhatsApp)", bool(s.bot_whatsapp_number),
+         "the app shows the code to send, without a button"),
         ("Bot library (Files)", bool(s.library_url and s.library_service_token), "invented demo library"),
         ("Google sign-in (Gmail, Calendar, Classroom)",
          bool(s.google_client_id and s.google_client_secret), "demo mailbox, calendar kept in 7even5ive"),

@@ -16,7 +16,7 @@ data class ClassSlot(
 /** The college mailbox (`/api/cards` → `mail`, `GET /api/mail`). */
 @Serializable
 data class MailStatus(
-    /** demo (invented mail, no Google account) or gmail. */
+    /** demo (invented mail: the demo account), gmail, or none (an account without Google yet). */
     val mode: String = "demo",
     val connected: Boolean = false,
     val status: String = "not_connected",
@@ -29,7 +29,10 @@ data class MailStatus(
     /** Mails the filter read and left out (not a placement, internship or exam notice). */
     @SerialName("left_out") val leftOut: Int = 0,
 ) {
-    val isDemo: Boolean get() = mode != "gmail"
+    val isDemo: Boolean get() = mode == "demo"
+
+    /** A real account that hasn't connected Google: nothing to read yet. */
+    val needsGoogle: Boolean get() = mode == "none"
 }
 
 /** `POST /api/mail/check`. */

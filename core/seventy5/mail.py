@@ -73,12 +73,16 @@ _store: Store | None = None
 def store() -> Store:
     global _store
     if _store is None:
+        from mailfilter.store import metadata
+
+        from .db import open_store
+
         url = settings.mailfilter_database_url
         if url.startswith("sqlite:///"):  # a file beside the others: make its folder first
             from pathlib import Path
 
             Path(url.removeprefix("sqlite:///")).parent.mkdir(parents=True, exist_ok=True)
-        _store = Store(url)
+        _store = open_store(Store, url, metadata)
     return _store
 
 
@@ -114,9 +118,15 @@ def _deliver_second(demo: _DemoBox, now: datetime) -> None:
 
 # --- which mailbox, which judge -----------------------------------------------------------------
 def mode(db: Database, sid: int) -> str:
+    """gmail: the student's own mailbox. demo: the invented one, only for a student with no
+    account of their own (the demo student, a laptop's). none: a real account that has not
+    connected Google: never invented mail."""
     from . import google
 
-    return "gmail" if google.has_gmail(db, sid) else "demo"
+    if google.has_gmail(db, sid):
+        return "gmail"
+    student = db.student(sid)
+    return "demo" if student is not None and not student["auth_user_id"] else "none"
 
 
 def mailbox_key(sid: int, which: str) -> str:
@@ -145,6 +155,8 @@ def _parts(db: Database, sid: int, now: datetime,
     """(mailbox key, mailbox, judge, whether this is the demo's first "Check now")."""
     which = mode(db, sid)
     key = mailbox_key(sid, which)
+    if which == "none":
+        raise MailUnavailable("Connect Google in Settings to read your college mail.", 409)
     if which == "demo":
         demo = _demo_box(sid, now)
         first = check_now and not demo.second_delivered
@@ -222,6 +234,8 @@ def check_all(db: Database, deadline: float | None = None) -> int:
     done = 0
     rows = db.conn.execute("SELECT id FROM students ORDER BY id").fetchall()
     for row in rows:
+        if mode(db, int(row["id"])) == "none":
+            continue  # no mailbox to read
         if not _room(deadline):
             break  # mail-continue picks up whoever is left
         try:
@@ -254,7 +268,8 @@ def continue_unfinished(db: Database, deadline: float | None = None) -> int:
     done = 0
     for row in db.conn.execute("SELECT id FROM students ORDER BY id").fetchall():
         sid = int(row["id"])
-        if not unfinished(mailbox_key(sid, mode(db, sid))):
+        which = mode(db, sid)
+        if which == "none" or not unfinished(mailbox_key(sid, which)):
             continue
         if not _room(deadline):
             break
@@ -325,8 +340,8 @@ def _upsert(db: Database, sid: int, external: str, fields: dict[str, Any], now: 
         event_id = db.insert_event(sid, external, "gmail", {"mail_card": external},
                                    clock.iso(now))
         if event_id is None:  # the event exists from an earlier, interrupted copy
-            event_id = int(db.conn.execute("SELECT id FROM events WHERE idempotency_key=?",
-                                           (external,)).fetchone()["id"])
+            event_id = int(db.conn.execute("SELECT id FROM events WHERE student_id=? AND"
+                                           " idempotency_key=?", (sid, external)).fetchone()["id"])
         db.mark_event(event_id, "done")
         db.insert_item(student_id=sid, event_id=event_id, source="gmail", route="mail",
                        relevance=None, created_at=clock.iso(now), external_id=external,

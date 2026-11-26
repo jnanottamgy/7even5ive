@@ -6,18 +6,30 @@ Every query takes student_id, so one student can never read another's rows.
 Why one lock around every statement: the background loop (reminders, calls, mail) and the
 request threads share one connection, and two threads' transactions on one connection would
 interleave. Results are fetched while the lock is held, so no cursor outlives it.
+Why Supabase's pooler needs care (decision P21 in plan.md): Lambda reaches Supabase only over
+IPv4, so through its shared pooler, in transaction mode. That pooler hands each transaction to
+any server connection, so no prepared statements (prepare_threshold=None) and no pipelines; and
+a connection idle while Lambda was frozen may be dead, so one idle for a while is checked with
+a cheap SELECT 1 before use and replaced if it fails.
+Why lock_down: Supabase publishes every table in `public` through its Data API, and the app
+ships Supabase's publishable key. Row level security with no policies, and no grants for the
+anon and authenticated roles, keep that API out of every table; this service connects as the
+database owner, which bypasses row level security.
 Not: an ORM -- a dozen small queries are clearer as SQL. Not: Postgres in the default test
 run -- SQLite needs no server; set PG_TEST_URL to run the same tests on Postgres.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 import sqlite3
 import threading
+import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterable, Iterator
 
 from . import clock
 from .config import settings
@@ -25,22 +37,29 @@ from .config import settings
 SCHEMA = """
 -- call_consent_at: when the student turned the urgent call on (NULL = off).
 -- quiet_start/quiet_end: their own quiet hours for calls, HH:MM India time (NULL = defaults).
+-- auth_user_id: the Supabase Auth user (the access token's `sub`); NULL for the demo student.
+-- username: unique, lowercase. token_hash: SHA-256 of the student's personal token (MCP), never
+-- the token itself. mcp_token: unused, kept so databases made before accounts still open.
 CREATE TABLE IF NOT EXISTS students (
   id {pk}, name TEXT NOT NULL, wa_phone TEXT UNIQUE, mcp_token TEXT UNIQUE,
   branch TEXT, year INTEGER, interests TEXT,
   portal_id TEXT,  -- the student's id in PortMax
-  call_consent_at TEXT, quiet_start TEXT, quiet_end TEXT
+  call_consent_at TEXT, quiet_start TEXT, quiet_end TEXT,
+  auth_user_id TEXT, username TEXT, email TEXT, college TEXT, token_hash TEXT,
+  token_created_at TEXT, created_at TEXT
 );
 CREATE TABLE IF NOT EXISTS subjects (
   id {pk}, student_id BIGINT NOT NULL REFERENCES students(id),
   name TEXT NOT NULL, UNIQUE(student_id, name)
 );
--- Every source (bot, Gmail, Classroom, portal) becomes one row here, once.
--- Why UNIQUE(idempotency_key): queues and webhooks redeliver, and the constraint is the dedupe.
+-- Every source (bot, Gmail, Classroom, portal) becomes one row here, once per student.
+-- Why UNIQUE(student_id, idempotency_key): queues and webhooks redeliver, and the constraint is
+-- the dedupe; per student, because two classmates share a Classroom coursework id.
 CREATE TABLE IF NOT EXISTS events (
-  id {pk}, student_id BIGINT NOT NULL, idempotency_key TEXT NOT NULL UNIQUE,
+  id {pk}, student_id BIGINT NOT NULL, idempotency_key TEXT NOT NULL,
   source TEXT NOT NULL, payload TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'queued',
-  attempts INTEGER NOT NULL DEFAULT 0, last_error TEXT, created_at TEXT NOT NULL
+  attempts INTEGER NOT NULL DEFAULT 0, last_error TEXT, created_at TEXT NOT NULL,
+  UNIQUE(student_id, idempotency_key)
 );
 -- A card: what the student sees. route records which layer decided it (classroom/jev/llm).
 -- Times are ISO strings in IST, so string order is time order on both engines.
@@ -120,7 +139,18 @@ CREATE TABLE IF NOT EXISTS connect_codes (
   code TEXT PRIMARY KEY, student_id BIGINT NOT NULL, verifier TEXT NOT NULL,
   redirect_uri TEXT NOT NULL, expires_at TEXT NOT NULL
 );
+-- Linking WhatsApp (accounts.py): a short code the student sends to the bot. The bot's signed
+-- webhook proves the number is theirs. One live code per student; spent on first use.
+CREATE TABLE IF NOT EXISTS wa_link_codes (
+  code TEXT PRIMARY KEY, student_id BIGINT NOT NULL, expires_at TEXT NOT NULL
+);
 """
+
+# Every table above, in the order a student's rows are deleted (children before parents).
+STUDENT_TABLES = ("audit", "calendar", "pending_approvals", "notifications", "devices", "calls",
+                  "reminders", "items", "events", "subjects", "google_accounts", "connect_codes",
+                  "wa_link_codes")
+CORE_TABLES = (*STUDENT_TABLES, "students", "used_approvals", "jobs")
 
 # Columns added after the first release. A fresh database gets them from SCHEMA above only if
 # they are listed there too; an older database gets them here, once.
@@ -129,7 +159,9 @@ COLUMNS: dict[str, dict[str, str]] = {
               "organisation": "TEXT", "role": "TEXT", "link": "TEXT", "mail_link": "TEXT",
               "summary": "TEXT", "event_at": "TEXT"},
     "reminders": {"channel": "TEXT NOT NULL DEFAULT 'push'"},
-    "students": {"call_consent_at": "TEXT", "quiet_start": "TEXT", "quiet_end": "TEXT"},
+    "students": {"call_consent_at": "TEXT", "quiet_start": "TEXT", "quiet_end": "TEXT",
+                 "auth_user_id": "TEXT", "username": "TEXT", "email": "TEXT", "college": "TEXT",
+                 "token_hash": "TEXT", "token_created_at": "TEXT", "created_at": "TEXT"},
 }
 
 INDEXES = """
@@ -138,6 +170,10 @@ CREATE INDEX IF NOT EXISTS reminders_due ON reminders(status, fire_at);
 CREATE INDEX IF NOT EXISTS calls_provider ON calls(provider_id);
 CREATE INDEX IF NOT EXISTS calls_student ON calls(student_id, created_at);
 CREATE INDEX IF NOT EXISTS items_external ON items(student_id, external_id);
+CREATE UNIQUE INDEX IF NOT EXISTS students_auth_user ON students(auth_user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS students_username ON students(username);
+CREATE UNIQUE INDEX IF NOT EXISTS students_token_hash ON students(token_hash);
+CREATE UNIQUE INDEX IF NOT EXISTS events_student_key ON events(student_id, idempotency_key);
 """
 
 try:  # psycopg is only needed against Postgres
@@ -145,9 +181,20 @@ try:  # psycopg is only needed against Postgres
     from psycopg.rows import dict_row
 
     INTEGRITY: tuple[type[Exception], ...] = (sqlite3.IntegrityError, psycopg.IntegrityError)
+    # A connection that died under us (the pooler closed it, Lambda was frozen, the network).
+    DROPPED: tuple[type[Exception], ...] = (psycopg.OperationalError, psycopg.InterfaceError)
 except ImportError:  # pragma: no cover
     psycopg = None  # type: ignore[assignment]
     INTEGRITY = (sqlite3.IntegrityError,)
+    DROPPED = ()
+
+# A Postgres connection unused for this long is checked (SELECT 1) before the next statement.
+IDLE_CHECK_SECONDS = 20.0
+
+
+def token_hash(token: str) -> str:
+    """What the database keeps of a personal token: its SHA-256, never the token."""
+    return hashlib.sha256(token.encode()).hexdigest()
 
 
 def _ist(value: str | None) -> str | None:
@@ -160,8 +207,62 @@ def _ist(value: str | None) -> str | None:
     return clock.iso(at if at.tzinfo else at.replace(tzinfo=clock.IST))
 
 
-def _is_pg(url: str) -> bool:
-    return url.startswith(("postgres://", "postgresql://"))
+def is_pg(url: str) -> bool:
+    return url.startswith(("postgres://", "postgresql://", "postgresql+psycopg://"))
+
+
+_is_pg = is_pg
+
+
+def pg_options(url: str) -> dict[str, Any]:
+    """Connection settings for Postgres, the same for the core and the SQLAlchemy stores.
+
+    prepare_threshold=None: Supabase's transaction pooler cannot keep prepared statements.
+    sslmode=require: anything but a local server is reached encrypted or not at all.
+    Keepalives: a connection the network silently dropped is noticed, not waited on forever.
+    """
+    from psycopg.conninfo import conninfo_to_dict
+
+    given = conninfo_to_dict(url.replace("postgresql+psycopg://", "postgresql://", 1))
+    host = str(given.get("host") or "")
+    local = host in ("", "localhost", "127.0.0.1", "::1") or host.startswith("/")
+    options: dict[str, Any] = {"prepare_threshold": None, "connect_timeout": 10,
+                               "application_name": "7even5ive", "keepalives": 1,
+                               "keepalives_idle": 30, "keepalives_interval": 10,
+                               "keepalives_count": 3}
+    if not local and "sslmode" not in given:
+        options["sslmode"] = "require"
+    return options
+
+
+def sqlalchemy_url(url: str) -> str:
+    """postgres://... and postgresql://... as SQLAlchemy's psycopg 3 URL; SQLite as it is."""
+    for prefix in ("postgresql+psycopg://", "postgresql://", "postgres://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg://" + url[len(prefix):]
+    return url
+
+
+def sqlalchemy_engine(url: str) -> Any:
+    """The engine for PortMax's and the mail filter's stores. On Postgres: pooler-safe (no
+    prepared statements), checked before each use (pool_pre_ping), and small, because each warm
+    Lambda keeps its own pool."""
+    from sqlalchemy import create_engine
+
+    if not is_pg(url):
+        return create_engine(url)
+    return create_engine(sqlalchemy_url(url), pool_size=2, max_overflow=3, pool_pre_ping=True,
+                         pool_recycle=300, connect_args=pg_options(url))
+
+
+def open_store(cls: Any, url: str, metadata: Any) -> Any:
+    """A PortMax or mail filter Store on sqlalchemy_engine: built without its own engine, which
+    would know nothing of the pooler, then given ours and its tables."""
+    store = cls(sqlalchemy_url(url), create=False)
+    store.engine.dispose()
+    store.engine = sqlalchemy_engine(url)
+    metadata.create_all(store.engine)
+    return store
 
 
 class _Result:
@@ -188,71 +289,170 @@ class _Conn:
     tx() groups several, on both engines, with the same rollback-on-error behaviour.
     Why an RLock: a transaction holds it from BEGIN to COMMIT, so another thread's statement
     waits instead of landing inside it; re-entrant, so statements inside the transaction pass.
+    Why no retry of a failed statement: it may have run before the connection dropped. Only a
+    connection found dead before anything is sent is replaced (_fresh).
     """
 
     def __init__(self, url: str) -> None:
         self.lock = threading.RLock()
-        self.pg = _is_pg(url)
+        self.url = url
+        self.pg = is_pg(url)
+        self._depth = 0  # open transactions on this connection
+        self._used = time.monotonic()
         if self.pg:
             if psycopg is None:
                 raise RuntimeError("DATABASE_URL is Postgres but psycopg is not installed")
-            # prepare_threshold=None: Supabase's transaction pooler cannot keep prepared
-            # statements between calls.
-            self.raw: Any = psycopg.connect(url, autocommit=True, row_factory=dict_row,
-                                            prepare_threshold=None)
+            self.raw: Any = self._connect()
         else:
             Path(url).parent.mkdir(parents=True, exist_ok=True)
             self.raw = sqlite3.connect(url, check_same_thread=False, isolation_level=None)
             self.raw.row_factory = sqlite3.Row
             self.raw.execute("PRAGMA foreign_keys = ON")
 
+    def _connect(self) -> Any:
+        url = self.url.replace("postgresql+psycopg://", "postgresql://", 1)
+        return psycopg.connect(url, autocommit=True, row_factory=dict_row, **pg_options(url))
+
+    def _fresh(self) -> None:
+        """Before the first statement of a turn (never inside a transaction): a Postgres
+        connection that is closed, broken, or idle long enough to have been dropped is
+        checked, and replaced if it is dead. Called with the lock held."""
+        if not self.pg or self._depth:
+            return
+        if not (self.raw.closed or self.raw.broken):
+            if time.monotonic() - self._used < IDLE_CHECK_SECONDS:
+                return
+            try:
+                self.raw.execute("SELECT 1")
+                self._used = time.monotonic()
+                return
+            except DROPPED:
+                pass
+        try:
+            self.raw.close()
+        except Exception:  # noqa: BLE001 - it is being replaced either way
+            pass
+        self.raw = self._connect()
+        self._used = time.monotonic()
+
     def _sql(self, sql: str) -> str:
-        return sql.replace("?", "%s") if self.pg else sql
+        # psycopg reads % as the start of a placeholder: a literal one (LIKE 'x%') is doubled.
+        return sql.replace("%", "%%").replace("?", "%s") if self.pg else sql
 
     def execute(self, sql: str, args: Any = ()) -> _Result:
         with self.lock:
+            self._fresh()
             cur = self.raw.execute(self._sql(sql), args)
             # Only statements that return rows have a description (SELECT, ... RETURNING).
             rows = cur.fetchall() if cur.description is not None else []
+            self._used = time.monotonic()
             return _Result(rows, cur.rowcount)
 
     def executemany(self, sql: str, rows: list[Any]) -> None:
         with self.lock:
+            self._fresh()
             if self.pg:
+                # One statement at a time: psycopg's executemany pipelines, which the
+                # transaction pooler does not support outside a transaction.
                 with self.raw.cursor() as cur:
-                    cur.executemany(self._sql(sql), rows)
+                    for row in rows:
+                        cur.execute(self._sql(sql), row)
             else:
                 self.raw.executemany(sql, rows)
+            self._used = time.monotonic()
 
     @contextmanager
     def transaction(self) -> Iterator[_Conn]:
         with self.lock:
-            if self.pg:
-                with self.raw.transaction():
-                    yield self
-                return
-            self.raw.execute("BEGIN")
+            self._fresh()
+            self._depth += 1
             try:
-                yield self
-            except BaseException:
-                self.raw.execute("ROLLBACK")
-                raise
-            self.raw.execute("COMMIT")
+                if self.pg:
+                    with self.raw.transaction():
+                        yield self
+                    return
+                self.raw.execute("BEGIN")
+                try:
+                    yield self
+                except BaseException:
+                    self.raw.execute("ROLLBACK")
+                    raise
+                self.raw.execute("COMMIT")
+            finally:
+                self._depth -= 1
+                self._used = time.monotonic()
 
     def script(self, sql: str) -> None:
         # Postgres runs a multi-statement string in one call when it has no parameters.
         with self.lock:
+            self._fresh()
             if self.pg:
                 self.raw.execute(sql)
             else:
                 self.raw.executescript(sql)
+            self._used = time.monotonic()
 
     def columns(self, table: str) -> set[str]:
         if self.pg:
             rows = self.execute("SELECT column_name FROM information_schema.columns"
-                                " WHERE table_name=?", (table,)).fetchall()
+                                " WHERE table_schema='public' AND table_name=?",
+                                (table,)).fetchall()
             return {r["column_name"] for r in rows}
         return {r["name"] for r in self.execute(f"PRAGMA table_info({table})").fetchall()}
+
+    def close(self) -> None:
+        with self.lock:
+            try:
+                self.raw.close()
+            except Exception:  # noqa: BLE001 - closing is best effort
+                pass
+
+
+_NAME = re.compile(r"^[a-z_][a-z0-9_]*$")
+
+
+def lock_down(conn: _Conn, tables: Iterable[str]) -> list[str]:
+    """Supabase only: row level security on, and no grants to anon or authenticated, for each
+    of these tables (only these: never another app's). Idempotent and cheap: three catalogue
+    reads, whatever the number of tables, then a statement only for a table that still needs one
+    (so on every start after the first, none). Returns the tables it changed. A plain Postgres
+    (tests, a laptop) has no such roles and only gets row level security."""
+    if not conn.pg:
+        return []
+    wanted = sorted({t for t in tables if _NAME.match(t)})
+    if not wanted:
+        return []
+    roles = [r["rolname"] for r in conn.execute(
+        "SELECT rolname FROM pg_roles WHERE rolname IN ('anon','authenticated') ORDER BY rolname"
+    ).fetchall()]
+    marks = ",".join("?" for _ in wanted)
+    table_rights = "'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'"
+    granted = " OR ".join(f"has_table_privilege('{role}', c.oid, {table_rights})" for role in roles)
+    rows = conn.execute(
+        f"SELECT c.relname AS name, c.relrowsecurity AS rls, {granted or 'false'} AS granted"
+        " FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace"
+        f" WHERE n.nspname='public' AND c.relkind IN ('r','p') AND c.relname IN ({marks})",
+        wanted).fetchall()
+    changed: list[str] = []
+    for row in rows:
+        if row["rls"] and not row["granted"]:
+            continue
+        if not row["rls"]:
+            conn.execute(f'ALTER TABLE public."{row["name"]}" ENABLE ROW LEVEL SECURITY')
+        if row["granted"]:
+            conn.execute(f'REVOKE ALL ON TABLE public."{row["name"]}" FROM {", ".join(roles)}')
+        changed.append(row["name"])
+    if roles:
+        # The identity columns' sequences: nothing outside this service needs them either.
+        seq_granted = " OR ".join(
+            f"has_sequence_privilege('{role}', c.oid, 'USAGE,SELECT,UPDATE')" for role in roles)
+        for seq in conn.execute(
+                f"SELECT c.relname AS name FROM pg_class c JOIN pg_namespace n ON"
+                " n.oid=c.relnamespace JOIN pg_depend d ON d.objid=c.oid AND d.deptype IN ('a','i')"
+                " JOIN pg_class t ON t.oid=d.refobjid WHERE n.nspname='public' AND c.relkind='S'"
+                f" AND t.relname IN ({marks}) AND ({seq_granted})", wanted).fetchall():
+            conn.execute(f'REVOKE ALL ON SEQUENCE public."{seq["name"]}" FROM {", ".join(roles)}')
+    return changed
 
 
 def _schema(pg: bool) -> str:
@@ -266,6 +466,7 @@ class Database:
         self.conn.script(_schema(self.conn.pg))
         self._migrate()
         self.conn.script(INDEXES)
+        lock_down(self.conn, CORE_TABLES)
 
     def _migrate(self) -> None:
         """Adds columns a database made by an older version lacks. Idempotent."""
@@ -274,6 +475,19 @@ class Database:
             for name, decl in wanted.items():
                 if name not in have:
                     self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+        # Tokens used to be stored as they are: keep only their hash, so they still work.
+        for row in self.conn.execute("SELECT id, mcp_token FROM students WHERE mcp_token IS NOT"
+                                     " NULL AND token_hash IS NULL").fetchall():
+            self.conn.execute("UPDATE students SET token_hash=?, mcp_token=NULL WHERE id=?",
+                              (token_hash(str(row["mcp_token"])), row["id"]))
+        if self.conn.pg:
+            # Event keys used to be unique across all students (a classmate's Classroom work
+            # would have been dropped as a repeat); now they are unique per student only.
+            self.conn.execute("ALTER TABLE events DROP CONSTRAINT IF EXISTS"
+                              " events_idempotency_key_key")
+
+    def close(self) -> None:
+        self.conn.close()
 
     @contextmanager
     def tx(self) -> Iterator[_Conn]:
@@ -285,10 +499,83 @@ class Database:
         return self.conn.execute("SELECT * FROM students WHERE wa_phone=?", (phone,)).fetchone()
 
     def student_by_token(self, token: str) -> Any | None:
-        return self.conn.execute("SELECT * FROM students WHERE mcp_token=?", (token,)).fetchone()
+        """The student whose personal token this is (the demo's, or one made for MCP)."""
+        if not token:
+            return None
+        return self.conn.execute("SELECT * FROM students WHERE token_hash=?",
+                                 (token_hash(token),)).fetchone()
+
+    def student_by_auth(self, auth_user_id: str) -> Any | None:
+        return self.conn.execute("SELECT * FROM students WHERE auth_user_id=?",
+                                 (auth_user_id,)).fetchone()
+
+    def student_by_username(self, username: str) -> Any | None:
+        return self.conn.execute("SELECT * FROM students WHERE username=?",
+                                 (username.lower(),)).fetchone()
 
     def student(self, student_id: int) -> Any:
         return self.conn.execute("SELECT * FROM students WHERE id=?", (student_id,)).fetchone()
+
+    def create_student(self, **fields: Any) -> int:
+        """A new student row. Raises IntegrityError when the username, the Auth user or the
+        token is already someone's (the unique indexes decide, so two at once cannot both win)."""
+        cols = ", ".join(fields)
+        marks = ", ".join("?" for _ in fields)
+        with self.tx() as c:
+            row = c.execute(f"INSERT INTO students({cols}) VALUES ({marks}) RETURNING id",
+                            tuple(fields.values())).fetchone()
+            return int(row["id"])
+
+    def update_student(self, student_id: int, **fields: Any) -> None:
+        if not fields:
+            return
+        sets = ", ".join(f"{k}=?" for k in fields)
+        with self.tx() as c:
+            c.execute(f"UPDATE students SET {sets} WHERE id=?", (*fields.values(), student_id))
+
+    def set_subjects(self, student_id: int, names: list[str]) -> None:
+        """The student's own subject list, replacing the one before. Cards keep their subject."""
+        with self.tx() as c:
+            c.execute("DELETE FROM subjects WHERE student_id=?", (student_id,))
+            for name in names:
+                c.execute("INSERT INTO subjects(student_id, name) VALUES (?,?)"
+                          " ON CONFLICT(student_id, name) DO NOTHING", (student_id, name))
+
+    def clear_student_data(self, student_id: int) -> None:
+        """Everything the student has in this database except the student row itself."""
+        with self.tx() as c:
+            for table in STUDENT_TABLES:
+                c.execute(f"DELETE FROM {table} WHERE student_id=?", (student_id,))
+
+    def delete_student(self, student_id: int) -> bool:
+        """The student and every row of theirs, in one transaction. False if there was none."""
+        with self.tx() as c:
+            for table in STUDENT_TABLES:
+                c.execute(f"DELETE FROM {table} WHERE student_id=?", (student_id,))
+            return c.execute("DELETE FROM students WHERE id=?", (student_id,)).rowcount == 1
+
+    # --- WhatsApp linking ------------------------------------------------------------------
+    def add_link_code(self, code: str, student_id: int, expires_at: str) -> None:
+        with self.tx() as c:
+            c.execute("DELETE FROM wa_link_codes WHERE student_id=?", (student_id,))
+            c.execute("INSERT INTO wa_link_codes VALUES (?,?,?)", (code, student_id, expires_at))
+
+    def link_whatsapp(self, code: str, phone: str, now: str) -> int | None:
+        """Spends the code and gives its student this number (taken from whoever had it: the
+        signed message proves it is this student's now). None if unknown, used or expired."""
+        with self.tx() as c:
+            row = c.execute("SELECT * FROM wa_link_codes WHERE code=?", (code,)).fetchone()
+            if row is None:
+                return None
+            c.execute("DELETE FROM wa_link_codes WHERE code=?", (code,))
+            if row["expires_at"] <= now:
+                return None
+            sid = int(row["student_id"])
+            if c.execute("SELECT id FROM students WHERE id=?", (sid,)).fetchone() is None:
+                return None
+            c.execute("UPDATE students SET wa_phone=NULL WHERE wa_phone=? AND id<>?", (phone, sid))
+            c.execute("UPDATE students SET wa_phone=? WHERE id=?", (phone, sid))
+            return sid
 
     def subjects(self, student_id: int) -> list[str]:
         rows = self.conn.execute(

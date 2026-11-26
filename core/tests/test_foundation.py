@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 from conftest import at, file_item
 from seventy5 import clock, demo, notify
 from seventy5.api import create
-from seventy5.db import Database
+from seventy5.db import Database, token_hash
 from seventy5.gateway import Denied
 from seventy5.scheduler import Job, Scheduler, latest_slot
 
@@ -149,8 +149,8 @@ def test_a_reminder_lands_in_the_outbox_and_the_phone_pulls_it(make_app):
 def test_one_students_outbox_is_invisible_to_another(make_app):
     a, sid = make_app()
     with a.db.tx() as c:
-        other = int(c.execute("INSERT INTO students(name, mcp_token) VALUES ('B', 'tok-b')"
-                              " RETURNING id").fetchone()["id"])
+        other = int(c.execute("INSERT INTO students(name, token_hash) VALUES ('B', ?)"
+                              " RETURNING id", (token_hash("tok-b"),)).fetchone()["id"])
     a.db.add_notification(sid, "reminder", "mine", "x", None, "2030-01-01T00:00+05:30")
     client = TestClient(create(a))
     theirs = client.get("/api/notifications", headers={"authorization": "Bearer tok-b"}).json()

@@ -19,6 +19,7 @@ from typing import Any
 
 from . import clock
 from .config import settings
+from .db import token_hash
 from .jev import Decisions, Likely, Picked
 from .llm import LLMError, Proposal
 
@@ -29,7 +30,29 @@ PORTAL_ID = "demo"
 # DEMO_PHONE: the number your bot knows you by (91 + 10 digits), so its events reach this
 # student. The default is invented.
 PHONE = "".join(ch for ch in os.environ.get("DEMO_PHONE", "919900000001") if ch.isdigit())
+# The demo student's token: public on purpose (it is in the app, behind "Try the demo"). The
+# database keeps only its hash, like any personal token. Real accounts sign in with Supabase.
 TOKEN = "demo-student-token"
+# The job row that remembers when the demo morning was last seeded (seeded_today).
+SEED_JOB = "demo-seed"
+
+
+def student_id(db: Any) -> int | None:
+    row = db.student_by_token(TOKEN)
+    return int(row["id"]) if row is not None else None
+
+
+def is_demo(db: Any, sid: int) -> bool:
+    """The shared demo student: everyone who taps "Try the demo" is this one student."""
+    row = db.student(sid)
+    return row is not None and row["token_hash"] == token_hash(TOKEN)
+
+
+def seeded_today(db: Any) -> bool:
+    job = db.job(SEED_JOB)
+    if job is None or student_id(db) is None:
+        return False
+    return str(job["last_run_at"])[:10] == clock.iso(clock.now())[:10]
 
 
 def _next(weekday: int, hour: int, minute: int = 0) -> str:
@@ -112,20 +135,41 @@ class FixtureLLM:
 
 
 def seed(app: Any) -> int:
+    """The demo student, back to the start of the demo morning. Only the demo student's rows
+    change: on Supabase the same database holds every real account. Its phones (wake-ups) and
+    call settings stay; its cards, reminders, calls, mail and approvals start over."""
+    from . import mail
+
     db = app.db
+    existing = db.student_by_token(TOKEN)
+    # The demo's number, unless a real account linked it (WhatsApp proved it is theirs then):
+    # the invented morning must never land in a real student's cards.
+    owner = db.student_by_phone(PHONE)
+    phone = PHONE if owner is None or (existing is not None and owner["id"] == existing["id"]) else None
+    profile = {"name": "Demo Student", "wa_phone": phone, "branch": "CSE", "year": 3,
+               "interests": "hackathons, backend, AI", "portal_id": PORTAL_ID,
+               "college": "mockcollege"}
     with db.tx() as c:
-        for table in ("audit", "calendar", "pending_approvals", "used_approvals", "notifications",
-                      "devices", "calls", "jobs", "reminders", "items", "events", "subjects",
-                      "google_accounts", "connect_codes", "students"):
-            c.execute(f"DELETE FROM {table}")
-        cur = c.execute("INSERT INTO students(name, wa_phone, mcp_token, branch, year, interests,"
-                        " portal_id) VALUES (?,?,?,?,?,?,?) RETURNING id",
-                        ("Demo Student", PHONE, TOKEN, "CSE", 3, "hackathons, backend, AI",
-                         PORTAL_ID))
-        sid = int(cur.fetchone()["id"])
-        c.executemany("INSERT INTO subjects(student_id, name) VALUES (?,?)",
-                      [(sid, s) for s in SUBJECTS])
+        if existing is None:
+            cols = ", ".join([*profile, "token_hash", "created_at"])
+            marks = ", ".join("?" for _ in range(len(profile) + 2))
+            cur = c.execute(f"INSERT INTO students({cols}) VALUES ({marks}) RETURNING id",
+                            (*profile.values(), token_hash(TOKEN), clock.iso(clock.now())))
+            sid = int(cur.fetchone()["id"])
+        else:
+            sid = int(existing["id"])
+            from .db import STUDENT_TABLES
+
+            for table in STUDENT_TABLES:
+                if table != "devices":
+                    c.execute(f"DELETE FROM {table} WHERE student_id=?", (sid,))
+            sets = ", ".join(f"{k}=?" for k in profile)
+            c.execute(f"UPDATE students SET {sets} WHERE id=?", (*profile.values(), sid))
+        for name in SUBJECTS:
+            c.execute("INSERT INTO subjects(student_id, name) VALUES (?,?)", (sid, name))
     seed_portal()
+    mail.reset_demo(sid)
+    db.job_ran(SEED_JOB, clock.iso(clock.now()), None)
     return sid
 
 
@@ -148,8 +192,10 @@ def play(app: Any, client: Any, sid: int) -> list[str]:
 
     lines = []
     linked = configured()
+    # A real account linked the demo's number: its forwards would land in that account.
+    owns_phone = app.db.student(sid)["wa_phone"] == PHONE
     for i, m in enumerate(messages(), 1):
-        if linked and m["source"] == "whatsapp":
+        if (linked or not owns_phone) and m["source"] == "whatsapp":
             # A real bot is linked: its own deadlines arrive by backfill and events, so the
             # invented forwards would only duplicate them. Mail and Classroom stay invented.
             continue
@@ -172,42 +218,63 @@ def play(app: Any, client: Any, sid: int) -> list[str]:
     return lines
 
 
-def prepare(db_url: str | None = None,
-            run_jobs: bool = False) -> tuple[Any, Any, int, bool, list[str]]:
-    """Build the app, seed the student and replay the morning: (app, api, sid, live, lines).
+def recorded_answers() -> tuple[FixtureDecider, FixtureLLM]:
+    script = messages()
+    return (FixtureDecider({m["text"]: m["jev"] for m in script}),
+            FixtureLLM({m["text"]: m["llm"] for m in script if "llm" in m}))
 
-    Shared by the local demo and the cloud service, so both start from the same morning.
-    db_url: a fresh database for the cloud service's demo reset; else the configured one.
-    run_jobs: the served API runs the background loop itself (the laptop demo). The online
-    service leaves it off and runs the loop in its router, so it survives a demo reset.
-    """
+
+def live_models() -> bool:
+    return bool(settings.jev_api_key and (settings.anthropic_api_key or settings.bedrock_model_id))
+
+
+def morning(app: Any, api: Any) -> tuple[int, list[str]]:
+    """Seed the demo student and replay the morning through this app: (sid, log lines).
+
+    The invented morning replays its recorded answers unless DEMO_LIVE_REPLAY=1 (a laptop
+    showing the models at work). On a cold Lambda start a live replay would spend its 29 s and
+    money on invented messages."""
     from fastapi.testclient import TestClient
 
-    from .api import create
-    from .app import build
+    from . import mail, sync
 
-    live = bool(settings.jev_api_key and (settings.anthropic_api_key or settings.bedrock_model_id))
-    script = messages()
-    recorded = (FixtureDecider({m["text"]: m["jev"] for m in script}),
-                FixtureLLM({m["text"]: m["llm"] for m in script if "llm" in m}))
-    # Real events get the live models when the keys are there; the invented morning replays its
-    # recorded answers unless DEMO_LIVE_REPLAY=1 (a laptop showing the models at work). On a
-    # cold Lambda start a live replay would spend its 29 s and money on invented messages.
-    app = build(db_url) if live else build(db_url, jev=recorded[0], llm=recorded[1])
-    replay_live = live and os.environ.get("DEMO_LIVE_REPLAY") == "1"
+    replay_live = live_models() and os.environ.get("DEMO_LIVE_REPLAY") == "1"
     kept = (app.cascade.jev, app.cascade.llm)
     if not replay_live:
-        app.cascade.jev, app.cascade.llm = recorded
-    sid = seed(app)
-    api = create(app, run_jobs=run_jobs)
+        app.cascade.jev, app.cascade.llm = recorded_answers()
     try:
+        sid = seed(app)
         lines = play(app, TestClient(api), sid)
     finally:
         app.cascade.jev, app.cascade.llm = kept
-    from . import mail, sync
-
-    lines += sync.backfill(app.db, sid)
+    if app.db.student(sid)["wa_phone"]:
+        lines += sync.backfill(app.db, sid)
     lines += mail.startup(app.db, sid)
+    return sid, lines
+
+
+def prepare(db_url: str | None = None, run_jobs: bool = False,
+            daily: bool = False) -> tuple[Any, Any, int, bool, list[str]]:
+    """Build the app, seed the student and replay the morning: (app, api, sid, live, lines).
+
+    Shared by the local demo and the cloud service, so both start from the same morning.
+    run_jobs: the served API runs the background loop itself (the laptop demo). The online
+    service leaves it off and runs the loop in its router.
+    daily: keep a demo morning already seeded today (the online service on Supabase, where a
+    cold start must not wipe what someone is showing); without it, always start over.
+    """
+    from .api import create
+    from .app import build
+
+    live = live_models()
+    recorded = recorded_answers()
+    app = build(db_url) if live else build(db_url, jev=recorded[0], llm=recorded[1])
+    api = create(app, run_jobs=run_jobs)
+    if daily and seeded_today(app.db):
+        sid = student_id(app.db)
+        assert sid is not None
+        return app, api, sid, live, ["demo      today's demo morning kept (seeded earlier today)"]
+    sid, lines = morning(app, api)
     return app, api, sid, live, lines
 
 

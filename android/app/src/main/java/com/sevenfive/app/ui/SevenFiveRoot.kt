@@ -90,6 +90,10 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.sevenfive.app.data.AccountState
+import com.sevenfive.app.ui.auth.AuthStep
+import com.sevenfive.app.ui.auth.AuthViewModel
+import com.sevenfive.app.ui.auth.ProfileEditScreen
 import com.sevenfive.app.ui.screens.AttendanceScreen
 import com.sevenfive.app.ui.screens.HomeScreen
 import com.sevenfive.app.ui.screens.InboxScreen
@@ -119,6 +123,7 @@ object Routes {
     const val SETTINGS = "settings"
     const val PORTAL_CHECK = "portal-check"
     const val VOICE = "voice"
+    const val PROFILE = "profile"
 }
 
 /** Opens the voice assistant from any tab's header (null where there is none). */
@@ -135,10 +140,10 @@ private val tabs = listOf(
 )
 
 /** Screens pushed on top of the tabs: they slide in from the right, like an iOS navigation stack. */
-private val pushed = setOf(Routes.SETTINGS, Routes.PORTAL, Routes.PORTAL_CHECK, Routes.VOICE)
+private val pushed = setOf(Routes.SETTINGS, Routes.PORTAL, Routes.PORTAL_CHECK, Routes.VOICE, Routes.PROFILE)
 
 @Composable
-fun SevenFiveRoot(vm: AppViewModel) {
+fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
     val nav = rememberNavController()
     val snackbar = remember { SnackbarHostState() }
     val state by vm.cards.collectAsStateWithLifecycle()
@@ -258,7 +263,22 @@ fun SevenFiveRoot(vm: AppViewModel) {
                     composable(Routes.REMINDERS) { RemindersScreen(vm, settings) }
                     composable(Routes.PORTAL) { PortalScreen(vm, onDone = { nav.popBackStack() }) }
                     composable(Routes.SETTINGS) {
-                        SettingsScreen(vm, onBack = { nav.popBackStack() }, onPortalCheck = { nav.navigate(Routes.PORTAL_CHECK) })
+                        SettingsScreen(
+                            vm,
+                            onBack = { nav.popBackStack() },
+                            onPortalCheck = { nav.navigate(Routes.PORTAL_CHECK) },
+                            onEditProfile = { nav.navigate(Routes.PROFILE) },
+                            // From the demo to signing up: the login flow opens on Sign up.
+                            onCreateAccount = {
+                                auth.go(AuthStep.SignUp)
+                                vm.logOut()
+                            },
+                        )
+                    }
+                    composable(Routes.PROFILE) {
+                        val account by vm.account.collectAsStateWithLifecycle()
+                        val profile = (account as? AccountState.Ready)?.me?.profile
+                        ProfileEditScreen(auth, profile, onBack = { nav.popBackStack() })
                     }
                     composable(Routes.PORTAL_CHECK) {
                         PortalCheckScreen(vm, vm.portalCheckUrl.value, onBack = { nav.popBackStack() })

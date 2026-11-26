@@ -15,10 +15,12 @@ Two kinds of invocation:
 Settings: every key lives in Parameter Store under SSM_PREFIX (/7even5ive-demo by default) as
 SecureStrings, read once at a cold start, before anything reads seventy5.config. Nothing secret
 is in the template, the code or the Lambda console; a missing key just leaves its stand-in.
-Why /tmp: it is the only writable place on Lambda. The demo's SQLite files live there and are
-reseeded with the demo morning on every cold start, so each start is a clean demo.
-Why one instance: the mock portal keeps its login sessions in memory and the data lives in this
-instance's /tmp, so the stack pins the function to one concurrent instance (see the template).
+Where the data lives: with DATABASE_URL in Parameter Store (Supabase Postgres, through its
+pooler), everything persists there, accounts included, and the demo student is refreshed once a
+day. Without it, SQLite files in /tmp (the only writable place on Lambda), reseeded with the demo
+morning on every cold start.
+Why one instance: the mock portal keeps its login sessions in memory (and, without Supabase, the
+data lives in this instance's /tmp), so the stack pins the function to one concurrent instance.
 Why lazy: the app is built on the first request, not at import, so a slow cold start counts
 against the request's timeout instead of Lambda's shorter init limit.
 """
@@ -66,14 +68,22 @@ def load_settings(prefix: str | None, client: Any = None) -> list[str]:
         return []
 
 
-if os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
-    # Before anything reads seventy5.config: Lambda's code folder is read-only.
-    os.environ.setdefault("DATABASE_URL", "/tmp/75.db")
-    os.environ.setdefault("PORTMAX_DATABASE_URL", "sqlite:////tmp/portmax.db")
-    os.environ.setdefault("MAILFILTER_DATABASE_URL", "sqlite:////tmp/mailfilter.db")
+def use_tmp_unless_supabase() -> None:
+    """Without a Supabase DATABASE_URL, the three SQLite files live in /tmp (Lambda's code folder
+    is read-only) and start over at each cold start. With one, all three share Supabase."""
+    if not os.environ.get("DATABASE_URL", "").startswith(("postgres://", "postgresql://")):
+        os.environ.setdefault("DATABASE_URL", "/tmp/75.db")
+        os.environ.setdefault("PORTMAX_DATABASE_URL", "sqlite:////tmp/portmax.db")
+        os.environ.setdefault("MAILFILTER_DATABASE_URL", "sqlite:////tmp/mailfilter.db")
     os.environ.setdefault("CACHE_DIR", "/tmp/cache")
+
+
+if os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
+    # Before anything reads seventy5.config. Parameter Store first: its DATABASE_URL (Supabase)
+    # must not lose to the /tmp default.
     _loaded = load_settings(os.environ.get("SSM_PREFIX"))
     log.info("settings from Parameter Store", extra={"names": sorted(_loaded)})
+    use_tmp_unless_supabase()
 
 _handler: Any = None
 _router: Any = None

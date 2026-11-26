@@ -14,7 +14,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.coroutines.resume
 
 /**
  * Firebase only wakes the phone; it never carries a title, a deadline or any words (fcm.py sends
@@ -56,7 +58,33 @@ object Push {
             try {
                 app.container.core.registerDevice(token)
             } catch (e: ApiException) {
-                // Registered on the next start or token refresh.
+                // Registered on the next start or token refresh (or no one is signed in yet).
+            }
+        }
+    }
+
+    /** Registers this phone for whoever just signed in (or started the demo). */
+    fun register(context: Context) {
+        if (!configured) return
+        try {
+            FirebaseMessaging.getInstance().token.addOnSuccessListener { register(context, it) }
+        } catch (e: RuntimeException) {
+            // Firebase not started: nothing to register.
+        }
+    }
+
+    /** This phone's Firebase token, to unregister it when someone signs out. Null without Firebase. */
+    suspend fun currentToken(context: Context): String? {
+        if (!configured || FirebaseApp.getApps(context).isEmpty()) return null
+        return withTimeoutOrNull(5_000L) {
+            suspendCancellableCoroutine { done ->
+                try {
+                    FirebaseMessaging.getInstance().token
+                        .addOnSuccessListener { done.resume(it) }
+                        .addOnFailureListener { done.resume(null) }
+                } catch (e: RuntimeException) {
+                    done.resume(null)
+                }
             }
         }
     }

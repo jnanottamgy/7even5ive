@@ -12,6 +12,7 @@ from conftest import at, file_item
 from seventy5 import clock, demo
 from seventy5.cloud import Router
 from seventy5.mcp_server import http_app
+from seventy5.db import token_hash
 
 HEADERS = {"authorization": f"Bearer {demo.TOKEN}", "accept": "application/json, text/event-stream",
            "content-type": "application/json"}
@@ -86,7 +87,7 @@ def test_no_token_no_mcp(mcp):
 def test_each_request_is_its_own_student(mcp):
     a, sid, rpc = mcp
     with a.db.tx() as c:
-        c.execute("INSERT INTO students(name, mcp_token) VALUES ('B', 'tok-b')")
+        c.execute("INSERT INTO students(name, token_hash) VALUES ('B', ?)", (token_hash('tok-b'),))
     mine = file_item(a, sid, due="2030-01-04T23:59")
     clock.freeze(at(2030, 1, 1, 9))
     theirs = json.loads(tool(rpc, "due_this_week")["content"][0]["text"])

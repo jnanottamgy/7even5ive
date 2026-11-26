@@ -3,7 +3,10 @@ package com.sevenfive.app.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sevenfive.app.AppContainer
+import com.sevenfive.app.data.AccountState
 import com.sevenfive.app.data.ApiException
+import com.sevenfive.app.data.PersonalToken
+import com.sevenfive.app.data.WhatsAppLink
 import com.sevenfive.app.data.AppSettings
 import com.sevenfive.app.data.Approval
 import com.sevenfive.app.data.Briefing
@@ -95,8 +98,40 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
 
     val searching: StateFlow<Boolean> = container.finder.searching
 
+    /** Who is using the app (an account, or the demo). */
+    val account: StateFlow<AccountState> = container.accounts.state
+
+    private val _personalToken = MutableStateFlow<PersonalToken?>(null)
+    /** A personal token just made: shown once, then dropped from memory. */
+    val personalToken: StateFlow<PersonalToken?> = _personalToken.asStateFlow()
+
+    private val _whatsapp = MutableStateFlow<WhatsAppLink?>(null)
+    /** The code to send the bot, while the student links WhatsApp. */
+    val whatsapp: StateFlow<WhatsAppLink?> = _whatsapp.asStateFlow()
+
     init {
         viewModelScope.launch { container.finder.messages.collect { say(it) } }
+        // Someone else is using the app now: nothing of the last person's stays on screen.
+        viewModelScope.launch {
+            var last: String? = null
+            account.collect { state ->
+                val who = when (state) {
+                    AccountState.Demo -> "demo"
+                    is AccountState.Ready -> container.accounts.session?.userId
+                    else -> null
+                }
+                if (who != last) {
+                    last = who
+                    _approved.value = emptyList()
+                    _settings.value = null
+                    _callHistory.value = emptyList()
+                    _briefing.value = null
+                    _tour.value = null
+                    _personalToken.value = null
+                    _whatsapp.value = null
+                }
+            }
+        }
         if (Diagnostics.hasUnseen(container.appContext)) {
             say("7even5ive closed unexpectedly last time. Details: Settings → Diagnostics.")
         }
@@ -437,6 +472,73 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         }
         container.cards.refresh()
     }
+
+    // --- the account ----------------------------------------------------------------------------
+    fun logOut() = action("account") {
+        try {
+            container.accounts.signOut()
+        } catch (e: ApiException) {
+            say(e.detail)
+        }
+    }
+
+    /** Only from the delete dialog, after typing DELETE. */
+    fun deleteAccount() = action("delete") {
+        try {
+            container.accounts.deleteAccount()
+        } catch (e: ApiException) {
+            say(e.detail)
+        }
+    }
+
+    fun newPersonalToken() = action("token") {
+        try {
+            _personalToken.value = container.core.newPersonalToken()
+            container.accounts.refreshMe()
+        } catch (e: ApiException) {
+            say(e.detail)
+        }
+    }
+
+    fun dismissPersonalToken() {
+        _personalToken.value = null
+    }
+
+    fun deletePersonalToken() = action("token") {
+        try {
+            container.core.deletePersonalToken()
+            container.accounts.refreshMe()
+            say("Token removed: AI apps using it can't reach your account any more")
+        } catch (e: ApiException) {
+            say(e.detail)
+        }
+    }
+
+    fun linkWhatsApp() = action("whatsapp") {
+        try {
+            _whatsapp.value = container.core.linkWhatsApp()
+        } catch (e: ApiException) {
+            say(e.detail)
+        }
+    }
+
+    /** The dialog closed: the student may have sent the code by now, so look again. */
+    fun dismissWhatsApp() {
+        _whatsapp.value = null
+        viewModelScope.launch { container.accounts.refreshMe() }
+    }
+
+    fun unlinkWhatsApp() = action("whatsapp") {
+        try {
+            container.core.unlinkWhatsApp()
+            container.accounts.refreshMe()
+            say("WhatsApp unlinked")
+        } catch (e: ApiException) {
+            say(e.detail)
+        }
+    }
+
+    fun refreshProfile() = viewModelScope.launch { container.accounts.refreshMe() }
 
     fun findLaptop() = viewModelScope.launch { container.finder.find(userAsked = true) }
 

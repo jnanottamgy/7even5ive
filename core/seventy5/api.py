@@ -15,14 +15,29 @@ from pathlib import Path
 from typing import Any, AsyncIterator
 
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 
-from . import briefing, calls, clock, google, mail, notify, tools, voice
+from . import accounts, auth, briefing, calls, clock, google, mail, notify, tools, voice
 from .app import App, build
 from .config import settings
 from .gateway import Denied, read_token
 from .ingress import BadSignature, accept, verify
 from .scheduler import Scheduler
+
+
+class ApiError(Exception):
+    """An answer the app acts on: detail is said to the student, code tells the app what to do
+    (session_expired, profile_required, username_taken, demo_account, ...)."""
+
+    def __init__(self, status: int, detail: str, code: str) -> None:
+        super().__init__(detail)
+        self.status, self.detail, self.code = status, detail, code
+
+
+# Anyone may call these two; each address gets this many per 5 minutes.
+_username_checks = auth.Limiter(60, 300)
+_login_by_ip = auth.Limiter(10, 300)
+_login_by_name = auth.Limiter(10, 900)
 
 WEB = Path(__file__).parent / "web"
 
@@ -45,12 +60,34 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
 
     api = FastAPI(title="75", lifespan=lifespan)
 
-    def student_from(auth: str | None) -> int:
-        # Prototype sign-in: the student's personal token as a Bearer header.
+    @api.exception_handler(ApiError)
+    async def api_error(_: Request, err: ApiError) -> JSONResponse:
+        return JSONResponse({"detail": err.detail, "code": err.code}, status_code=err.status)
+
+    def bearer(header: str | None) -> str:
+        return (header or "").removeprefix("Bearer ").strip()
+
+    def student_from(authorization: str | None) -> int:
+        # A Supabase access token (the app), or the demo's token (Try the demo).
         try:
-            return state.gateway.authenticate((auth or "").removeprefix("Bearer ").strip())
+            return state.gateway.authenticate(bearer(authorization))
         except Denied as err:
-            raise HTTPException(401, str(err)) from err
+            raise ApiError(err.status, str(err), err.code) from err
+
+    def account_from(authorization: str | None) -> tuple[Any, int | None]:
+        """For /api/me: (Supabase identity or None, student id or None). A signed-in student
+        with no profile yet gets (identity, None); the demo gets (None, its id)."""
+        try:
+            identity, row = state.gateway.identify(bearer(authorization))
+        except Denied as err:
+            raise ApiError(err.status, str(err), err.code) from err
+        if identity is None and row is not None and row["auth_user_id"]:
+            raise ApiError(401, "This token is for MCP clients. Sign in to the app instead.",
+                           "unauthorized")
+        return identity, (int(row["id"]) if row is not None else None)
+
+    def refusal(err: accounts.AccountError) -> ApiError:
+        return ApiError(err.status, err.detail, err.code)
 
     def live(token: str) -> bool:
         # A pending row outlives its token (15 minutes); the phone only shows what it can still
@@ -71,7 +108,16 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
         except BadSignature as err:
             raise HTTPException(401, str(err)) from err
         event = json.loads(body)
-        student = state.db.student_by_phone(str(event.get("from", "")))
+        sender = str(event.get("from", ""))
+        if accounts.LINK_CODE.match(str(event.get("text") or "")):
+            # "LINK 75-XXXXXX": this number becomes the student's who made the code. The
+            # signature above proves the bot saw it come from this number. Never filed.
+            linked = accounts.link_from_bot(state.db, str(event.get("text")), sender)
+            return {"ok": True, "linked": linked is not None,
+                    "reply": "Linked to 7even5ive. Forward your class messages here."
+                    if linked is not None else
+                    "That code didn't work: it may have expired. Make a new one in the app."}
+        student = state.db.student_by_phone(sender)
         if student is None:
             # Unknown number: no reply, no row, no model call. Spam costs one SELECT.
             return {"ok": True}
@@ -95,8 +141,10 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
         sid = student_from(authorization)
         db = state.db
         return {
-            # The token and the phone number stay on the server; the app needs neither.
-            "student": dict(db.student(sid)) | {"mcp_token": None, "wa_phone": None},
+            # Tokens, the sign-in's id and the phone number stay on the server.
+            "student": {k: v for k, v in dict(db.student(sid)).items()
+                        if k not in ("token_hash", "auth_user_id", "token_created_at")}
+            | {"mcp_token": None, "wa_phone": None},
             "due_this_week": tools.due_this_week(db, sid),
             "attendance": tools.attendance(db, sid),
             "materials": tools.materials(db, sid),
@@ -246,6 +294,11 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
 
         sid = student_from(authorization)
         try:
+            accounts.refuse_demo(state.db, sid, "connect Google (it is shared by everyone "
+                                                "trying the app)")
+        except accounts.AccountError as err:
+            raise refusal(err) from err
+        try:
             return google.start(state.db, sid, origin_of(request.scope))
         except google.GoogleUnavailable as err:
             raise HTTPException(503, str(err)) from err
@@ -268,6 +321,10 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
     def google_finish(body: dict[str, Any], authorization: str | None = Header(None)) -> dict[str, Any]:
         """The app, signed in as the student who started the sign-in, hands back Google's code."""
         sid = student_from(authorization)
+        try:
+            accounts.refuse_demo(state.db, sid, "connect Google")
+        except accounts.AccountError as err:
+            raise refusal(err) from err
         try:
             google.finish(state.db, str(body.get("code") or ""), str(body.get("state") or ""), sid)
         except google.GoogleUnavailable as err:
@@ -313,6 +370,155 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
         if out.get("available"):
             state.db.audit(sid, "voice_session", "allow", "student", clock.iso(clock.now()))
         return out
+
+    # --- accounts (accounts.py; the sign-in itself is Supabase's, auth.py) --------------------
+    @api.get("/api/auth/config")
+    def auth_config() -> dict[str, Any]:
+        """What the app needs to sign in with Supabase. Nothing secret: the publishable key is
+        made to ship in apps; Supabase's row level security keeps it out of every table."""
+        on = auth.configured()
+        return {"enabled": on,
+                "supabase_url": settings.supabase_url if on else None,
+                "publishable_key": settings.supabase_publishable_key if on else None,
+                # Signing in with a username needs this service to look up the email.
+                "username_login": on,
+                "delete_account": auth.can_delete_users(),
+                "password_min_length": 8,
+                "demo": True}
+
+    @api.get("/api/auth/username")
+    def username_available(request: Request, u: str = "") -> dict[str, Any]:
+        if not _username_checks.allow(request.client.host if request.client else "?"):
+            raise ApiError(429, "Too many checks. Wait a minute.", "rate_limited")
+        return accounts.username_check(state.db, u)
+
+    @api.post("/api/auth/login")
+    def login_by_username(body: dict[str, Any], request: Request) -> Response:
+        """Sign in with a username instead of an email: this service finds the email and asks
+        Supabase, answering with Supabase's own session. Same answer for an unknown username
+        and a wrong password, so this can't be used to find out who has an account."""
+        if not auth.configured():
+            raise ApiError(503, "Sign-in isn't set up on this server.", "auth_unavailable")
+        login = str(body.get("login") or "").strip().lower()
+        password = str(body.get("password") or "")
+        ip = request.client.host if request.client else "?"
+        if not _login_by_ip.allow(ip) or not _login_by_name.allow(login):
+            raise ApiError(429, "Too many tries. Wait a few minutes and try again.",
+                           "rate_limited")
+        wrong = ApiError(400, "Wrong username or password.", "invalid_credentials")
+        row = state.db.student_by_username(login) if login and "@" not in login else None
+        if row is None or not row["email"] or not password:
+            raise wrong
+        try:
+            reply = auth.password_login(str(row["email"]), password, ip)
+        except auth.AuthError as err:
+            raise ApiError(err.status, str(err), err.code) from err
+        if reply.status_code == 200:
+            return Response(reply.content, media_type="application/json")
+        try:
+            code = str(reply.json().get("error_code") or "")
+        except ValueError:
+            code = ""
+        if code == "email_not_confirmed":
+            raise ApiError(400, "Confirm your email first: log in with your email address to "
+                                "get a new code.", "email_not_confirmed")
+        if reply.status_code == 429:
+            raise ApiError(429, "Too many tries. Wait a few minutes and try again.",
+                           "rate_limited")
+        if reply.status_code >= 500:
+            raise ApiError(503, "The sign-in service isn't answering. Try again.",
+                           "auth_unavailable")
+        raise wrong
+
+    @api.get("/api/me")
+    def get_me(authorization: str | None = Header(None)) -> dict[str, Any]:
+        identity, sid = account_from(authorization)
+        return accounts.me(state.db, sid, identity.email if identity else None)
+
+    @api.post("/api/me")
+    def save_me(body: dict[str, Any], authorization: str | None = Header(None)) -> dict[str, Any]:
+        """The profile: made on first save (after sign-up), changed after."""
+        identity, sid = account_from(authorization)
+        if identity is None:
+            raise ApiError(403, "The demo account can't be changed. Create your own account.",
+                           "demo_account")
+        try:
+            sid = accounts.save_profile(state.db, identity.user_id, identity.email, body)
+        except accounts.AccountError as err:
+            raise refusal(err) from err
+        return accounts.me(state.db, sid, identity.email)
+
+    @api.post("/api/me/delete")
+    def delete_me(body: dict[str, Any], authorization: str | None = Header(None)) -> dict[str, Any]:
+        """Deletes the account: every row, the mail read, the portal answers, Google revoked,
+        then the login itself. The app asks twice before calling this."""
+        identity, sid = account_from(authorization)
+        if identity is None:
+            raise ApiError(403, "The demo account can't be deleted.", "demo_account")
+        if body.get("confirm") != "DELETE":
+            raise ApiError(400, "Confirm with DELETE.", "invalid")
+        if not auth.can_delete_users():
+            raise ApiError(503, "Deleting accounts isn't set up on this server yet. Nothing was"
+                                " deleted.", "auth_unavailable")
+        if sid is not None:
+            try:
+                accounts.delete_everything(state.db, sid)
+            except accounts.AccountError as err:
+                raise refusal(err) from err
+        try:
+            auth.delete_user(identity.user_id)
+        except auth.AuthError as err:
+            raise ApiError(err.status, "Your data is deleted, but your login couldn't be removed"
+                                       " right now. Try again.", err.code) from err
+        return {"deleted": True}
+
+    @api.post("/api/me/token")
+    def make_token(request: Request, authorization: str | None = Header(None)) -> dict[str, Any]:
+        """A personal token for an MCP client (Claude, ChatGPT), shown once. A new one replaces
+        the old. It reaches the same gateway tools as the app, and nothing else."""
+        from .cloud import origin_of
+
+        identity, sid = account_from(authorization)
+        if sid is None:
+            raise ApiError(403, "Finish setting up your account first.", "profile_required")
+        try:
+            out = accounts.new_token(state.db, sid)
+        except accounts.AccountError as err:
+            raise refusal(err) from err
+        base = settings.public_url or origin_of(request.scope) or ""
+        return out | {"mcp_url": f"{base}/mcp"}
+
+    @api.post("/api/me/token/delete")
+    def delete_token(authorization: str | None = Header(None)) -> dict[str, Any]:
+        _, sid = account_from(authorization)
+        if sid is None:
+            raise ApiError(403, "Finish setting up your account first.", "profile_required")
+        try:
+            accounts.drop_token(state.db, sid)
+        except accounts.AccountError as err:
+            raise refusal(err) from err
+        return {"deleted": True}
+
+    @api.post("/api/me/whatsapp")
+    def link_whatsapp(authorization: str | None = Header(None)) -> dict[str, Any]:
+        _, sid = account_from(authorization)
+        if sid is None:
+            raise ApiError(403, "Finish setting up your account first.", "profile_required")
+        try:
+            return accounts.start_whatsapp(state.db, sid)
+        except accounts.AccountError as err:
+            raise refusal(err) from err
+
+    @api.post("/api/me/whatsapp/delete")
+    def unlink_whatsapp(authorization: str | None = Header(None)) -> dict[str, Any]:
+        _, sid = account_from(authorization)
+        if sid is None:
+            raise ApiError(403, "Finish setting up your account first.", "profile_required")
+        try:
+            accounts.unlink_whatsapp(state.db, sid)
+        except accounts.AccountError as err:
+            raise refusal(err) from err
+        return accounts.me(state.db, sid)
 
     @api.get("/api/health")
     def health() -> dict[str, Any]:

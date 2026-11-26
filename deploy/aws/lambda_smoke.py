@@ -5,7 +5,9 @@
 
 Needs Python 3.12 on Linux x86_64, the platform of the zip's wheels (CI runs it there).
 Checks health, the cards, the gateway's refusals, PortMax's runner and the mock portal's login
-page; exits non-zero on the first failure.
+page, the account endpoints' limits on the demo account; exits non-zero on the first failure.
+SMOKE_DATABASE_URL=postgresql://... runs it against Postgres (e.g. a local pooler), as on
+Supabase; by default SQLite files in a temporary folder, as on Lambda without Supabase.
 """
 
 from __future__ import annotations
@@ -18,12 +20,12 @@ from typing import Any
 
 BUILD = sys.argv[1] if len(sys.argv) > 1 else "core/.build-lambda"
 TMP = tempfile.mkdtemp()
-os.environ.update(
-    AWS_LAMBDA_FUNCTION_NAME="smoke",
-    DATABASE_URL=f"{TMP}/75.db",
-    PORTMAX_DATABASE_URL=f"sqlite:///{TMP}/portmax.db",
-    PORTMAX_DEV_TOKENS="demo-student-token:demo",
-)
+os.environ.update(AWS_LAMBDA_FUNCTION_NAME="smoke", CACHE_DIR=f"{TMP}/cache")
+if os.environ.get("SMOKE_DATABASE_URL"):
+    os.environ["DATABASE_URL"] = os.environ["SMOKE_DATABASE_URL"]  # all three share it
+else:
+    os.environ.update(DATABASE_URL=f"{TMP}/75.db", PORTMAX_DATABASE_URL=f"sqlite:///{TMP}/portmax.db",
+                      MAILFILTER_DATABASE_URL=f"sqlite:///{TMP}/mailfilter.db")
 sys.path.insert(0, BUILD)
 
 from seventy5.lambda_demo import handler
@@ -106,6 +108,21 @@ tools = {t["name"] for t in json.loads(mcp["body"]).get("result", {}).get("tools
 check("MCP over HTTP lists the tools", {"due_this_week", "briefing"} <= tools, mcp)
 check("MCP needs the token", call("/mcp", "POST", {"content-type": "application/json"},
                                   "{}")["statusCode"] == 401)
+
+# Accounts: without Supabase only the demo; the demo account can't be changed or deleted.
+auth_config = json.loads(call("/api/auth/config")["body"])
+check("accounts off without Supabase", auth_config.get("enabled") is False and auth_config.get("demo"),
+      auth_config)
+me = json.loads(call("/api/me", headers=TOKEN)["body"])
+check("the demo is the demo account", me.get("demo") is True and me.get("onboarded") is True, me)
+for path in ("/api/me", "/api/me/token", "/api/me/delete", "/api/google/start"):
+    refused = call(path, "POST", {**TOKEN, **JSON}, json.dumps({"confirm": "DELETE"}))
+    check(f"demo account can't use {path}", refused["statusCode"] == 403 and
+          json.loads(refused["body"]).get("code") == "demo_account", refused)
+fake_session = "eyJhbGciOiJFUzI1NiJ9.eyJzdWIiOiJ4In0.c2ln"
+unset = call("/api/cards", headers={"authorization": f"Bearer {fake_session}"})
+check("a session token without Supabase set up is a retry, not a sign-out", unset["statusCode"] == 503,
+      unset)
 
 # The once-a-minute tick that stands in for a server's background loop.
 ticked = handler({"seventy5": "tick"}, None)

@@ -11,6 +11,8 @@ psycopg[binary]>=3.2
 mcp>=2.3,<3
 # Signs Firebase's token request; encrypts the stored Google refresh tokens
 cryptography>=42
+# Checks Supabase's access tokens (ES256/RS256 from the JWKS, or the legacy HS256 secret)
+PyJWT[crypto]>=2.10
 # PortMax's and the mail filter's runtime needs
 pydantic>=2.9
 sqlalchemy>=2.0

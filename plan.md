@@ -179,6 +179,11 @@ Status: `[ ]` to do, `[~]` in progress, `[x]` done and tested, `[-]` decided not
 | P18 | The demo morning's weekdays ("due Fri") mean the next such weekday after now. | On Fridays the old rule put "Fri" just outside "due this week". |
 | P19 | Every Lambda tick shares one 22 s deadline; a mail is only started with 12 s left, Classroom with 15 s; Check now answers within 20 s and the rest goes on in the background. Claude has one 9 s try per mail and one 12 s try per message (no retries). | A tick or request that overran 29 s would reset the instance and its /tmp data, the Google connection with it. |
 | P20 | The invented demo morning always replays its recorded answers (`DEMO_LIVE_REPLAY=1` replays it live on a laptop); real events use the live models whenever the keys are set. | A cold start with keys would otherwise spend its 29 s and money classifying invented messages. |
+| P21 | One Supabase Postgres for the core, PortMax and the mail filter, through the **transaction pooler** (port 6543): no prepared statements or pipelines, a connection idle 20 s checked with `SELECT 1` before use, SSL required. Every table gets row level security with no policies, and anon/authenticated lose their grants. The demo student is refreshed once a day and its reset touches only its rows. | Lambda reaches the internet over IPv4 only; the pooler is IPv4 and made for serverless. The publishable key ships in apps, so Supabase's Data API must see nothing. One shared database must never be wiped for a demo. |
+| P22 | Accounts are Supabase Auth, email + password, confirmed with a 6-digit emailed code (codes, not links). The phone calls Supabase itself; the server checks each access token (JWKS for ES256/RS256, the legacy secret or Supabase's /user for HS256) and maps its `sub` to a student. Username (unique, lowercase), name, college, branch, year, interests and subjects live in our database. | Per-IP sign-in limits apply to each phone, not to the server; links in emails would need a web page and break in mail scanners. |
+| P23 | A username sign-in goes through the server (it finds the email; same answer for an unknown name and a wrong password; 10 tries per 5 minutes per address). Personal tokens (MCP) are stored as SHA-256, shown once, and work for `/mcp` only. WhatsApp is linked by a code the student sends to the bot, whose signed webhook proves the number. | Usernames are the Instagram way; a token or a typed phone number must never let one student act as another. |
+| P24 | The demo account (public token, "Try the demo") can't connect Google or WhatsApp, get a token, change its profile or be deleted; only it may use `/demo/*`. Real accounts never get invented mail (mail mode `none` until Google). Event keys are unique per student. | Everyone shares the demo student; classmates share Classroom coursework ids. |
+| P25 | Deleting an account revokes Google, forgets the mail filter's and PortMax's rows, removes every row, then the Supabase login (secret key); without the secret key nothing is deleted. The phone's session is sealed by the Android Keystore; signing out also clears the portal's WebView cookies, notifications and this phone's push registration. | Google Play requires account deletion; a shared phone must not leak the last student's data. |
 
 ## Keys and accounts the team hands over at the end
 
@@ -187,7 +192,9 @@ The full checklist, where each goes and how to get it: [`docs/keys.md`](docs/key
 `LIBRARY_SERVICE_TOKEN`, `DEMO_PHONE`; `ANTHROPIC_API_KEY` or `BEDROCK_MODEL_ID`; `JEV_API_KEY`;
 `GOOGLE_CLIENT_ID`/`SECRET`; ElevenLabs (`ELEVENLABS_API_KEY`, the two agent ids from the setup
 commands, the imported phone number's id, `CALL_PROVIDER`, the webhook secret,
-`DEMO_STUDENT_PHONE`); optionally Firebase (`FCM_SERVICE_ACCOUNT_JSON` and four app settings).
+`DEMO_STUDENT_PHONE`); optionally Firebase (`FCM_SERVICE_ACCOUNT_JSON` and four app settings);
+Supabase (`DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, two
+email templates and your own SMTP: [`docs/supabase.md`](docs/supabase.md)); `BOT_WHATSAPP_NUMBER`.
 
 ## Log
 
@@ -218,4 +225,21 @@ commands, the imported phone number's id, `CALL_PROVIDER`, the webhook secret,
   core 134, PortMax 100, mail filter 206; Android 45 unit tests; debug and demo APKs build; the
   Lambda zip passes its smoke test. Not run here: a phone or emulator (none in this sandbox),
   and any live account (no keys yet). Found and fixed: the demo's "due Fri" on Fridays (P18).
-
+- 26 Nov (Supabase and real accounts, from Jnanottam's "setup supabase too / a real sign in, ig
+  style"): one Supabase Postgres for everything (P21), tested through PgBouncer in transaction
+  mode as Supabase's pooler runs; accounts on Supabase Auth (P22-P25): the server checks access
+  tokens (JWKS, legacy secret, or Supabase), profiles with unique usernames, username sign-in,
+  personal MCP tokens stored hashed, WhatsApp linked by a code through the bot, account deletion,
+  the demo account's limits, row level security on every table. App: Instagram-style log in,
+  sign up, email code, forgotten password, profile setup and editing; the session sealed by the
+  Keystore and refreshed one at a time; Settings → Account (WhatsApp, MCP token, log out,
+  delete); nothing polled while signed out; the last student's data cleared on sign-out. Found
+  and fixed on the way: Classroom work shared by classmates would have filed for only one of
+  them (event keys now per student); real accounts would have received the demo's invented
+  mail; a demo reset or cold start would have wiped every table; Parameter Store's
+  `DATABASE_URL` lost to the `/tmp` default; an empty `.env` value overrode a default; a literal
+  `%` in SQL broke on Postgres. The cascade now calls Bedrock's Messages API like the mail judge
+  (one model id, `anthropic.claude-haiku-5-5`). Tests: core 162 on SQLite (+3 Postgres-only) and
+  165 on Postgres and through the pooler; Android 57; the Lambda zip passes its smoke test on
+  SQLite and twice on Postgres (the second cold start keeps the day's demo). Not run here: a
+  real Supabase project, a phone (no emulator), the screens rendered.

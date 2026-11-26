@@ -118,25 +118,39 @@ private fun MailboxCard(mail: MailStatus, checking: Boolean, modifier: Modifier 
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        if (mail.isDemo) "Demo mailbox" else (mail.address ?: "Your college mail"),
+                        when {
+                            mail.isDemo -> "Demo mailbox"
+                            mail.needsGoogle -> "Your college mail"
+                            else -> mail.address ?: "Your college mail"
+                        },
                         style = MaterialTheme.typography.titleSmall,
                     )
                     val checked = Time.parse(mail.checkedAt)?.let { "Checked ${Time.dayAndTime(it)}" } ?: "Not checked yet"
                     val next = Time.parse(mail.nextCheckAt)?.let { " · next ${Time.dayAndTime(it)}" }.orEmpty()
-                    Text(checked + next, style = MaterialTheme.typography.bodySmall, color = app.secondaryLabel)
+                    Text(
+                        if (mail.needsGoogle) "Not connected" else checked + next,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = app.secondaryLabel,
+                    )
                 }
-                Spacer(Modifier.width(8.dp))
-                GlassPill(
-                    if (cooling) "Checked" else "Check now",
-                    onClick = onCheck,
-                    enabled = !cooling,
-                    busy = checking,
-                    icon = Icons.Outlined.Refresh,
-                )
+                if (!mail.needsGoogle) {
+                    Spacer(Modifier.width(8.dp))
+                    GlassPill(
+                        if (cooling) "Checked" else "Check now",
+                        onClick = onCheck,
+                        enabled = !cooling,
+                        busy = checking,
+                        icon = Icons.Outlined.Refresh,
+                    )
+                }
             }
             Spacer(Modifier.height(8.dp))
             Text(
-                leftOutLine(mail.leftOut) + if (mail.isDemo) " · invented mail until you connect Google in Settings" else "",
+                when {
+                    mail.needsGoogle -> "Connect Google in Settings: placements, internships and exam notices from your college mail land here."
+                    mail.isDemo -> leftOutLine(mail.leftOut) + " · invented mail until you connect Google in Settings"
+                    else -> leftOutLine(mail.leftOut)
+                },
                 style = MaterialTheme.typography.labelMedium,
                 color = app.tertiaryLabel,
             )

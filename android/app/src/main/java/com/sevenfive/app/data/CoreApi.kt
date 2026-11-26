@@ -115,6 +115,51 @@ class CoreApi(private val http: Http, val baseUrl: () -> String) {
         http.post("${baseUrl()}/demo/reset", "{}")
     }
 
+    // --- accounts (the sign-in itself is Supabase's: SupabaseAuth) ------------------------------
+    /** How this server's students sign in. No token needed. */
+    suspend fun authConfig(): AuthConfig =
+        AppJson.decodeFromString(http.get("${baseUrl()}/api/auth/config", auth = false))
+
+    suspend fun usernameCheck(username: String): UsernameCheck {
+        val q = java.net.URLEncoder.encode(username, "UTF-8")
+        return AppJson.decodeFromString(http.get("${baseUrl()}/api/auth/username?u=$q", auth = false))
+    }
+
+    /** A username sign-in: the server answers with Supabase's own session JSON. */
+    suspend fun loginWithUsername(username: String, password: String): String {
+        val body = buildJsonObject {
+            put("login", username)
+            put("password", password)
+        }
+        return http.post("${baseUrl()}/api/auth/login", body.toString(), auth = false)
+    }
+
+    suspend fun me(): Me = AppJson.decodeFromString(http.get("${baseUrl()}/api/me"))
+
+    suspend fun saveProfile(form: ProfileForm): Me =
+        AppJson.decodeFromString(http.post("${baseUrl()}/api/me", form.toJson().toString()))
+
+    /** Every row, the mail read, the portal answers, then the login itself. */
+    suspend fun deleteAccount() {
+        http.post("${baseUrl()}/api/me/delete", buildJsonObject { put("confirm", "DELETE") }.toString())
+    }
+
+    suspend fun newPersonalToken(): PersonalToken =
+        AppJson.decodeFromString(http.post("${baseUrl()}/api/me/token", "{}"))
+
+    suspend fun deletePersonalToken() {
+        http.post("${baseUrl()}/api/me/token/delete", "{}")
+    }
+
+    suspend fun linkWhatsApp(): WhatsAppLink = AppJson.decodeFromString(http.post("${baseUrl()}/api/me/whatsapp", "{}"))
+
+    suspend fun unlinkWhatsApp(): Me = AppJson.decodeFromString(http.post("${baseUrl()}/api/me/whatsapp/delete", "{}"))
+
+    /** This phone stops being woken for the student signing out. */
+    suspend fun removeDevice(token: String) {
+        http.post("${baseUrl()}/api/devices/remove", buildJsonObject { put("token", token) }.toString())
+    }
+
     /** The status a request with no token gets (the gateway's 401). */
     suspend fun statusWithoutToken(): Int = try {
         http.get("${baseUrl()}/api/cards", auth = false)

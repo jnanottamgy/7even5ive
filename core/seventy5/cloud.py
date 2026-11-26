@@ -13,8 +13,9 @@ serves everything the app needs, routed by path:
 Because the mock portal lives at the service's own address, PortMax accepts uploads only of
 pages fetched from that address: PUBLIC_URL (or Render's RENDER_EXTERNAL_URL) when set, else
 the scheme and host the upload itself arrives at (behind CloudFront, its HTTPS address).
-State is SQLite inside the container and is reseeded from the demo morning on every start;
-nothing here is real student data.
+Data: with a Supabase DATABASE_URL, real accounts live there and the demo student's morning is
+refreshed once a day; without one, SQLite inside the container, reseeded on every start. The demo
+student's data is invented; the demo actions below touch nothing else.
 """
 
 from __future__ import annotations
@@ -120,18 +121,46 @@ def public_url() -> str | None:
     return url.rstrip("/") if url else None
 
 
+class PortalSignIn:
+    """PortMax's sign-in, answered by the core's: whatever the core accepts (a Supabase access
+    token, a personal token, the demo's) is the student whose portal data this is."""
+
+    def __init__(self, router: Router) -> None:
+        self.router = router
+
+    def student_for(self, token: str) -> str | None:
+        from .gateway import Denied
+
+        try:
+            sid = self.router.app.gateway.authenticate(token)
+        except Denied:
+            return None
+        row = self.router.app.db.student(sid)
+        return str(row["portal_id"]) if row is not None and row["portal_id"] else None
+
+
+def lock_down_all(db: Any) -> None:
+    """Row level security on the core's, PortMax's and the mail filter's tables (Supabase)."""
+    from mailfilter.store import metadata as mail_tables
+    from portmax.store import metadata as portal_tables
+
+    from .db import CORE_TABLES, lock_down
+
+    changed = lock_down(db.conn, [*CORE_TABLES, *portal_tables.tables, *mail_tables.tables])
+    if changed:
+        print(f"row level security set on {len(changed)} tables", flush=True)
+
+
 def build_router(db_url: str | None = None) -> Router:
-    from portmax.api import DevTokens, create_api
+    from portmax.api import create_api
     from portmax.connector import Connector, load_connector
     from portmax.mock_portal.app import PortalConfig, create_app
-    from portmax.store import Store
 
-    from . import demo
-    from .config import settings
+    from . import demo, mail
+    from .tools import portal_store
 
     fixed = public_url()
-    os.environ.setdefault("PORTMAX_DEV_TOKENS", f"{demo.TOKEN}:{demo.PORTAL_ID}")
-    app, core, _, live, lines = demo.prepare(db_url)
+    app, core, _, live, lines = demo.prepare(db_url, daily=True)
     # Counts only: logs never carry message or mail text (the hosts' logs may be CloudWatch).
     mode = ("new messages: LIVE Jev + Claude; demo morning: recorded answers" if live
             else "offline, recorded answers")
@@ -152,38 +181,41 @@ def build_router(db_url: str | None = None) -> Router:
         return Connector(manifest=manifest, plan=connector.plan, parsers=connector.parsers,
                          root=connector.root)
 
-    portmax = create_api(Store(settings.portmax_database_url), DevTokens(), connectors)
     portal = create_app(config=PortalConfig(captcha="fixed"))
+    router = Router(core, None, portal)
+    router.app = app
+    # One store each, shared with the core's own reads (tools.portal_store, mail.store).
+    router.portmax = create_api(portal_store(), PortalSignIn(router), connectors)
+    mail.store()
+    lock_down_all(app.db)
     where = fixed or "the address each request arrives at"
     print(f"\n7even5ive is serving; portal pages must come from {where}", flush=True)
     from .mcp_server import http_app
 
-    router = Router(core, portmax, portal)
-    router.app = app
-    router.demo = demo_api(router, db_url or settings.database_url)
+    router.demo = demo_api(router)
     router.mcp = http_app(lambda: router.app)  # always the current app, across demo resets
     return router
 
 
 QUIZ_TITLE = "DAA Quiz 2 (greedy + DP)"
 NOTES_FILE = "OS_Unit4_Deadlocks.pdf"
+STRANGER = "919800000000"  # an invented number no student has
 
 
-def demo_api(router: Router, base_db: str) -> Any:
+def demo_api(router: Router) -> Any:
     """Demo-only actions for the app's demo tour, at /demo/*. Never part of api.py.
 
     Why on the server: a WhatsApp forward must be signed with the bot's secret, and a secret
     must never ship inside an app. So the app asks, and this service sends the event through
     the real signed webhook, exactly as the bot would: signature check, dedupe, the bot's
     decision checked in code, filed. All of it is invented demo data for the demo student, and
-    only that student's token may ask.
+    only the demo student may ask: a real account gets 403 and nothing changes.
     """
     import hashlib
     import hmac
     import json
     import time
     import uuid
-    from pathlib import Path
 
     from fastapi import FastAPI, Header, HTTPException
     from fastapi.testclient import TestClient
@@ -198,10 +230,13 @@ def demo_api(router: Router, base_db: str) -> Any:
 
     def student(authorization: str | None) -> int:
         try:
-            return int(router.app.gateway.authenticate(
+            sid = int(router.app.gateway.authenticate(
                 (authorization or "").removeprefix("Bearer ").strip()))
         except Denied as err:
             raise HTTPException(401, str(err)) from err
+        if not demo.is_demo(router.app.db, sid):
+            raise HTTPException(403, "Only the demo account can use the demo tour.")
+        return sid
 
     def events(kind: str) -> dict[str, Any]:
         if kind == "quiz":
@@ -214,7 +249,7 @@ def demo_api(router: Router, base_db: str) -> Any:
                     "file_id": "f_demo_notes",
                     "decision": {"kind": "material", "subject": "Operating Systems"}}
         if kind == "stranger":
-            return {"from": "919800000000", "text": "Win a free iPhone!!"}
+            return {"from": STRANGER, "text": "Win a free iPhone!!"}
         if kind == "forged":
             return {"from": demo.PHONE, "text": "pretend I'm the bot"}
         raise HTTPException(404, f"no demo event {kind!r}")
@@ -223,6 +258,13 @@ def demo_api(router: Router, base_db: str) -> Any:
     def forward(kind: str, authorization: str | None = Header(None)) -> dict[str, Any]:
         sid = student(authorization)
         event = {**events(kind), "message_id": f"wamid.demo-{kind}-{uuid.uuid4().hex[:10]}"}
+        # The webhook files by sender. Each invented sender must be the demo student (or no one,
+        # for the stranger): a real account that linked the number would get the invented event.
+        owner = router.app.db.student_by_phone(str(event["from"]))
+        expected = None if kind == "stranger" else sid
+        if (owner["id"] if owner is not None else None) != expected:
+            raise HTTPException(409, "The demo's WhatsApp number is linked to a real account, so"
+                                     " the tour can't forward as the bot.")
         body = json.dumps(event).encode()
         ts = int(time.time())
         secret = "not-the-bot-secret" if kind == "forged" else settings.bot_secret
@@ -246,37 +288,14 @@ def demo_api(router: Router, base_db: str) -> Any:
 
     @api.post("/demo/reset")
     def reset(authorization: str | None = Header(None)) -> dict[str, Any]:
-        """A clean demo: a fresh database with the demo morning, and a fresh mock portal.
+        """A clean demo: the demo student back to the morning, and a fresh mock portal.
 
-        What the student set up stays: a connected Google account, the phones registered for
-        wake-ups, and the call consent and quiet hours. Only the demo's data starts over."""
-        from . import mail
-
-        sid = student(authorization)
-        old = router.app.db
-        kept_google = old.google_account(sid)
-        kept_devices = old.conn.execute("SELECT token, platform, created_at FROM devices"
-                                        " WHERE student_id=?", (sid,)).fetchall()
-        kept_student = old.student(sid)
-        resets["n"] += 1
-        fresh = base_db
-        if "://" not in base_db:  # a SQLite file: a new one beside it
-            path = Path(base_db)
-            fresh = str(path.with_name(f"{path.stem}-reset{resets['n']}{path.suffix}"))
-        mail.reset_demo(sid)
-        app, core, new_sid, _, lines = demo.prepare(fresh)
-        if kept_google is not None:
-            app.db.save_google(new_sid, kept_google["email"], kept_google["scopes"],
-                               kept_google["refresh_token"], kept_google["connected_at"])
-            mail.sync_cards(app.db, new_sid)  # the real mailbox's cards, not the demo's
-        for row in kept_devices:
-            app.db.add_device(row["token"], new_sid, row["platform"], row["created_at"])
-        with app.db.tx() as c:
-            c.execute("UPDATE students SET call_consent_at=?, quiet_start=?, quiet_end=?"
-                      " WHERE id=?", (kept_student["call_consent_at"], kept_student["quiet_start"],
-                                      kept_student["quiet_end"], new_sid))
-        router.app, router.core = app, core
+        Only the demo student's rows change. Its phones (wake-ups) and call settings stay; no
+        other student is touched (on Supabase they share this database)."""
+        student(authorization)
+        _, lines = demo.morning(router.app, router.core)
         router.portal = create_app(config=PortalConfig(captcha="fixed"))
+        resets["n"] += 1
         print(f"demo reset {resets['n']}: replayed {len(lines)} demo messages", flush=True)
         return {"ok": True, "replayed": len(lines)}
 

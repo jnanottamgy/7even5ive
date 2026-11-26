@@ -22,6 +22,8 @@ python -m pytest -q
 
 No accounts needed: every external service has a stand-in, and without keys the demo replays
 recorded Jev and LLM answers (it prints which mode ran). Keys go in `core/.env`, which git ignores.
+With a Supabase project ([`docs/supabase.md`](docs/supabase.md)) the app also has real accounts:
+sign up with an email code, a username and profile; "Try the demo" stays.
 
 ## The problem
 
@@ -95,6 +97,7 @@ own. Plan: [`docs/portmax.md`](docs/portmax.md).
 | [`mailfilter/`](mailfilter) | The twice-daily college-mail check; its cards are the core's college-mail cards in the prototype (decision P2, [plan](docs/mailfilter.md)) |
 | [`docs/decisions.md`](docs/decisions.md) | Decision log: the source of truth when anything disagrees |
 | [`docs/keys.md`](docs/keys.md) | Every key and account, where it goes, what it switches on |
+| [`docs/supabase.md`](docs/supabase.md) | The database and real accounts (sign up with an email code, username, profile): setup and how it works |
 | [`docs/online.md`](docs/online.md) | The serverless demo on AWS (Lambda, API Gateway, the once-a-minute tick) |
 | [`docs/architecture.md`](docs/architecture.md) | Components and flows |
 | [`docs/policy.md`](docs/policy.md) | The control model enforced at the gateway |

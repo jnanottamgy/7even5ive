@@ -92,7 +92,7 @@ Bedrock access).
 | Bunk math (`get_attendance_plan`): exact at the minimum, capped at the classes left, next classes in India time, semester outlook, worst first | Built; served by the Lambda, the MCP server and the gateway schema | `bunk.py`, `tools.py` |
 | Lambda adapter for AgentCore Gateway, tool schema | Built; check the event shape against AWS docs before deploying | `adapters/lambda_handler.py`, `adapters/gateway.py` |
 | MCP server (development, demo) | Built; Claude Code connects through `.mcp.json` | `adapters/mcp_server.py` |
-| Phone API: `GET /v1/connectors/{college}`, `GET /v1/runner.js`, `POST /v1/pages` | Built; dev sign-in tokens until real sign-in | `api.py` |
+| Phone API: `GET /v1/connectors/{college}`, `GET /v1/runner.js`, `POST /v1/pages` | Built. On the online service its sign-in is the core's (`cloud.PortalSignIn`): a Supabase session or the demo's token, each student to their own portal id; dev tokens remain for PortMax run on its own | `api.py` |
 | JS runner for the WebView | Built; real-Chromium tests: reads every tool, keeps the login past the idle timeout, refuses unsafe plans | `runner/portmax-runner.js` |
 | Wake-ups for overdue pings | Built with a logging stand-in for Firebase | `wakeups.py` |
 | Forge: capture, sanitise, fixtures, verify, accept, publish | Built; end to end on the mock in a real browser; verify catches hardcoded answers, impure parsers, leaked cookies | `forge/` |

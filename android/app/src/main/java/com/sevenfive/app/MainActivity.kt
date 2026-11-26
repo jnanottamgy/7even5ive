@@ -15,14 +15,28 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.sevenfive.app.portal.AppVisibility
 import com.sevenfive.app.portal.ForegroundSync
+import androidx.compose.animation.Crossfade
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sevenfive.app.data.AccountState
 import com.sevenfive.app.ui.AppViewModel
 import com.sevenfive.app.ui.SevenFiveRoot
+import com.sevenfive.app.ui.auth.AuthFlow
+import com.sevenfive.app.ui.auth.AuthViewModel
+import com.sevenfive.app.ui.auth.CheckingScreen
+import com.sevenfive.app.ui.auth.OnboardingScreen
+import com.sevenfive.app.ui.auth.StartingScreen
 import com.sevenfive.app.ui.theme.SevenFiveTheme
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private lateinit var sync: ForegroundSync
     private lateinit var viewModel: AppViewModel
+    private lateinit var auth: AuthViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,24 +50,52 @@ class MainActivity : ComponentActivity() {
 
         val factory = viewModelFactory { initializer { AppViewModel(container) } }
         viewModel = ViewModelProvider(this, factory)[AppViewModel::class.java]
+        val authFactory = viewModelFactory { initializer { AuthViewModel(container) } }
+        auth = ViewModelProvider(this, authFactory)[AuthViewModel::class.java]
         // A fresh start from Google's sign-in page (not a rotation, which replays the intent).
         if (savedInstanceState == null) handleLink(intent)
 
-        // Poll the cards and keep the portal fresh only while the app is on screen.
+        // Poll the cards and keep the portal fresh only while the app is on screen, and only for
+        // someone signed in (or trying the demo): signed out, nothing is asked for.
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                launch { container.cards.pollForever() }
                 launch { container.finder.runWhileStarted() }
-                launch { sync.runWhileStarted() }
-                launch { container.outbox.pollWhileStarted() }
+                container.accounts.state.map { it.usesApp }.distinctUntilChanged().collectLatest { using ->
+                    if (using) {
+                        coroutineScope {
+                            launch { container.cards.pollForever() }
+                            launch { sync.runWhileStarted() }
+                            launch { container.outbox.pollWhileStarted() }
+                        }
+                    }
+                }
             }
         }
 
         setContent {
             SevenFiveTheme {
-                SevenFiveRoot(viewModel)
+                val account by container.accounts.state.collectAsStateWithLifecycle()
+                Crossfade(targetState = gate(account), label = "account") { screen ->
+                    when (screen) {
+                        Gate.START -> StartingScreen()
+                        Gate.CHECK -> CheckingScreen(auth, account as? AccountState.Checking ?: AccountState.Checking())
+                        Gate.OUT -> AuthFlow(auth)
+                        Gate.PROFILE -> OnboardingScreen(auth, (account as? AccountState.NeedsProfile)?.email)
+                        Gate.APP -> SevenFiveRoot(viewModel, auth)
+                    }
+                }
             }
         }
+    }
+
+    private enum class Gate { START, CHECK, OUT, PROFILE, APP }
+
+    private fun gate(state: AccountState): Gate = when (state) {
+        AccountState.Starting -> Gate.START
+        is AccountState.Checking -> Gate.CHECK
+        is AccountState.SignedOut -> Gate.OUT
+        is AccountState.NeedsProfile -> Gate.PROFILE
+        AccountState.Demo, is AccountState.Ready -> Gate.APP
     }
 
     override fun onNewIntent(intent: Intent) {

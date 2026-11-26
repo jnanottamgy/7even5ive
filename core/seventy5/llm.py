@@ -81,12 +81,14 @@ class ClaudeLLM:
         import anthropic  # lazy: the offline demo never needs it
 
         # Why Bedrock first: the team has AWS credits and no Anthropic key, and it keeps
-        # the model inside the AWS account the rest of 75 runs in.
+        # the model inside the AWS account the rest of 75 runs in. Through Bedrock's Messages
+        # API (the Mantle client, as the mail judge uses): the same request shape as the
+        # Anthropic API, and one model id for both, anthropic.claude-haiku-5-5.
         # One short try: a slow answer becomes a "needs review" card instead of holding a
         # webhook (or a Lambda tick, 29 s) open; the SDK's default would wait 10 minutes.
         if settings.bedrock_model_id:
-            self._client = anthropic.AnthropicBedrock(aws_region=settings.bedrock_region,
-                                                      timeout=LLM_TIMEOUT, max_retries=0)
+            self._client = anthropic.AnthropicBedrockMantle(aws_region=settings.bedrock_region,
+                                                            timeout=LLM_TIMEOUT, max_retries=0)
             self._model = settings.bedrock_model_id
         else:
             self._client = anthropic.Anthropic(api_key=settings.anthropic_api_key,

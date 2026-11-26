@@ -115,7 +115,9 @@ class Cascade:
         ev = self.db.event(event_id)
         payload: dict[str, Any] = json.loads(ev["payload"])
         student = self.db.student(ev["student_id"])
-        subjects = self.db.subjects(student["id"])
+        from .tools import subjects as subjects_of
+
+        subjects = subjects_of(self.db, student["id"])
         source = ev["source"]
         base = {"student_id": student["id"], "event_id": event_id, "source": source,
                 "created_at": clock.iso(clock.now())}

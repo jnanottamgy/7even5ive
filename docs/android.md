@@ -237,6 +237,31 @@ drive or exam itself when `due_at` is the deadline to register). Reminders add `
 | `GET /api/mail` · `POST /api/mail/check` | The mailbox status · Check now (`429` within 5 minutes of the last check) |
 | `POST /mcp` | MCP over HTTP for Claude or ChatGPT (`Authorization: Bearer <token>`) |
 
+### Accounts (Supabase Auth, [`supabase.md`](supabase.md))
+
+The app signs up, in and out with Supabase Auth itself (`data/Auth.kt`: `/auth/v1/signup`,
+`/verify` with the emailed code, `/token` for password and refresh, `/recover`, `/user`,
+`/logout`, all with the publishable key), and sends the session's access token as the Bearer
+token everywhere here, PortMax and `/demo` included. The session is sealed by the Android
+Keystore (`data/SessionStore.kt`) and refreshed a minute before it ends (`data/Accounts.kt`).
+"Try the demo" uses the demo student's public token instead. `mail.mode` is also `none`: an
+account that hasn't connected Google.
+
+| Endpoint | What |
+|---|---|
+| `GET /api/auth/config` (no token) | `{enabled, supabase_url, publishable_key, username_login, delete_account, password_min_length, demo}` |
+| `GET /api/auth/username?u=` (no token) | `{username, available, message}`: the rules, then whether it is taken |
+| `POST /api/auth/login` `{login, password}` (no token) | A username sign-in: answers with Supabase's own session JSON. The same `400 invalid_credentials` for an unknown name and a wrong password |
+| `GET /api/me` | `{onboarded, email, profile: {username, name, email, college, branch, year, interests, subjects, whatsapp (masked), personal_token: {exists, created_at}, demo}, demo}` |
+| `POST /api/me` `{username?, name?, college?, branch?, year?, interests?, subjects?}` | Makes the profile (username and name required the first time), then changes it. `409 username_taken` |
+| `POST /api/me/delete` `{confirm: "DELETE"}` | Every row, the mail read, portal answers, Google revoked, then the login. `503` (nothing deleted) without the secret key |
+| `POST /api/me/token` · `POST /api/me/token/delete` | A personal MCP token, shown once (`{token, created_at, mcp_url}`) · revoke it |
+| `POST /api/me/whatsapp` · `POST /api/me/whatsapp/delete` | `{code, expires_at, message ("LINK 75-…"), bot_number, link (wa.me)}` · unlink |
+
+Refusals carry a `code` the app acts on: `401 session_expired` (refresh once, then log in again),
+`403 profile_required` (profile setup), `403 demo_account`, `503 auth_unavailable` (try again;
+never a sign-out).
+
 ## 7. Portal login and refresh (PortMax)
 
 Base: `http://<laptop-ip>:8002`. The college for the demo is `mockcollege`.

@@ -12,9 +12,14 @@ One web service runs everything the phone app needs at one HTTPS address
 | everything else | the mock college portal the app's WebView logs in to |
 
 PortMax accepts portal pages only from the service's own address: `PUBLIC_URL` (or Render's
-`RENDER_EXTERNAL_URL`) when set, else the scheme and host each request arrives at. State is SQLite inside the container, reseeded with the demo morning
-on every start; there is no real student data. This is the prototype's demo server. The
-production plan (Lambda, SQS, Supabase, AgentCore) is [`deploy.md`](deploy.md).
+`RENDER_EXTERNAL_URL`) when set, else the scheme and host each request arrives at.
+
+**Where the data lives.** With a Supabase `DATABASE_URL` (see [`supabase.md`](supabase.md)),
+everything lives in that Postgres database: real accounts (sign up with an email code, username,
+profile), their cards, college mail and portal answers, and the shared demo student, whose
+morning is refreshed once a day. Without it, SQLite inside the container, reseeded with the demo
+morning on every start, and the app offers only the demo. The production plan (Lambda, SQS,
+Supabase, AgentCore) is [`deploy.md`](deploy.md).
 
 ## Serverless on AWS: Lambda + API Gateway (recommended, about 20 minutes, no command line)
 
@@ -23,10 +28,11 @@ The team's architecture is serverless, so this is the main way to put the demo o
 same demo (`core/seventy5/lambda_demo.py`, the same routing as above) as **one Lambda function
 behind an API Gateway HTTP API**: no server to keep running, nothing billed while idle.
 
-How it keeps the demo correct on Lambda: the demo's data lives in the function's `/tmp` and
-is reseeded with the demo morning on every cold start, and the mock portal keeps its logins
-in memory. So the function is pinned to **one instance at a time** (`PinToOneInstance`); two
-instances would each have their own copy. The production pipeline, several functions sharing
+How it keeps the demo correct on Lambda: without Supabase the data lives in the function's
+`/tmp` and is reseeded with the demo morning on every cold start; with Supabase it lives there
+and lasts. Either way the mock portal keeps its logins in memory, so the function is pinned to
+**one instance at a time** (`PinToOneInstance`); two instances would each have their own copy of
+those logins. Put the Supabase project in the stack's region. The production pipeline, several functions sharing
 Supabase, is [`core/template.yaml`](../core/template.yaml) ([`deploy.md`](deploy.md)).
 
 1. **Get the code zip.** GitHub → **Actions** → **Lambda demo** → the newest green run →

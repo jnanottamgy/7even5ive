@@ -63,8 +63,9 @@ Resources:
               - Effect: Allow
                 Action: ssm:GetParametersByPath
                 Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${SettingsPath}
-              # Claude on Bedrock: the cascade (bedrock-runtime) and the mail judge
-              # (bedrock-mantle). Inference profiles route across regions, hence "*".
+              # Claude on Bedrock: the cascade and the mail judge both call Bedrock's Messages
+              # API (the SDK signs those requests for the service bedrock-mantle); InvokeModel
+              # stays for older setups. Inference profiles route across regions, hence "*".
               - Effect: Allow
                 Action:
                   - bedrock:InvokeModel
@@ -88,7 +89,6 @@ Resources:
       ReservedConcurrentExecutions: !If [Pin, 1, !Ref "AWS::NoValue"]
       Environment:
         Variables:
-          PORTMAX_DEV_TOKENS: demo-student-token:demo
           PYTHONDONTWRITEBYTECODE: "1"
           SSM_PREFIX: !Ref SettingsPath
 

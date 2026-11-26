@@ -17,8 +17,23 @@ from conftest import at, file_item
 from seventy5 import clock, demo, google, mail, notify, tools
 from seventy5.api import create
 from seventy5.gateway import Denied
+from seventy5.db import token_hash
 
-AUTH = {"authorization": f"Bearer {demo.TOKEN}"}
+# Google is for a student's own account, never the shared demo one (accounts.refuse_demo): the
+# seeded student is given a token of its own, which makes it an ordinary student.
+STUDENT_TOKEN = "own-student-token"
+AUTH = {"authorization": f"Bearer {STUDENT_TOKEN}"}
+
+
+@pytest.fixture
+def make_app(make_app):
+    def make(*args, **kwargs):
+        a, sid = make_app(*args, **kwargs)
+        a.db.update_student(sid, token_hash=token_hash(STUDENT_TOKEN))
+        assert not demo.is_demo(a.db, sid)
+        return a, sid
+
+    return make
 NOW = at(2030, 1, 7, 10, 0)  # a Monday
 ALL_SCOPES = " ".join(google.SCOPES[2:])
 
@@ -197,7 +212,7 @@ def test_the_consent_page_carries_a_one_time_state_and_no_student_token(make_app
     a, sid = make_app()
     url = TestClient(create(a)).post("/api/google/start", headers=AUTH).json()["url"]
     query = parse_qs(urlsplit(url).query)
-    assert url.startswith(google.AUTH_URL) and demo.TOKEN not in url
+    assert url.startswith(google.AUTH_URL) and STUDENT_TOKEN not in url
     assert query["redirect_uri"] == ["http://testserver/api/google/callback"]
     assert query["code_challenge_method"] == ["S256"] and query["access_type"] == ["offline"]
     assert set(query["scope"][0].split()) == set(google.SCOPES)
@@ -231,7 +246,7 @@ def test_the_sign_in_stores_an_encrypted_grant_once(make_app, fake):
 def test_only_the_student_who_started_a_sign_in_can_finish_it(make_app, fake):
     a, sid = make_app()
     with a.db.tx() as c:
-        c.execute("INSERT INTO students(name, mcp_token) VALUES ('B', 'tok-b')")
+        c.execute("INSERT INTO students(name, token_hash) VALUES ('B', ?)", (token_hash('tok-b'),))
     client = TestClient(create(a))
     url = client.post("/api/google/start", headers=AUTH).json()["url"]
     state = parse_qs(urlsplit(url).query)["state"][0]
@@ -251,7 +266,7 @@ def test_the_hand_off_page_carries_only_the_code_and_state_escaped(make_app, fak
     state = parse_qs(urlsplit(url).query)["state"][0]
     page = client.get(f"/api/google/callback?code=<script>x</script>&state={state}").text
     assert "<script>x</script>" not in page and "package=com.sevenfive.app" in page
-    assert demo.TOKEN not in page
+    assert STUDENT_TOKEN not in page
 
 
 def test_a_spent_expired_or_refused_sign_in_shows_why(make_app, fake):
