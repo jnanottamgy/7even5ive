@@ -1,6 +1,7 @@
 package com.sevenfive.app.ui
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
@@ -80,12 +81,21 @@ fun SevenFiveRoot(vm: AppViewModel) {
     }
 
     val showTabs = route in tabs.map { it.route }
+    val tour by vm.tour.collectAsStateWithLifecycle()
+    // Each demo step opens the tab it talks about.
+    LaunchedEffect(tour?.index, tour != null) {
+        tour?.let { nav.goToTab(DemoTour.steps[it.index].route) }
+    }
     Scaffold(
         // Each screen draws its own top bar under the status bar; this only adds the tabs.
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
-            if (showTabs) {
+            if (showTabs) Column {
+                tour?.let { t ->
+                    DemoBar(t, onBack = { vm.tourBack() }, onNext = { vm.tourNext() },
+                        onAct = { vm.tourAct() }, onClose = { vm.endTour() })
+                }
                 NavigationBar {
                     tabs.forEach { tab ->
                         val selected = route == tab.route

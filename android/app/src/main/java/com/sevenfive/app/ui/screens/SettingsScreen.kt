@@ -120,6 +120,32 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPortalCheck: () -> Un
             ) { Text("Save and reconnect") }
 
             HorizontalDivider()
+            val resetting by vm.resetting.collectAsStateWithLifecycle()
+            Text("Demo tour", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Runs the whole demo from this phone, step by step: each step opens the right tab, " +
+                    "says what to tell the audience, and makes the live moments happen. Works with " +
+                    "the online demo server.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Button(
+                onClick = { vm.resetDemo(); vm.startTour() },
+                enabled = !resetting,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Start the demo tour (fresh)") }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { vm.startTour() }, modifier = Modifier.weight(1f)) {
+                    Text("Start, keep data")
+                }
+                OutlinedButton(
+                    onClick = { vm.resetDemo() },
+                    enabled = !resetting,
+                    modifier = Modifier.weight(1f),
+                ) { Text(if (resetting) "Resetting…" else "Reset demo data") }
+            }
+
+            HorizontalDivider()
             val checkStart by vm.portalCheckUrl.collectAsStateWithLifecycle()
             var checkUrl by remember { mutableStateOf(checkStart) }
             val checkTarget = PortalCheck.normalise(checkUrl)

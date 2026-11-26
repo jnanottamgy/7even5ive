@@ -10,6 +10,21 @@ Everything shown is invented demo data running on the serverless demo (AWS Lambd
 [`docs/online.md`](online.md)). The college portal is our mock: MSRIT blocks third-party apps
 ([`portal-webview-test.md`](portal-webview-test.md)).
 
+## Run it from the phone (no laptop)
+
+The app has the whole demo built in: **gear → Demo tour → Start the demo tour (fresh)**. It
+resets the server to the demo morning, then a guide bar docks above the tabs: each step opens
+the right tab, shows the line to say, and a button makes the live moment happen (the forward,
+the forgery, the AI's calendar request, the send that is refused, the server ping). **Next** and
+**Back** move between steps; **✕** ends the tour. The steps are the same ten as the table below.
+
+The live moments go through demo-only actions on the demo server (`/demo/*` in
+`core/seventy5/cloud.py`): the server signs each WhatsApp event with the bot's secret and sends
+it through the real webhook, so the secret never ships in the app. They exist only on the demo
+service, never in the production API.
+
+The laptop driver below does the same from a terminal, if you prefer that.
+
 ## Before you start (10 minutes before)
 
 1. **Phone:** the latest APK installed, internet on (Wi-Fi or mobile data). Open 7even5ive once

@@ -68,4 +68,17 @@ check("send_email is refused", refused["statusCode"] == 403, refused)
 check("PortMax runner served", call("/v1/runner.js")["statusCode"] == 200)
 login = call("/index.php")
 check("mock portal login page", login["statusCode"] == 200 and "pm-login" in login["body"], login["statusCode"])
+
+# The app's demo tour: WhatsApp events through the real signed webhook, and the reset.
+check("demo tour needs the student's token", call("/demo/forward/quiz", "POST")["statusCode"] == 401)
+quiz = call("/demo/forward/quiz", "POST", TOKEN)
+quiz_body = json.loads(quiz["body"]) if quiz["statusCode"] == 200 else {}
+check("demo forward files a card via the bot",
+      (quiz_body.get("filed") or {}).get("route") == "bot", quiz)
+forged = json.loads(call("/demo/forward/forged", "POST", TOKEN)["body"])
+check("a forged signature is refused", forged.get("webhook_status") == 401, forged)
+reset = call("/demo/reset", "POST", TOKEN)
+check("demo reset", reset["statusCode"] == 200, reset)
+after = json.loads(call("/api/cards", headers=TOKEN)["body"])
+check("reset restores the morning", len(after["due_this_week"]) == 4, len(after["due_this_week"]))
 print("smoke test passed")
