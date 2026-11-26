@@ -55,8 +55,9 @@ Project → **Project Settings** → **API Keys**:
 
 The secret key is used for two things only: deleting an account's login, and signing in with a
 username (the server looks up the email). Without it, accounts work but **Delete account**
-answers "not set up yet" and nothing is deleted. Older projects' `anon` and `service_role` keys
-work too (`SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`); the new keys are better.
+answers "isn't set up on this server yet" and nothing is deleted. Older projects' `anon` and
+`service_role` keys work too (`SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`); the new keys
+are better.
 
 ## 4. How the server checks sessions (usually nothing to do)
 
@@ -171,7 +172,7 @@ phone ──(sign up · code · log in · refresh · reset)──► Supabase Au
 | No email arrives after **Sign up** | Built-in mail only reaches your Supabase team (step 5); check spam |
 | "Can't check your sign-in right now" (503) | The JWKS address unreachable, or a legacy-secret project with no `SUPABASE_JWT_SECRET` (step 4) |
 | The first request after a while takes many seconds | Supabase and the Lambda are in different regions (step 1) |
-| **Delete account**: "not set up on this server yet" | `SUPABASE_SECRET_KEY` missing; nothing was deleted |
+| **Delete account**: "isn't set up on this server yet" | `SUPABASE_SECRET_KEY` missing; nothing was deleted |
 | The startup log says `stand-in  Database` | `DATABASE_URL` missing or not `postgresql://`; the data starts over at each cold start |
 
 Tested here: the whole server suite on SQLite, on Postgres 16, and on Postgres behind PgBouncer
