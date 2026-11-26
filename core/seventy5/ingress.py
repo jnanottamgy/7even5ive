@@ -47,3 +47,15 @@ def accept(db: Database, queue: Queue, student_id: int, source: str, source_id: 
     if event_id is not None:
         queue.send(event_id)
     return event_id
+
+
+def accept_again(db: Database, queue: Queue, student_id: int, source: str, source_id: str,
+                 payload: dict[str, Any]) -> int | None:
+    """A source we poll (Classroom) found again something whose event never ended in a card
+    (left for review, skipped, or its run was cut off): the same event goes back on the queue
+    with today's payload. Not for pushed sources, whose redeliveries must stay dropped. Returns
+    the event id, or None when there is no such event."""
+    event_id = db.requeue_event(student_id, f"{source}:{source_id}", payload)
+    if event_id is not None:
+        queue.send(event_id)
+    return event_id
