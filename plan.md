@@ -278,4 +278,11 @@ email templates and your own SMTP: [`docs/supabase.md`](docs/supabase.md)); `BOT
   Python 3.12 bytecode and pinned versions. Found outside this repository: the bot's side of the
   link isn't on any of its GitHub branches (Kartik), and ChatGPT's connectors take OAuth only.
   The connector was tried with the real Claude Code and Codex against a local server: both signed
-  in, and Claude Code reported Connected.
+  in, and Claude Code reported Connected. Reliability (merged from a parallel branch): the 1 PM
+  and 9 PM mail sweep reaches every student, least recently checked first, and a Claude or Gmail
+  outage is retried within the slot; Classroom has its own resumable job; a card can't be copied
+  twice (unique index, copies folded once); Classroom work the cascade didn't file is filed by a
+  later sync; a Google grant Google refuses is flagged once and the app says Reconnect Google;
+  events a killed Lambda left queued are re-driven. Tests: core 247 on Postgres and through
+  PgBouncer (244 + 3 Postgres-only on SQLite); Android 93; the Lambda zip's smoke test on SQLite
+  and twice through the pooler, all 27 tables locked.
