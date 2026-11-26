@@ -30,7 +30,12 @@ import java.util.concurrent.TimeUnit
  * is left alone. Field values are held in memory for the one request and never logged or stored.
  * Not covered: the TLS handshake is OkHttp's, not Safari's.
  */
-class IosFormSubmitter(private val web: WebView, private val portalHost: String) {
+class IosFormSubmitter(
+    private val web: WebView,
+    private val portalHost: String,
+    /** A one-line summary of each answer (status, redirect path, cookie names), on the main thread. */
+    private val report: (String) -> Unit = {},
+) {
     private val main = Handler(Looper.getMainLooper())
     private val io = Executors.newSingleThreadExecutor()
     private val client = OkHttpClient.Builder()
@@ -68,17 +73,32 @@ class IosFormSubmitter(private val web: WebView, private val portalHost: String)
             .build()
         try {
             client.newCall(request).execute().use { r ->
-                r.headers("Set-Cookie").forEach { cookies.setCookie(action, it) }
-                cookies.flush()
+                val setCookies = r.headers("Set-Cookie")
                 val location = r.header("Location")
-                if (r.isRedirect && location != null) {
-                    val next = java.net.URI(action).resolve(location).toString()
-                    main.post { web.loadUrl(next) }
-                } else {
-                    val type = r.body?.contentType()
-                    val html = r.body?.string().orEmpty()
-                    val charset = type?.charset()?.name() ?: "utf-8"
-                    main.post { web.loadDataWithBaseURL(action, html, "text/html", charset, action) }
+                val next = if (r.isRedirect && location != null) java.net.URI(action).resolve(location).toString() else null
+                val type = r.body?.contentType()
+                val html = if (next == null) r.body?.string().orEmpty() else ""
+                val charset = type?.charset()?.name() ?: "utf-8"
+                // Host and path only (a query can carry personal details); cookie names, never values.
+                val names = setCookies.map { it.substringBefore('=').trim() }.distinct()
+                val where = next?.let { Uri.parse(it) }?.let { " -> ${it.host}${it.path.orEmpty()}" } ?: ""
+                val summary = "Sent as iPhone: HTTP ${r.code}$where" +
+                    (if (names.isEmpty()) ", no cookies set" else ", cookies set: ${names.joinToString()}")
+                // setCookie is asynchronous: load the next page only once every cookie has landed,
+                // or the portal sees a request without its new session and shows the login again.
+                // Its callback needs a Looper, so this runs on the main thread.
+                main.post {
+                    report(summary)
+                    val load = {
+                        cookies.flush()
+                        if (next != null) web.loadUrl(next)
+                        else web.loadDataWithBaseURL(action, html, "text/html", charset, action)
+                    }
+                    if (setCookies.isEmpty()) { load(); return@post }
+                    var left = setCookies.size
+                    setCookies.forEach { c ->
+                        cookies.setCookie(action, c) { left -= 1; if (left == 0) load() }
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -120,10 +140,10 @@ class IosFormSubmitter(private val web: WebView, private val portalHost: String)
  * origins get the intercept script; reCAPTCHA's frames are left untouched.
  */
 @android.annotation.SuppressLint("JavascriptInterface")
-fun WebView.sendPortalFormsAsIphone(portalHost: String) {
+fun WebView.sendPortalFormsAsIphone(portalHost: String, report: (String) -> Unit = {}) {
     if (PortalSettings.identity != PortalIdentity.IPHONE || portalHost.isBlank()) return
     if (!androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.DOCUMENT_START_SCRIPT)) return
-    addJavascriptInterface(IosFormSubmitter(this, portalHost), IosFormSubmitter.NAME)
+    addJavascriptInterface(IosFormSubmitter(this, portalHost, report), IosFormSubmitter.NAME)
     androidx.webkit.WebViewCompat.addDocumentStartJavaScript(
         this, IosFormSubmitter.INTERCEPT_JS, setOf("https://$portalHost", "http://$portalHost"),
     )

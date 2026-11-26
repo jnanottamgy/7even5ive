@@ -79,6 +79,7 @@ fun PortalCheckScreen(vm: AppViewModel, portalUrl: String, onBack: () -> Unit) {
     var where by remember { mutableStateOf(portalHost) }
     var problem by remember { mutableStateOf<String?>(null) }
     var identity by remember { mutableStateOf(PortalSettings.identity) }
+    var lastSend by remember { mutableStateOf<String?>(null) }
 
     BackHandler {
         val web = webView
@@ -135,6 +136,10 @@ fun PortalCheckScreen(vm: AppViewModel, portalUrl: String, onBack: () -> Unit) {
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                lastSend?.let {
+                    Text(it, style = MaterialTheme.typography.labelMedium,
+                        color = LocalAppColors.current.secondaryLabel, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
                 // Which browser the portal sees. Switching rebuilds the WebView from the start page.
                 Text(
                     "Looks like: ${identity.label} · tap to switch",
@@ -186,7 +191,7 @@ fun PortalCheckScreen(vm: AppViewModel, portalUrl: String, onBack: () -> Unit) {
                                 // "no third-party apps" checks pass. No JS bridge is added.
                                 hardenPortalWebView()
                                 // iPhone mode: the login POST goes out with Safari's headers.
-                                sendPortalFormsAsIphone(portalHost)
+                                sendPortalFormsAsIphone(portalHost) { lastSend = it }
                                 webChromeClient = object : WebChromeClient() {
                                     override fun onReceivedTitle(view: WebView, t: String?) {
                                         title = t.orEmpty()
