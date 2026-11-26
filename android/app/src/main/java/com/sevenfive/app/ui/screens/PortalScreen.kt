@@ -6,6 +6,7 @@ import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
@@ -191,12 +192,16 @@ fun PortalScreen(vm: AppViewModel, onDone: () -> Unit) {
                             WebView(ctx).apply {
                                 trail("WebView created; configuring")
                                 configureForPortal(bridge)
-                                sendPortalFormsAsIphone(portalOrigin.host ?: "")
+                                val ios = sendPortalFormsAsIphone(portalOrigin.host ?: "")
                                 trail("WebView configured")
                                 // Without a chrome client the page's alert()/confirm() are silently
                                 // dropped, and a "Continue?" confirm on a later step never proceeds.
                                 webChromeClient = WebChromeClient()
                                 webViewClient = object : WebViewClient() {
+                                    // iPhone mode: the portal's GETs go out with iPhone headers too.
+                                    override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
+                                        ios?.interceptGet(request)
+
                                     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                                         if (sameOrigin(request.url, portalOrigin)) return false
                                         // The step after login can move to another host of the same

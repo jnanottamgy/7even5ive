@@ -201,13 +201,17 @@ fun PortalCheckScreen(vm: AppViewModel, portalUrl: String, onBack: () -> Unit) {
                                 // "no third-party apps" checks pass. No JS bridge is added.
                                 hardenPortalWebView()
                                 // iPhone mode: the login POST goes out with Safari's headers.
-                                sendPortalFormsAsIphone(portalHost) { lastSend = it }
+                                val ios = sendPortalFormsAsIphone(portalHost) { lastSend = it }
                                 webChromeClient = object : WebChromeClient() {
                                     override fun onReceivedTitle(view: WebView, t: String?) {
                                         title = t.orEmpty()
                                     }
                                 }
                                 webViewClient = object : WebViewClient() {
+                                    // iPhone mode: the portal's GETs go out with iPhone headers too.
+                                    override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
+                                        ios?.interceptGet(request)
+
                                     // The portal's own site, plus Google reCAPTCHA's frames (the
                                     // login's invisible challenge needs them); anything else stays out.
                                     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {

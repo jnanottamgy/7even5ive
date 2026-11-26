@@ -63,6 +63,64 @@ class IosFormSubmitter(
         .readTimeout(45, TimeUnit.SECONDS)
         .build()
 
+    /**
+     * Every GET to the portal's own site, sent with iPhone headers instead of the WebView's.
+     *
+     * Why: a login sent as an iPhone and the very next page fetched with Chromium's headers
+     * (Sec-CH-UA-Platform "Android" and the rest) look like two devices on one session, and the
+     * portal drops it. So in iPhone mode the WebView makes no request to the portal itself: page
+     * loads, scripts and images all come through here, with the WebView's cookies, and cookies the
+     * portal sets are copied back (the WebView ignores Set-Cookie on a response it didn't fetch).
+     * Call from WebViewClient.shouldInterceptRequest (a background thread). Returns null for
+     * anything that isn't a same-site GET, which the WebView then fetches as usual (Google's
+     * reCAPTCHA included).
+     */
+    fun interceptGet(request: android.webkit.WebResourceRequest): android.webkit.WebResourceResponse? {
+        val url = request.url
+        if (!request.method.equals("GET", ignoreCase = true)) return null
+        if (!PortalCheck.sameSite(portalHost, url.host, url.scheme)) return null
+        val cookies = CookieManager.getInstance()
+        val asked = request.requestHeaders.entries.associate { it.key.lowercase() to it.value }
+        val builder = Request.Builder().url(url.toString()).get()
+            .header("User-Agent", IOS_USER_AGENT)
+            .header("Accept-Language", "en-IN,en-GB;q=0.9,en;q=0.8")
+        if (request.isForMainFrame) {
+            builder.header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                .header("Sec-Fetch-Site", "same-origin")
+                .header("Sec-Fetch-Mode", "navigate")
+                .header("Sec-Fetch-Dest", "document")
+        } else {
+            builder.header("Accept", asked["accept"] ?: "*/*")
+        }
+        asked["referer"]?.let { builder.header("Referer", it) }
+        cookies.getCookie(url.toString())?.let { builder.header("Cookie", it) }
+        return try {
+            val r = client.newCall(builder.build()).execute()
+            r.headers("Set-Cookie").forEach { cookies.setCookie(url.toString(), it) }
+            val location = r.header("Location")
+            if (r.isRedirect && location != null) {
+                r.close()
+                val next = java.net.URI(url.toString()).resolve(location).toString()
+                if (!request.isForMainFrame) return null  // a redirected script or image: let the WebView fetch it
+                // WebResourceResponse can't carry a 3xx, so a tiny page moves the frame on; the
+                // next load comes back through here.
+                val page = "<html><head><script>location.replace(${kotlinx.serialization.json.JsonPrimitive(next)})</script></head></html>"
+                return android.webkit.WebResourceResponse("text/html", "utf-8", 200, "OK",
+                    mapOf("Cache-Control" to "no-store"), page.byteInputStream())
+            }
+            val body = r.body ?: return null
+            val type = body.contentType()
+            val mime = type?.let { "${it.type}/${it.subtype}" } ?: "application/octet-stream"
+            val charset = type?.charset()?.name() ?: if (type?.type == "text") "utf-8" else null
+            val headers = r.headers.names()
+                .filter { it.lowercase() !in setOf("set-cookie", "content-encoding", "content-length", "transfer-encoding", "content-type") }
+                .associateWith { r.header(it).orEmpty() }
+            android.webkit.WebResourceResponse(mime, charset, r.code, r.message.ifBlank { "OK" }, headers, body.byteStream())
+        } catch (e: Exception) {
+            null  // the WebView tries itself, which is no worse than before
+        }
+    }
+
     @JavascriptInterface
     fun post(action: String, fieldsJson: String, referer: String) {
         val target = Uri.parse(action)
@@ -188,11 +246,13 @@ class IosFormSubmitter(
  * origins get the intercept script; reCAPTCHA's frames are left untouched.
  */
 @android.annotation.SuppressLint("JavascriptInterface")
-fun WebView.sendPortalFormsAsIphone(portalHost: String, report: (SubmitReport) -> Unit = {}) {
-    if (PortalSettings.identity != PortalIdentity.IPHONE || portalHost.isBlank()) return
-    if (!androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.DOCUMENT_START_SCRIPT)) return
-    addJavascriptInterface(IosFormSubmitter(this, portalHost, report), IosFormSubmitter.NAME)
+fun WebView.sendPortalFormsAsIphone(portalHost: String, report: (SubmitReport) -> Unit = {}): IosFormSubmitter? {
+    if (PortalSettings.identity != PortalIdentity.IPHONE || portalHost.isBlank()) return null
+    if (!androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.DOCUMENT_START_SCRIPT)) return null
+    val submitter = IosFormSubmitter(this, portalHost, report)
+    addJavascriptInterface(submitter, IosFormSubmitter.NAME)
     androidx.webkit.WebViewCompat.addDocumentStartJavaScript(
         this, IosFormSubmitter.INTERCEPT_JS, setOf("https://$portalHost", "http://$portalHost"),
     )
+    return submitter
 }
