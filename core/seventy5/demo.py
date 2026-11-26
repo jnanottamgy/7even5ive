@@ -101,8 +101,9 @@ class FixtureLLM:
 def seed(app: Any) -> int:
     db = app.db
     with db.tx() as c:
-        for table in ("audit", "calendar", "pending_approvals", "used_approvals", "reminders", "items",
-                      "events", "subjects", "students"):
+        for table in ("audit", "calendar", "pending_approvals", "used_approvals", "notifications",
+                      "devices", "calls", "jobs", "reminders", "items", "events", "subjects",
+                      "students"):
             c.execute(f"DELETE FROM {table}")
         cur = c.execute("INSERT INTO students(name, wa_phone, mcp_token, branch, year, interests,"
                         " portal_id) VALUES (?,?,?,?,?,?,?) RETURNING id",
@@ -151,10 +152,11 @@ def play(app: Any, client: Any, sid: int) -> list[str]:
     return lines
 
 
-def prepare() -> tuple[Any, Any, int, bool, list[str]]:
+def prepare(run_jobs: bool = False) -> tuple[Any, Any, int, bool, list[str]]:
     """Build the app, seed the student and replay the morning: (app, api, sid, live, lines).
 
     Shared by the local demo and the cloud service, so both start from the same morning.
+    run_jobs: the served API also runs the background loop (reminders, calls, mail).
     """
     from fastapi.testclient import TestClient
 
@@ -168,14 +170,14 @@ def prepare() -> tuple[Any, Any, int, bool, list[str]]:
         llm=None if live else FixtureLLM({m["text"]: m["llm"] for m in script if "llm" in m}),
     )
     sid = seed(app)
-    api = create(app)
+    api = create(app, run_jobs=run_jobs)
     lines = play(app, TestClient(api), sid)
     return app, api, sid, live, lines
 
 
 def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")  # Windows consoles default to cp1252
-    app, api, sid, live, lines = prepare()
+    app, api, sid, live, lines = prepare(run_jobs="--no-serve" not in sys.argv)
     print(f"mode: {'LIVE Jev + Claude' if live else 'offline, recorded answers'}\n")
     print("source    route     outcome      message")
     print("\n".join(lines))

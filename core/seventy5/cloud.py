@@ -51,14 +51,10 @@ class Router:
 
     async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
         if scope["type"] == "lifespan":
-            # None of the three apps uses startup or shutdown events.
-            while True:
-                message = await receive()
-                if message["type"] == "lifespan.startup":
-                    await send({"type": "lifespan.startup.complete"})
-                elif message["type"] == "lifespan.shutdown":
-                    await send({"type": "lifespan.shutdown.complete"})
-                    return
+            # Only the core has startup work (its background loop: reminders, calls, mail);
+            # PortMax's API and the mock portal have none.
+            await self.core(scope, receive, send)
+            return
         path = scope.get("path", "")
         REQUEST_ORIGIN.set(origin_of(scope))
         if path.startswith(PREFIXES_CORE):
@@ -88,7 +84,7 @@ def build_router() -> Router:
 
     fixed = public_url()
     os.environ.setdefault("PORTMAX_DEV_TOKENS", f"{demo.TOKEN}:{demo.PORTAL_ID}")
-    _, core, _, live, lines = demo.prepare()
+    _, core, _, live, lines = demo.prepare(run_jobs=True)
     print(f"mode: {'LIVE Jev + Claude' if live else 'offline, recorded answers'}")
     print("\n".join(lines))
 
