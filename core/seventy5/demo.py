@@ -26,7 +26,10 @@ from .llm import LLMError, Proposal
 SUBJECTS = ["Computer Networks", "Database Management Systems",
             "Design and Analysis of Algorithms", "Operating Systems", "Probability and Statistics"]
 PORTAL_ID = "demo"
-PHONE, TOKEN = "919900000001", "demo-student-token"
+# DEMO_PHONE: the number your bot knows you by (91 + 10 digits), so its events reach this
+# student. The default is invented.
+PHONE = "".join(ch for ch in os.environ.get("DEMO_PHONE", "919900000001") if ch.isdigit())
+TOKEN = "demo-student-token"
 
 
 def _at(days: int, hour: int, minute: int = 0) -> str:
@@ -131,8 +134,15 @@ def seed_portal() -> None:
 def play(app: Any, client: Any, sid: int) -> list[str]:
     from .ingress import accept, sign
 
+    from .library import configured
+
     lines = []
+    linked = configured()
     for i, m in enumerate(messages(), 1):
+        if linked and m["source"] == "whatsapp":
+            # A real bot is linked: its own deadlines arrive by backfill and events, so the
+            # invented forwards would only duplicate them. Mail and Classroom stay invented.
+            continue
         if m["source"] == "whatsapp":
             # No decision = the bot was unsure, so 7even5ive's own cascade decides.
             body = json.dumps({"from": PHONE, "message_id": f"wamid.demo{i}", "text": m["text"],
@@ -176,6 +186,9 @@ def prepare(db_url: str | None = None,
     sid = seed(app)
     api = create(app, run_jobs=run_jobs)
     lines = play(app, TestClient(api), sid)
+    from . import sync
+
+    lines += sync.backfill(app.db, sid)
     return app, api, sid, live, lines
 
 

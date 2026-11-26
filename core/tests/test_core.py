@@ -404,3 +404,115 @@ def test_the_demo_tour_goes_through_the_real_webhook_and_resets(tmp_path, monkey
     assert client.post("/demo/reset", headers=auth).json()["ok"]
     due = client.get("/api/cards", headers=auth).json()["due_this_week"]
     assert len(due) == 4 and not any(c["title"] == cloud.QUIZ_TITLE for c in due)
+# --- the bot's library and deadlines (library.py, sync.py) --------------------------------------
+def _bot_event(a, kind: str, deadline: dict, version: int, event_id: str):
+    client = TestClient(create(a))
+    body = json.dumps({"type": f"deadline.{kind}", "event_id": event_id, "version": version,
+                       "from": demo.PHONE, "deadline": deadline}).encode()
+    ts = int(time.time())
+    return client.post("/bot/webhook", content=body,
+                       headers={"x-75-timestamp": str(ts), "x-75-signature": sign(body, ts)})
+
+
+def test_bot_deadline_create_update_delete_moves_the_card_and_its_reminder(app):
+    a, sid = app()
+    d = {"id": 12, "title": "Assignment 3", "subject": "DBMS", "description": None,
+         "due_at": "2030-01-04T18:29:00+00:00"}  # 23:59 IST
+    assert _bot_event(a, "created", d, 10, "e1").status_code == 200
+    card = a.db.item_by_external(sid, "bot:deadline:12")
+    assert (card["route"], card["subject"], card["due_at"]) == ("bot", "DBMS", "2030-01-04T23:59+05:30")
+    assert "DBMS" in a.db.subjects(sid)  # the bot's subject joins the list
+    a.gateway.call(sid, "set_reminder", {"item_id": card["id"], "before_minutes": 60})
+
+    moved = {**d, "due_at": "2030-01-06T18:29:00+00:00"}
+    _bot_event(a, "updated", moved, 20, "e2")
+    card = a.db.item(sid, card["id"])
+    assert card["due_at"] == "2030-01-06T23:59+05:30"
+    assert a.db.reminders(sid)[0]["fire_at"] == "2030-01-06T22:59+05:30"  # still an hour before
+
+    _bot_event(a, "updated", d, 15, "e3")  # an older update arriving late loses
+    assert a.db.item(sid, card["id"])["due_at"] == "2030-01-06T23:59+05:30"
+
+    _bot_event(a, "deleted", {"id": 12}, 30, "e4")
+    assert a.db.item(sid, card["id"])["status"] == "cancelled"
+    assert a.db.reminders(sid) == []  # a deleted deadline never fires a reminder
+
+
+def test_a_retried_bot_event_is_applied_once(app):
+    a, sid = app()
+    d = {"id": 7, "title": "Lab record", "subject": None, "due_at": "2030-02-01T04:30:00+00:00"}
+    first = _bot_event(a, "created", d, 1, "same").json()
+    again = _bot_event(a, "created", d, 1, "same").json()
+    assert first["duplicate"] is False and again["duplicate"] is True
+    assert len([r for r in a.db.all_cards(sid) if r["external_id"]]) == 1
+
+
+def test_library_reads_through_the_gateway_and_says_when_it_is_down(app, monkeypatch):
+    from seventy5 import library, tools
+
+    a, sid = app()
+    monkeypatch.setattr(tools, "_library", library.DemoLibrary())
+    lib = a.gateway.call(sid, "list_library")["result"]
+    assert lib["subjects"][0]["name"] == "Database Management Systems"
+    files = a.gateway.call(sid, "list_library_files", {"subject_id": 1, "shelf": "pyq"})["result"]
+    assert [f["title"] for f in files["files"]] == ["CIE-1 question paper"]
+    opened = a.gateway.call(sid, "open_file", {"file_id": 103})["result"]
+    assert opened["kind"] == "file" and opened["url"].startswith("https://")
+    with pytest.raises(Denied):
+        a.gateway.call(sid, "open_file", {"file_id": 999})
+
+    class Down:
+        def library(self, phone):
+            raise library.LibraryUnavailable(library.UNREACHABLE)
+
+    monkeypatch.setattr(tools, "_library", Down())
+    down = a.gateway.call(sid, "list_library")["result"]
+    assert down == {"available": False, "reason": library.UNREACHABLE}
+
+
+def test_a_storage_failure_says_the_file_not_the_library_is_unavailable():
+    import httpx
+
+    from seventy5.library import NO_STORAGE, HttpLibrary, LibraryUnavailable
+
+    lib = HttpLibrary("https://bot.test", "k", httpx.Client(
+        transport=httpx.MockTransport(lambda r: httpx.Response(502, json={"detail": "x"}))))
+    with pytest.raises(LibraryUnavailable, match="storage"):
+        lib.open("919900000001", 1)
+    assert "storage" in NO_STORAGE
+
+
+def test_http_library_sends_the_key_and_number_in_headers_not_the_url():
+    import httpx
+
+    from seventy5.library import HttpLibrary
+
+    seen = {}
+
+    def handler(request):
+        seen["url"], seen["headers"] = str(request.url), request.headers
+        return httpx.Response(200, json={"subjects": [], "unsorted": 0})
+
+    lib = HttpLibrary("https://bot.test", "k", httpx.Client(transport=httpx.MockTransport(handler)))
+    lib.library("919900000001")
+    assert seen["url"] == "https://bot.test/seventy5/v1/library"
+    assert seen["headers"]["authorization"] == "Bearer k"
+    assert seen["headers"]["x-student-phone"] == "919900000001"
+
+
+def test_backfill_pulls_upcoming_deadlines_and_subjects(app, monkeypatch):
+    from seventy5 import library, sync
+
+    a, sid = app()
+
+    class Bot(library.DemoLibrary):
+        def deadlines(self, phone):
+            return [{"id": 3, "title": "Mini project", "subject": "OS Lab",
+                     "due_at": "2030-03-01T18:29:00+00:00"}]
+
+    monkeypatch.setattr(sync, "configured", lambda: True)
+    monkeypatch.setattr(sync, "get_library", lambda: Bot())
+    lines = sync.backfill(a.db, sid)
+    assert "backfill 1 deadlines" in lines[0]
+    assert a.db.item_by_external(sid, "bot:deadline:3")["title"] == "Mini project"
+    assert "OS Lab" in a.db.subjects(sid)

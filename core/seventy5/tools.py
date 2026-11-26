@@ -97,3 +97,49 @@ def add_to_calendar(db: Database, student_id: int, item_id: int) -> dict[str, An
     key = calendar_key(student_id, item_id)
     db.upsert_calendar(key, student_id, f"{item['subject']}: {item['title']}", item["due_at"])
     return {"calendar_event": key, "title": item["title"], "starts_at": item["due_at"]}
+
+
+# --- the bot's library (read through, never copied: see library.py) ---------------------------
+_library: Any = None
+
+
+def library_client() -> Any:
+    global _library
+    if _library is None:
+        from .library import get_library
+
+        _library = get_library()
+    return _library
+
+
+def _read(call: Any) -> Any:
+    from .library import LibraryUnavailable
+
+    try:
+        return call()
+    except LibraryUnavailable as err:
+        # Said, not raised: the Files screen shows it, and nothing else depends on it.
+        return {"available": False, "reason": str(err)}
+    except LookupError as err:
+        raise ValueError("no such subject or file") from err
+
+
+def list_library(db: Database, student_id: int) -> dict[str, Any]:
+    """Subjects of the active term, each with its three shelves and how many files are on them."""
+    phone = db.student(student_id)["wa_phone"]
+    return dict(_read(lambda: library_client().library(phone)))
+
+
+def list_library_files(db: Database, student_id: int, subject_id: int | None = None,
+                       shelf: str | None = None, unsorted: bool = False,
+                       offset: int = 0) -> dict[str, Any]:
+    """One shelf of one subject (or files still waiting for a subject), newest first."""
+    phone = db.student(student_id)["wa_phone"]
+    return dict(_read(lambda: library_client().files(
+        phone, subject_id=subject_id, shelf=shelf, unsorted=unsorted, offset=int(offset))))
+
+
+def open_file(db: Database, student_id: int, file_id: int) -> dict[str, Any]:
+    """A link that opens one file for a few minutes, or a note's text."""
+    phone = db.student(student_id)["wa_phone"]
+    return dict(_read(lambda: library_client().open(phone, int(file_id))))

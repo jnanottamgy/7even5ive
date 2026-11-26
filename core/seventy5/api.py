@@ -74,6 +74,14 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
         if student is None:
             # Unknown number: no reply, no row, no model call. Spam costs one SELECT.
             return {"ok": True}
+        if str(event.get("type", "")).startswith("deadline."):
+            # A deadline the bot saved, changed or deleted: keyed by the bot's event id, so a
+            # retried delivery is dropped.
+            payload = {k: event[k] for k in ("type", "version", "deadline") if k in event}
+            event_id = accept(state.db, state.queue, student["id"], "bot",
+                              str(event["event_id"]), payload)
+            background.add_task(state.work)
+            return {"ok": True, "duplicate": event_id is None}
         payload = {k: event.get(k) for k in ("text", "attachment", "file_id", "group", "decision")
                    if event.get(k)}
         event_id = accept(state.db, state.queue, student["id"], "whatsapp",

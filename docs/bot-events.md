@@ -1,5 +1,7 @@
 # WhatsApp bot → 7even5ive: event format
 
+> **Deadlines now come as their own events** (`deadline.created`, `.updated`, `.deleted`), and the library is read, not pushed: see [`library-link.md`](library-link.md). The per-message format below still works for anything else the bot forwards.
+
 The bot pushes every message a student sends it to 7even5ive, which never polls the bot.
 When the bot has already filed the message, send its **decision** too: 7even5ive checks it in
 code (the subject must be one of the student's subjects, the date must be real) and files it

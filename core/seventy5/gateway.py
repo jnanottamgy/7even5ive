@@ -40,6 +40,10 @@ POLICY: dict[str, str] = {
     # Marking one of the student's own cards done, and undoing it, stays inside 7even5ive.
     "mark_done": "allow",
     "reopen": "allow",
+    # The library stays in the bot's database; these only read it, scoped to this student.
+    "list_library": "allow",
+    "list_library_files": "allow",
+    "open_file": "allow",
     "add_to_calendar": "ask",
     "send_email": "deny",  # Gmail is read-only for 75
     "submit_on_portal": "deny",
@@ -56,6 +60,9 @@ OWN: dict[str, Callable[..., Any]] = {
     "cancel_reminder": notify.cancel_reminder,
     "mark_done": tools.mark_done,
     "reopen": tools.reopen,
+    "list_library": tools.list_library,
+    "list_library_files": tools.list_library_files,
+    "open_file": tools.open_file,
 }
 WRITES: dict[str, Callable[..., Any]] = {"add_to_calendar": tools.add_to_calendar}
 

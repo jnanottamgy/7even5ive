@@ -48,7 +48,10 @@ CREATE TABLE IF NOT EXISTS items (
   id {pk}, student_id BIGINT NOT NULL, event_id BIGINT REFERENCES events(id),
   kind TEXT NOT NULL, subject TEXT NOT NULL, title TEXT NOT NULL, due_at TEXT,
   status TEXT NOT NULL DEFAULT 'filed', route TEXT NOT NULL, source TEXT NOT NULL,
-  relevance REAL, created_at TEXT NOT NULL
+  relevance REAL, created_at TEXT NOT NULL,
+  -- Where a linked library's row came from ("bot:deadline:12") and the version last
+  -- applied, so a change lands on the same card and an older one never wins.
+  external_id TEXT, external_version BIGINT
 );
 -- Why a table of used nonces: an approval token works once, even inside its expiry.
 CREATE TABLE IF NOT EXISTS used_approvals (nonce TEXT PRIMARY KEY, used_at TEXT NOT NULL);
@@ -105,6 +108,7 @@ CREATE TABLE IF NOT EXISTS jobs (
 # Columns added after the first release. A fresh database gets them from SCHEMA above only if
 # they are listed there too; an older database gets them here, once.
 COLUMNS: dict[str, dict[str, str]] = {
+    "items": {"external_id": "TEXT", "external_version": "BIGINT"},
     "reminders": {"channel": "TEXT NOT NULL DEFAULT 'push'"},
     "students": {"call_consent_at": "TEXT", "quiet_start": "TEXT", "quiet_end": "TEXT"},
 }
@@ -334,6 +338,22 @@ class Database:
         sql += " ORDER BY COALESCE(due_at, created_at), id"
         return self.conn.execute(sql, args).fetchall()
 
+    def item_by_external(self, student_id: int, external_id: str) -> Any | None:
+        return self.conn.execute(
+            "SELECT * FROM items WHERE student_id=? AND external_id=?", (student_id, external_id)
+        ).fetchone()
+
+    def update_item(self, student_id: int, item_id: int, **fields: Any) -> None:
+        sets = ", ".join(f"{k}=?" for k in fields)
+        with self.tx() as c:
+            c.execute(f"UPDATE items SET {sets} WHERE id=? AND student_id=?",
+                      (*fields.values(), item_id, student_id))
+
+    def add_subject(self, student_id: int, name: str) -> None:
+        with self.tx() as c:
+            c.execute("INSERT INTO subjects(student_id, name) VALUES (?,?)"
+                      " ON CONFLICT(student_id, name) DO NOTHING", (student_id, name))
+
     def all_cards(self, student_id: int) -> list[Any]:
         return self.conn.execute(
             "SELECT * FROM items WHERE student_id=? ORDER BY id DESC LIMIT 100", (student_id,)
@@ -402,6 +422,17 @@ class Database:
             cur = c.execute("UPDATE reminders SET status='cancelled' WHERE id=? AND student_id=?"
                             " AND status='pending'", (reminder_id, student_id))
             return cur.rowcount == 1
+
+    def pending_reminders_for(self, student_id: int, item_id: int) -> list[Any]:
+        return self.conn.execute(
+            "SELECT * FROM reminders WHERE student_id=? AND item_id=? AND status='pending'",
+            (student_id, item_id),
+        ).fetchall()
+
+    def move_reminder(self, reminder_id: int, fire_at: str) -> None:
+        with self.tx() as c:
+            c.execute("UPDATE reminders SET fire_at=? WHERE id=? AND status='pending'",
+                      (fire_at, reminder_id))
 
     def due_reminders(self, now: str) -> list[Any]:
         return self.conn.execute(

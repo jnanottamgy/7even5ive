@@ -120,6 +120,12 @@ class Cascade:
         base = {"student_id": student["id"], "event_id": event_id, "source": source,
                 "created_at": clock.iso(clock.now())}
 
+        # -1. A deadline the bot saved, changed or deleted: applied as it is, no model.
+        if str(payload.get("type", "")).startswith("deadline."):
+            from . import sync
+
+            return sync.apply(self.db, student["id"], event_id, payload)
+
         # 0. The bot already decided: it filed this message itself. Check its answer in code
         # (no model call) and file it as it is; only a failed check falls through to Jev.
         if (bot := self._from_bot(payload, subjects)) is not None:

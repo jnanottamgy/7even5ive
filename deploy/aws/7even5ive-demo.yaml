@@ -53,6 +53,17 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      # The server's settings and secrets (bot link, webhook and approval secrets, demo phone)
+      # live in Parameter Store under /7even5ive-demo/, set in the console. Never in this
+      # template or the user data, where the EC2 console would show them.
+      Policies:
+        - PolicyName: read-demo-settings
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [ssm:GetParametersByPath]
+                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/7even5ive-demo"
 
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -98,7 +109,16 @@ Resources:
           fi
           docker build -t sevenfive /opt/7even5ive
           docker rm -f sevenfive 2>/dev/null || true
-          exec docker run --name sevenfive -p 80:8000 \
+          # Settings from Parameter Store (/7even5ive-demo/NAME -> NAME=value). Tracing off,
+          # so no secret reaches the journal; none set is fine, the demo runs on defaults.
+          set +x
+          install -m 600 /dev/null /run/sevenfive.env
+          aws ssm get-parameters-by-path --region "${AWS::Region}" --path /7even5ive-demo \
+            --with-decryption --query 'Parameters[].[Name,Value]' --output text 2>/dev/null \
+            | while IFS=$'\t' read -r name value; do echo "${!name##*/}=$value"; done \
+            >> /run/sevenfive.env || echo "no settings in Parameter Store; using defaults"
+          set -x
+          exec docker run --name sevenfive -p 80:8000 --env-file /run/sevenfive.env \
             -e PORTMAX_DEV_TOKENS=demo-student-token:demo sevenfive
           SCRIPT
           chmod +x /usr/local/bin/sevenfive-start

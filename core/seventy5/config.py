@@ -63,9 +63,12 @@ class Settings:
     portmax_database_url: str = os.environ.get(
         "PORTMAX_DATABASE_URL", f"sqlite:///{ROOT / 'data' / 'portmax.db'}".replace("\\", "/"))
     timezone: str = "Asia/Kolkata"
+    # The WhatsApp bot's library. Both set: Files reads the real library and upcoming
+    # deadlines are backfilled from it. Either empty: an invented demo library stands in.
+    library_url: str = os.environ.get("LIBRARY_URL", "").rstrip("/")
+    library_service_token: str = os.environ.get("LIBRARY_SERVICE_TOKEN", "")
     # Set on AWS only: the SQS queue between ingress and the cascade Lambda.
     queue_url: str = os.environ.get("QUEUE_URL", "")
-
     # The service's own public address (https://...), for Google's sign-in redirect and the
     # call webhook. Render sets RENDER_EXTERNAL_URL itself.
     public_url: str = (os.environ.get("PUBLIC_URL") or os.environ.get("RENDER_EXTERNAL_URL")
@@ -109,6 +112,7 @@ class Settings:
         "MAILFILTER_DATABASE_URL", f"sqlite:///{ROOT / 'data' / 'mailfilter.db'}".replace("\\", "/"))
     # Claude on Bedrock for the mail judge (Mumbai). Same AWS credentials as BEDROCK_MODEL_ID.
     mail_model: str = os.environ.get("MAILFILTER_MODEL", "anthropic.claude-haiku-5-5")
+
 
 
 settings = Settings()

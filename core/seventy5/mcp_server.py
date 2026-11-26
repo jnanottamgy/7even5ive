@@ -84,5 +84,26 @@ def add_to_calendar(item_id: int) -> Any:
     return _call("add_to_calendar", item_id=item_id)
 
 
+@server.tool(description="The student's file library (from their WhatsApp bot): subjects of this "
+                         "term, each with shelves material, pyq and info and how many files each holds.")
+def list_library() -> Any:
+    return _call("list_library")
+
+
+@server.tool(description="Files on one shelf of one subject (subject_id from list_library; shelf "
+                         "material, pyq or info), newest first. unsorted=true: files still waiting "
+                         "for a subject. Page with offset.")
+def list_library_files(subject_id: int | None = None, shelf: str | None = None,
+                       unsorted: bool = False, offset: int = 0) -> Any:
+    return _call("list_library_files", subject_id=subject_id, shelf=shelf, unsorted=unsorted,
+                 offset=offset)
+
+
+@server.tool(description="Open one file from the library by its id: a link that works for a few "
+                         "minutes (give it to the student), or a note's text.")
+def open_file(file_id: int) -> Any:
+    return _call("open_file", file_id=file_id)
+
+
 if __name__ == "__main__":
     server.run("streamable-http" if "--http" in sys.argv else "stdio")

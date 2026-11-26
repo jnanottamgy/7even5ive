@@ -87,6 +87,7 @@ import com.sevenfive.app.ui.screens.HomeScreen
 import com.sevenfive.app.ui.screens.InboxScreen
 import com.sevenfive.app.ui.screens.MaterialsScreen
 import com.sevenfive.app.ui.screens.PortalCheckScreen
+import com.sevenfive.app.ui.screens.FilesScreen
 import com.sevenfive.app.ui.screens.PortalScreen
 import com.sevenfive.app.ui.screens.RemindersScreen
 import com.sevenfive.app.ui.screens.SettingsScreen
@@ -115,7 +116,7 @@ private data class Tab(val route: String, val label: String, val on: ImageVector
 private val tabs = listOf(
     Tab(Routes.HOME, "This week", Icons.Filled.Home, Icons.Outlined.Home),
     Tab(Routes.ATTENDANCE, "Attendance", Icons.Filled.PieChart, Icons.Outlined.PieChart),
-    Tab(Routes.MATERIALS, "Materials", Icons.AutoMirrored.Filled.LibraryBooks, Icons.AutoMirrored.Outlined.LibraryBooks),
+    Tab(Routes.MATERIALS, "Files", Icons.AutoMirrored.Filled.LibraryBooks, Icons.AutoMirrored.Outlined.LibraryBooks),
     Tab(Routes.INBOX, "Inbox", Icons.Filled.Inbox, Icons.Outlined.Inbox),
     Tab(Routes.REMINDERS, "Reminders", Icons.Filled.Alarm, Icons.Outlined.Alarm),
 )
@@ -212,7 +213,7 @@ fun SevenFiveRoot(vm: AppViewModel) {
                     val settings = { nav.navigate(Routes.SETTINGS) }
                     composable(Routes.HOME) { HomeScreen(vm, settings) }
                     composable(Routes.ATTENDANCE) { AttendanceScreen(vm, settings, onPortal = { nav.navigate(Routes.PORTAL) }) }
-                    composable(Routes.MATERIALS) { MaterialsScreen(vm, settings) }
+                    composable(Routes.MATERIALS) { FilesScreen(vm, settings) }
                     composable(Routes.INBOX) { InboxScreen(vm, settings) }
                     composable(Routes.REMINDERS) { RemindersScreen(vm, settings) }
                     composable(Routes.PORTAL) { PortalScreen(vm, onDone = { nav.popBackStack() }) }
