@@ -21,3 +21,4 @@ core/.aws-sam/
 # Lambda demo build (core/build_lambda_zip.py)
 core/.build-lambda/
 core/dist/
+/app-demo.apk
