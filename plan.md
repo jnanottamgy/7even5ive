@@ -64,23 +64,26 @@ is reseeded, so a connected Google account has to be connected again after a res
 Status: `[ ]` to do, `[~]` in progress, `[x]` done and tested, `[-]` decided not to build.
 
 ### Phase 1: foundation in the core
-- [ ] 1.1 Database: one lock around every statement and transaction (the background loop and
+- [x] 1.1 Database: one lock around every statement and transaction (the background loop and
       request threads share one SQLite connection); `_ensure_columns` migrations for new
       columns on old databases.
-- [ ] 1.2 Background loop (`scheduler.py`) started by `cloud.py` and `demo.py`: every job
+- [x] 1.2 Background loop (`scheduler.py`) started by `cloud.py` and `demo.py`: every job
       guarded, ids-only logs, stops cleanly.
-- [ ] 1.3 Notification outbox: `notifications` table, `OutboxSender`, `GET /api/notifications`,
+- [x] 1.3 Notification outbox: `notifications` table, `OutboxSender`, `GET /api/notifications`,
       device registration `POST /api/devices` for FCM tokens; reminders fire through it.
-- [ ] 1.4 `mark_done` / `reopen` tools (For you, undo); reminders and calls skip done items.
-- [ ] 1.5 A moved due date moves its pending reminders by the same amount.
+- [x] 1.4 `mark_done` / `reopen` tools (For you, undo); reminders and calls skip done items.
+- [x] 1.5 A moved due date moves its pending reminders by the same amount.
+
+- [ ] 1.6 The serverless demo (Lambda) has no lifespan, so no background loop: add a
+      once-a-minute EventBridge schedule that runs the reminders job there (found 26 Nov).
 
 ### Phase 2: the urgent call (ElevenLabs)
-- [ ] 2.1 `calls.py`: Caller protocol; ElevenLabs + Twilio caller; ElevenLabs + SIP/Exotel
+- [~] 2.1 `calls.py`: Caller protocol; ElevenLabs + Twilio caller; ElevenLabs + SIP/Exotel
       caller; `LogCaller` stand-in. Script template filled by code, titles cleaned.
-- [ ] 2.2 Rules: opt-in with recorded consent; reminders get `channel` push|call; quiet hours
+- [~] 2.2 Rules: opt-in with recorded consent; reminders get `channel` push|call; quiet hours
       (22:00-08:00 default, per student); at most 2 calls a day, 1 per item; item still open and
       not past due; anything refused becomes one push.
-- [ ] 2.3 `POST /api/calls/webhook`: ElevenLabs signature check, outcome recorded; missed,
+- [~] 2.3 `POST /api/calls/webhook`: ElevenLabs signature check, outcome recorded; missed,
       voicemail or failed -> one push, never a second call.
 - [ ] 2.4 Agent as code: prompt, first message, 90 s cap, voicemail detection, pushed by
       `python -m seventy5.calls setup-agent`; test call endpoint.
@@ -167,3 +170,9 @@ Filled in as each integration lands; full instructions go to `docs/keys.md`.
 
 - 26 Nov: plan written. Android SDK installed in the environment (setup script saved); a
   debug APK of the unchanged app built. Core tests: 30 passing.
+- 26 Nov: Phase 1 committed (`5122908`). The team's overnight work merged (`df21b28`: the
+  serverless Lambda demo, the in-app demo tour, the app redesign, the MSRIT WebView test).
+  The background loop moved into the online service's router so it survives `/demo/reset`.
+  Core tests: 52. Call module (`calls.py`) written, tests not yet.
+- 26 Nov: MSRIT refused the app's own WebView (teammates' test, `docs/portal-webview-test.md`);
+  `docs/portmax.md` updated. Handoff for Kartik written: `docs/handoff-kartik.md`.

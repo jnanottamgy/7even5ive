@@ -76,8 +76,8 @@ built only if the app ever needs its own API.
 
 ## Build status
 
-Built on 25 Nov in [`portmax/`](../portmax): Python 3.12, ruff and strict mypy clean, 95 tests
-passing, all against a mock college portal (`portmax mock serve`), never a real one. Phase 1 is
+Built on 25 Nov in [`portmax/`](../portmax): Python 3.12, ruff and strict mypy clean, 100 tests
+passing (26 Nov), all against a mock college portal (`portmax mock serve`), never a real one. Phase 1 is
 done: with the repository's `.mcp.json`, Claude Code answers "what's my DBMS attendance?" from the
 mock, and "can I skip DBMS?" from the same data. Phase 2 is done except one live run of the engineer with a model (needs an API key or
 Bedrock access).
@@ -97,7 +97,7 @@ Bedrock access).
 | Wake-ups for overdue pings | Built with a logging stand-in for Firebase | `wakeups.py` |
 | Forge: capture, sanitise, fixtures, verify, accept, publish | Built; end to end on the mock in a real browser; verify catches hardcoded answers, impure parsers, leaked cookies | `forge/` |
 | Forge: engineer (RAE with our prompt) | Wired; one live run with a model still to do | `forge/engineer.py` |
-| MSRIT connector | Waits for the idle-timeout test and MSRIT's permission | |
+| MSRIT connector | Blocked: MSRIT refuses the app's own WebView (26 Nov); the route is Kartik's call ([`portal-webview-test.md`](portal-webview-test.md)) | |
 | Android app: WebView login, WorkManager keep-alive, push wake-up | To build | |
 
 ## Run time: Android app login and keep-alive
@@ -131,13 +131,20 @@ Reported by open-source projects (not seen first-hand): Contineo (PHP, server-re
 digits, one session per student, bot-like clients IP-banned, scripted logins refused since
 14 Nov 2026 ("cannot be used from third-party apps"), no timetable in the portal, results on
 `exam.msrit.edu`. From the team (25 Nov): the portal lists total classes for the semester,
-attendance is updated daily with the percentage shown, and **a login inside an app works**.
-On 25 Nov the login worked in Instagram's in-app browser (a WebView), while an automated
-browser (Playwright, the forge's `capture`) was refused: "This portal cannot be used from
-third-party apps." The block is aimed at automation, not at in-app logins. So the connector is
-built from a **hand-recorded** visit instead: a team member logs in in normal Chrome with
-DevTools open, saves the Network tab as a HAR, and runs `portmax forge sanitize --har ...`; the
-rest of the pipeline is unchanged. No disguising of the automated browser, ever (decision 22).
+attendance is updated daily with the percentage shown. On 25 Nov the login worked in
+Instagram's in-app browser (whether on an iPhone or Android was not confirmed), while an
+automated browser (Playwright, the forge's `capture`) was refused: "This portal cannot be used
+from third-party apps."
+
+**Update, 26 Nov: our app's own Android WebView is refused too**, before the login form:
+"Please open it in Chrome or Safari" ([`portal-webview-test.md`](portal-webview-test.md)). So
+MSRIT allows real Chrome and Safari only, and the in-app login of decision 19 does not work
+against MSRIT as it stands. If the Instagram test was on an iPhone, both results agree; a retest
+of Instagram's in-app browser on Android would settle it. We do not disguise the app (decision
+22). The route for MSRIT (a shared screenshot or saved page from Chrome, typing it in, or an
+official feed) is Kartik's call; the demo keeps the mock portal. A connector, if one is still
+wanted, is built from a **hand-recorded** visit: a team member logs in in normal Chrome with
+DevTools open, saves the Network tab as a HAR, and runs `portmax forge sanitize --har ...`.
 
 ## Rules
 
