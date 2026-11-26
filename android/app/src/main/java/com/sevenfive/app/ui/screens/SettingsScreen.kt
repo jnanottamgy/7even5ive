@@ -3,49 +3,52 @@ package com.sevenfive.app.ui.screens
 import android.webkit.CookieManager
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.outlined.BugReport
+import androidx.compose.material.icons.outlined.Cloud
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.Laptop
+import androidx.compose.material.icons.automirrored.outlined.Logout
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Restore
+import androidx.compose.material.icons.outlined.Science
+import androidx.compose.material.icons.outlined.SlowMotionVideo
+import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sevenfive.app.BuildConfig
 import com.sevenfive.app.data.ServerConfig
 import com.sevenfive.app.portal.PortalCheck
 import com.sevenfive.app.ui.AppViewModel
+import com.sevenfive.app.ui.components.Group
+import com.sevenfive.app.ui.components.GroupAction
+import com.sevenfive.app.ui.components.GroupDivider
+import com.sevenfive.app.ui.components.GroupField
+import com.sevenfive.app.ui.components.GroupRow
+import com.sevenfive.app.ui.components.PushScaffold
+import com.sevenfive.app.ui.theme.LocalAppColors
+import com.sevenfive.app.ui.theme.LocalStatusColors
 import com.sevenfive.app.util.Diagnostics
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPortalCheck: () -> Unit = {}) {
     val current by vm.servers.collectAsStateWithLifecycle()
@@ -53,167 +56,118 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onPortalCheck: () -> Un
     var core by remember { mutableStateOf(current.coreUrl) }
     var portmax by remember { mutableStateOf(current.portmaxUrl) }
     var portal by remember { mutableStateOf(current.portalUrl) }
+    val app = LocalAppColors.current
+    val status = LocalStatusColors.current
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Server") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
-                },
-            )
-        },
-    ) { inner ->
+    PushScaffold("Settings", onBack) { padding ->
         Column(
-            Modifier.padding(inner).fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(padding),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
             val searching by vm.searching.collectAsStateWithLifecycle()
-            val online = vm.container.servers.buildDefault.takeIf { it.isOnline }
-            Text("Where the app gets its data", style = MaterialTheme.typography.titleMedium)
-            Text(
-                if (current.isOnline) "Online server: ${current.coreUrl}" else "Laptop: ${current.coreUrl}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (online != null && !current.isOnline) {
-                Button(
-                    onClick = { vm.useOnline(); onBack() },
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text("Use the online server") }
-            }
-            Row {
-                OutlinedTextField(
-                    value = host,
-                    onValueChange = { host = it.trim() },
-                    label = { Text("Online address or laptop IP") },
-                    placeholder = { Text("https://… or 192.168.1.20") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                    modifier = Modifier.weight(1f),
-                )
-                Spacer(Modifier.width(8.dp))
-                Button(
-                    onClick = { vm.connectTo(host); onBack() },
-                    enabled = host.isNotBlank(),
-                    modifier = Modifier.padding(top = 8.dp),
-                ) { Text("Connect") }
-            }
-            OutlinedButton(
-                onClick = { vm.findLaptop() },
-                enabled = !searching,
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text(if (searching) "Looking…" else "Find a laptop on this Wi-Fi") }
-
-            HorizontalDivider()
-            Text("Addresses (advanced)", style = MaterialTheme.typography.titleMedium)
-            UrlField("7even5ive core (cards, approvals)", core) { core = it }
-            UrlField("PortMax (portal settings, upload)", portmax) { portmax = it }
-            UrlField("College portal", portal) { portal = it }
-            Button(
-                onClick = {
-                    vm.saveServers(ServerConfig(core, portmax, portal))
-                    onBack()
-                },
-                enabled = listOf(core, portmax, portal).all { it.startsWith("http://") || it.startsWith("https://") },
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text("Save and reconnect") }
-
-            HorizontalDivider()
             val resetting by vm.resetting.collectAsStateWithLifecycle()
-            Text("Demo tour", style = MaterialTheme.typography.titleMedium)
-            Text(
-                "Runs the whole demo from this phone, step by step: each step opens the right tab, " +
-                    "says what to tell the audience, and makes the live moments happen. Works with " +
-                    "the online demo server.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Button(
-                onClick = { vm.resetDemo(); vm.startTour() },
-                enabled = !resetting,
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text("Start the demo tour (fresh)") }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { vm.startTour() }, modifier = Modifier.weight(1f)) {
-                    Text("Start, keep data")
+            val online = vm.container.servers.buildDefault.takeIf { it.isOnline }
+
+            Group(header = "Data source", footer = "Where the app gets its cards. The online demo needs no laptop.") {
+                GroupRow(
+                    if (current.isOnline) "Online server" else "Laptop",
+                    icon = if (current.isOnline) Icons.Outlined.Cloud else Icons.Outlined.Laptop,
+                    iconColor = if (current.isOnline) app.material else app.event,
+                    detail = current.coreUrl,
+                )
+                if (online != null && !current.isOnline) {
+                    GroupDivider()
+                    GroupRow("Use the online server", icon = Icons.Outlined.Cloud, iconColor = app.material,
+                        titleColor = MaterialTheme.colorScheme.primary, chevron = true) {
+                        vm.useOnline()
+                        onBack()
+                    }
                 }
-                OutlinedButton(
-                    onClick = { vm.resetDemo() },
-                    enabled = !resetting,
-                    modifier = Modifier.weight(1f),
-                ) { Text(if (resetting) "Resetting…" else "Reset demo data") }
+                GroupDivider()
+                GroupRow(
+                    if (searching) "Looking…" else "Find a laptop on this Wi-Fi",
+                    icon = Icons.Outlined.Wifi,
+                    iconColor = status.safe,
+                    enabled = !searching,
+                    busy = searching,
+                ) { vm.findLaptop() }
+                GroupDivider(inset = false)
+                GroupField(host, { host = it.trim() }, "Online address or laptop IP", "https://… or 192.168.1.20")
+                GroupDivider(inset = false)
+                GroupAction("Connect", onClick = { vm.connectTo(host); onBack() }, enabled = host.isNotBlank())
             }
 
-            HorizontalDivider()
+            Group(header = "Demo tour", footer = "Runs the whole demo from this phone, step by step: each step opens " +
+                "the right tab, says what to tell the audience, and makes the live moments happen. Works with " +
+                "the online demo server.") {
+                GroupRow("Start the tour (fresh)", icon = Icons.Outlined.PlayArrow, iconColor = MaterialTheme.colorScheme.primary,
+                    enabled = !resetting, chevron = true) {
+                    vm.resetDemo()
+                    vm.startTour()
+                }
+                GroupDivider()
+                GroupRow("Start, keep data", icon = Icons.Outlined.SlowMotionVideo, iconColor = app.deadline, chevron = true) {
+                    vm.startTour()
+                }
+                GroupDivider()
+                GroupRow(if (resetting) "Resetting…" else "Reset demo data", icon = Icons.Outlined.Restore,
+                    iconColor = app.notice, enabled = !resetting, busy = resetting) { vm.resetDemo() }
+            }
+
             val checkStart by vm.portalCheckUrl.collectAsStateWithLifecycle()
             var checkUrl by remember { mutableStateOf(checkStart) }
             val checkTarget = PortalCheck.normalise(checkUrl)
-            Text("Test a college portal", style = MaterialTheme.typography.titleMedium)
-            Text(
-                "Opens your college's real portal in the app, to see whether it lets you log in " +
-                    "from an app. You log in yourself; nothing is read from the page or sent anywhere, " +
-                    "and the demo keeps using its own portal.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            OutlinedTextField(
-                value = checkUrl,
-                onValueChange = { checkUrl = it.trim() },
-                label = { Text("Portal address") },
-                placeholder = { Text(PortalCheck.DEFAULT_URL) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedButton(
-                onClick = {
+            Group(header = "Test a college portal", footer = "Opens your college's real portal in the app, to see " +
+                "whether it lets you log in from an app. You log in yourself; nothing is read from the page or " +
+                "sent anywhere, and the demo keeps using its own portal.") {
+                GroupField(checkUrl, { checkUrl = it.trim() }, "Portal address", PortalCheck.DEFAULT_URL)
+                GroupDivider(inset = false)
+                GroupRow("Open portal test", icon = Icons.Outlined.Science, iconColor = app.event,
+                    enabled = checkTarget != null, chevron = true) {
                     if (checkTarget != null) {
                         vm.setPortalCheckUrl(checkTarget)
                         onPortalCheck()
                     }
-                },
-                enabled = checkTarget != null,
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text("Open portal test") }
+                }
+            }
 
-            HorizontalDivider()
-            Text("Portal session", style = MaterialTheme.typography.titleMedium)
-            Text(
-                "Your portal login lives only in this phone's browser storage. This logs it out here.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            OutlinedButton(onClick = {
-                CookieManager.getInstance().removeAllCookies(null)
-                CookieManager.getInstance().flush()
-                vm.container.portalStore.forget()
-                vm.say("Logged out of the portal on this phone")
-            }) { Text("Log out of portal on this phone") }
+            Group(header = "Portal session", footer = "Your portal login lives only in this phone's browser storage.") {
+                GroupRow("Log out of portal on this phone", icon = Icons.AutoMirrored.Outlined.Logout,
+                    iconColor = MaterialTheme.colorScheme.error, titleColor = MaterialTheme.colorScheme.error) {
+                    CookieManager.getInstance().removeAllCookies(null)
+                    CookieManager.getInstance().flush()
+                    vm.container.portalStore.forget()
+                    vm.say("Logged out of the portal on this phone")
+                }
+            }
 
-            HorizontalDivider()
+            Group(header = "Addresses (advanced)") {
+                GroupField(core, { core = it.trim() }, "7even5ive core (cards, approvals)")
+                GroupDivider(inset = false)
+                GroupField(portmax, { portmax = it.trim() }, "PortMax (portal settings, upload)")
+                GroupDivider(inset = false)
+                GroupField(portal, { portal = it.trim() }, "College portal")
+                GroupDivider(inset = false)
+                GroupAction(
+                    "Save and reconnect",
+                    onClick = {
+                        vm.saveServers(ServerConfig(core, portmax, portal))
+                        onBack()
+                    },
+                    enabled = listOf(core, portmax, portal).all { it.startsWith("http://") || it.startsWith("https://") },
+                )
+            }
+
             DiagnosticsSection(vm)
 
-            HorizontalDivider()
             Text(
                 "Signed in as the demo student (built in) · college ${BuildConfig.COLLEGE} · v${BuildConfig.VERSION_NAME}",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.outline,
+                color = app.tertiaryLabel,
+                modifier = Modifier.padding(horizontal = 16.dp),
             )
         }
     }
-}
-
-@Composable
-private fun UrlField(label: String, value: String, onChange: (String) -> Unit) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = { onChange(it.trim()) },
-        label = { Text(label) },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-        modifier = Modifier.fillMaxWidth(),
-    )
 }
 
 @Composable
@@ -221,37 +175,35 @@ private fun DiagnosticsSection(vm: AppViewModel) {
     val context = vm.container.appContext
     var report by remember { mutableStateOf(Diagnostics.report(context)) }
     val clipboard = LocalClipboardManager.current
-    Text("Diagnostics", style = MaterialTheme.typography.titleMedium)
-    if (report == null) {
-        Text(
-            "No crashes recorded.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+    val app = LocalAppColors.current
+    val shown = report
+    if (shown == null) {
+        Group(header = "Diagnostics") {
+            GroupRow("No crashes recorded", icon = Icons.Outlined.BugReport, iconColor = LocalStatusColors.current.safe)
+        }
         return
     }
-    Text(
-        "Why the app last closed. Copy it and send it to the team. It holds no messages or passwords.",
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    Text(
-        report!!.take(3_000),
-        style = MaterialTheme.typography.bodySmall,
-        fontFamily = FontFamily.Monospace,
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(max = 280.dp)
-            .verticalScroll(rememberScrollState()),
-    )
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(onClick = {
-            clipboard.setText(AnnotatedString(report!!))
+    Group(header = "Diagnostics", footer = "Why the app last closed. Copy it and send it to the team. It holds no messages or passwords.") {
+        Text(
+            shown.take(3_000),
+            style = MaterialTheme.typography.bodySmall,
+            fontFamily = FontFamily.Monospace,
+            color = app.secondaryLabel,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 280.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(14.dp),
+        )
+        GroupDivider(inset = false)
+        GroupRow("Copy", icon = Icons.Outlined.ContentCopy, iconColor = app.material) {
+            clipboard.setText(AnnotatedString(shown))
             vm.say("Copied: paste it into a message")
-        }) { Text("Copy") }
-        OutlinedButton(onClick = {
+        }
+        GroupDivider()
+        GroupRow("Clear", icon = Icons.Outlined.DeleteOutline, iconColor = MaterialTheme.colorScheme.error) {
             Diagnostics.clear(context)
             report = Diagnostics.report(context)
-        }) { Text("Clear") }
+        }
     }
 }

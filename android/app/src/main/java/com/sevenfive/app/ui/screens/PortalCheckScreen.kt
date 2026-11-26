@@ -19,23 +19,19 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Science
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -45,11 +41,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.sevenfive.app.portal.PortalCheck
 import com.sevenfive.app.ui.AppViewModel
+import com.sevenfive.app.ui.components.GlassPill
+import com.sevenfive.app.ui.components.PushTopBar
+import com.sevenfive.app.ui.theme.LocalAppColors
+import com.sevenfive.app.ui.theme.glassSurface
+import com.sevenfive.app.ui.theme.pressable
 import com.sevenfive.app.util.Diagnostics
 
 /**
@@ -61,7 +63,6 @@ import com.sevenfive.app.util.Diagnostics
  * addition over the login screen is third-party cookies, which ordinary browsers allow and
  * which a login CAPTCHA served from another site can need.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun PortalCheckScreen(vm: AppViewModel, portalUrl: String, onBack: () -> Unit) {
@@ -80,47 +81,43 @@ fun PortalCheckScreen(vm: AppViewModel, portalUrl: String, onBack: () -> Unit) {
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("Portal test")
-                        Text(
-                            portalHost,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = {
-                        problem = null
-                        val web = webView
-                        if (web != null) web.reload() else webKey++
-                    }) { Icon(Icons.Outlined.Refresh, contentDescription = "Reload") }
-                },
-            )
+            PushTopBar("Portal test", portalHost, onBack = onBack) {
+                Box(
+                    Modifier
+                        .padding(end = 10.dp)
+                        .size(38.dp)
+                        .pressable {
+                            problem = null
+                            val web = webView
+                            if (web != null) web.reload() else webKey++
+                        }
+                        .glassSurface(shape = CircleShape, strong = true),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Outlined.Refresh, contentDescription = "Reload", modifier = Modifier.size(20.dp))
+                }
+            }
         },
     ) { inner ->
         Column(Modifier.padding(inner).fillMaxSize()) {
-            Surface(color = MaterialTheme.colorScheme.secondaryContainer) {
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Outlined.Science, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        "A test only. You log in yourself on the portal's own page. 7even5ive adds " +
-                            "nothing to it, reads nothing from it and sends nothing anywhere.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                    .glassSurface(shape = MaterialTheme.shapes.medium, strong = true)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Outlined.Science, contentDescription = null, tint = LocalAppColors.current.event,
+                    modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    "A test only. You log in yourself on the portal's own page. 7even5ive adds " +
+                        "nothing to it, reads nothing from it and sends nothing anywhere.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
             Column(
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
@@ -136,7 +133,7 @@ fun PortalCheckScreen(vm: AppViewModel, portalUrl: String, onBack: () -> Unit) {
                     Text(
                         "Page: $title",
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = LocalAppColors.current.secondaryLabel,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -145,7 +142,12 @@ fun PortalCheckScreen(vm: AppViewModel, portalUrl: String, onBack: () -> Unit) {
                     Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
                 }
             }
-            if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+            Box(Modifier.fillMaxWidth().height(3.dp)) {
+                if (loading) {
+                    LinearProgressIndicator(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.primary,
+                        trackColor = Color.Transparent)
+                }
+            }
 
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 key(webKey) {
@@ -219,17 +221,17 @@ fun PortalCheckScreen(vm: AppViewModel, portalUrl: String, onBack: () -> Unit) {
             }
 
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.End,
             ) {
-                TextButton(onClick = {
+                GlassPill("Log out of all portals", tint = MaterialTheme.colorScheme.error, onClick = {
                     // The app has one cookie store: this also logs out of the demo portal.
                     CookieManager.getInstance().removeAllCookies(null)
                     CookieManager.getInstance().flush()
                     vm.container.portalStore.forget()
                     vm.say("Logged out of every portal in the app")
                     webView?.reload()
-                }) { Text("Log out of all portals") }
+                })
             }
         }
     }

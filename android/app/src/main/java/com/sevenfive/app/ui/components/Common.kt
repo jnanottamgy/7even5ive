@@ -1,16 +1,22 @@
 package com.sevenfive.app.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Assignment
@@ -19,22 +25,26 @@ import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.outlined.Quiz
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.sevenfive.app.ui.theme.LocalAppColors
+import com.sevenfive.app.ui.theme.glassSurface
+import com.sevenfive.app.ui.theme.pressable
 import com.sevenfive.app.util.Time
 import java.time.Instant
 
@@ -49,89 +59,174 @@ fun kindStyle(kind: String): KindStyle = when (kind) {
     else -> KindStyle(kind.replaceFirstChar { it.uppercase() }.ifBlank { "Item" }, Icons.Outlined.Description)
 }
 
+/** One colour per kind of card, iOS system colours. */
 @Composable
-fun KindChip(kind: String, modifier: Modifier = Modifier) {
-    val style = kindStyle(kind)
-    val tint = when (kind) {
-        "exam" -> MaterialTheme.colorScheme.error
-        "deadline" -> MaterialTheme.colorScheme.primary
-        else -> MaterialTheme.colorScheme.tertiary
-    }
-    Row(
-        modifier
-            .background(tint.copy(alpha = 0.12f), RoundedCornerShape(50))
-            .padding(horizontal = 8.dp, vertical = 3.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(style.icon, contentDescription = null, tint = tint, modifier = Modifier.size(14.dp))
-        Spacer(Modifier.width(4.dp))
-        Text(style.label, style = MaterialTheme.typography.labelMedium, color = tint)
+fun kindColor(kind: String): Color {
+    val app = LocalAppColors.current
+    return when (kind) {
+        "deadline" -> app.deadline
+        "exam" -> app.exam
+        "material" -> app.material
+        "event" -> app.event
+        "notice" -> app.notice
+        else -> MaterialTheme.colorScheme.primary
     }
 }
 
-/** What decided the card (bot, classroom, jev, jev+llm, llm). Small: judges like seeing it. */
+/** A rounded colour tile with a white glyph, like iOS Settings icons. */
+@Composable
+fun IconTile(icon: ImageVector, color: Color, modifier: Modifier = Modifier, size: Dp = 40.dp) {
+    Box(
+        modifier
+            .size(size)
+            .clip(RoundedCornerShape(size * 0.28f))
+            .background(Brush.verticalGradient(listOf(color.copy(alpha = 0.92f), color))),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(size * 0.52f))
+    }
+}
+
+@Composable
+fun KindChip(kind: String, modifier: Modifier = Modifier) {
+    val style = kindStyle(kind)
+    val tint = kindColor(kind)
+    Text(
+        style.label,
+        modifier = modifier
+            .clip(CircleShape)
+            .background(tint.copy(alpha = 0.14f))
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+        style = MaterialTheme.typography.labelSmall,
+        color = tint,
+    )
+}
+
+/** What decided the card (bot, classroom, jev, jev+llm, llm). Quiet: judges like seeing it. */
 @Composable
 fun RouteBadge(route: String?, modifier: Modifier = Modifier) {
     if (route.isNullOrBlank()) return
     Text(
         "via $route",
-        modifier = modifier
-            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(4.dp))
-            .padding(horizontal = 5.dp, vertical = 1.dp),
+        modifier = modifier,
         style = MaterialTheme.typography.labelSmall,
-        fontFamily = FontFamily.Monospace,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        fontWeight = FontWeight.Medium,
+        color = LocalAppColors.current.tertiaryLabel,
     )
 }
 
+/** An iOS grouped-list header: small, uppercase, secondary. */
 @Composable
 fun SectionHeader(text: String, modifier: Modifier = Modifier, trailing: @Composable (() -> Unit)? = null) {
     Row(
-        modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp),
+        modifier.fillMaxWidth().padding(start = 6.dp, end = 4.dp, top = 14.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text.uppercase(),
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelMedium,
+            letterSpacing = 0.4.sp,
+            color = LocalAppColors.current.secondaryLabel,
             modifier = Modifier.weight(1f),
         )
         trailing?.invoke()
     }
 }
 
+/** A glass card. [muted] is for things that are done or need no action. */
 @Composable
 fun AppCard(modifier: Modifier = Modifier, muted: Boolean = false, content: @Composable () -> Unit) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (muted) MaterialTheme.colorScheme.surfaceContainer
-            else MaterialTheme.colorScheme.surfaceContainerLowest,
-        ),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    Box(
+        modifier
+            .fillMaxWidth()
+            .glassSurface()
+            .padding(16.dp)
+            .then(if (muted) Modifier.alpha(0.72f) else Modifier),
+    ) { content() }
+}
+
+/** The main action: a filled capsule in the brand gradient. */
+@Composable
+fun PrimaryPill(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    busy: Boolean = false,
+    icon: ImageVector? = null,
+) {
+    val primary = MaterialTheme.colorScheme.primary
+    Row(
+        modifier
+            .pressable(enabled = enabled && !busy, haptic = true, onClick = onClick)
+            .clip(CircleShape)
+            .background(
+                Brush.horizontalGradient(
+                    listOf(primary.copy(alpha = if (enabled) 0.88f else 0.35f), primary.copy(alpha = if (enabled) 1f else 0.4f)),
+                ),
+            )
+            .padding(horizontal = 18.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
     ) {
-        Box(Modifier.padding(16.dp)) { content() }
+        if (busy) {
+            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+        } else {
+            if (icon != null) {
+                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+            }
+            Text(text, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimary)
+        }
+    }
+}
+
+/** A quieter action: a glass capsule with tinted text. */
+@Composable
+fun GlassPill(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    busy: Boolean = false,
+    icon: ImageVector? = null,
+    tint: Color = MaterialTheme.colorScheme.primary,
+) {
+    Row(
+        modifier
+            .pressable(enabled = enabled && !busy, onClick = onClick)
+            .glassSurface(shape = CircleShape, strong = true)
+            .padding(horizontal = 14.dp, vertical = 8.dp)
+            .alpha(if (enabled) 1f else 0.45f),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        if (busy) {
+            CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp, color = tint)
+        } else {
+            if (icon != null) {
+                Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(5.dp))
+            }
+            Text(text, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = tint)
+        }
     }
 }
 
 @Composable
 fun EmptyState(icon: ImageVector, title: String, body: String? = null, modifier: Modifier = Modifier) {
+    val app = LocalAppColors.current
     Column(
-        modifier.fillMaxWidth().padding(vertical = 48.dp, horizontal = 24.dp),
+        modifier.fillMaxWidth().padding(vertical = 48.dp, horizontal = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(40.dp), tint = MaterialTheme.colorScheme.outline)
+        Box(Modifier.size(72.dp).glassSurface(shape = CircleShape), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(32.dp), tint = app.secondaryLabel)
+        }
         Text(title, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
         if (body != null) {
-            Text(
-                body,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-            )
+            Text(body, style = MaterialTheme.typography.bodyMedium, color = app.secondaryLabel, textAlign = TextAlign.Center)
         }
     }
 }
@@ -139,33 +234,68 @@ fun EmptyState(icon: ImageVector, title: String, body: String? = null, modifier:
 /** The last good cards stay on screen; this says the server is out of reach and since when. */
 @Composable
 fun OfflineBanner(error: String?, updatedAt: Instant?, onSettings: () -> Unit, searching: Boolean = false) {
-    if (error == null) return
-    Surface(
-        color = MaterialTheme.colorScheme.errorContainer,
-        contentColor = MaterialTheme.colorScheme.onErrorContainer,
-        modifier = Modifier.fillMaxWidth(),
+    AnimatedVisibility(
+        visible = error != null,
+        enter = fadeIn() + expandVertically(),
+        exit = fadeOut() + shrinkVertically(),
     ) {
-        Row(Modifier.padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.CloudOff, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
+        val red = MaterialTheme.colorScheme.error
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 6.dp)
+                .glassSurface(shape = RoundedCornerShape(16.dp), strong = true, tint = red.copy(alpha = 0.10f))
+                .padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Outlined.CloudOff, contentDescription = null, tint = red, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    if (searching) "Looking for the laptop on this network…" else error,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Medium,
+                    if (searching) "Looking for the laptop on this network…" else error.orEmpty(),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 if (updatedAt != null) {
-                    Text("Showing data from ${Time.ago(updatedAt)}", style = MaterialTheme.typography.labelSmall)
+                    Text(
+                        "Showing data from ${Time.ago(updatedAt)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = LocalAppColors.current.secondaryLabel,
+                    )
                 }
             }
-            TextButton(onClick = onSettings) { Text("Server") }
+            Text(
+                "Server",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.pressable(onClick = onSettings).padding(horizontal = 10.dp, vertical = 6.dp),
+            )
         }
     }
 }
 
-val ScreenPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp)
-
 @Composable
 fun Dot(color: Color, modifier: Modifier = Modifier) {
-    Box(modifier.size(8.dp).background(color, RoundedCornerShape(50)))
+    Box(modifier.size(8.dp).clip(CircleShape).background(color))
+}
+
+/** A thin rounded progress bar on a faint track. */
+@Composable
+fun SlimBar(fraction: Float, color: Color, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .fillMaxWidth()
+            .height(5.dp)
+            .clip(CircleShape)
+            .background(LocalAppColors.current.hairline),
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth(fraction.coerceIn(0f, 1f))
+                .height(5.dp)
+                .clip(CircleShape)
+                .background(Brush.horizontalGradient(listOf(color.copy(alpha = 0.75f), color))),
+        )
+    }
 }

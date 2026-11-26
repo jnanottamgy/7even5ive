@@ -1,6 +1,19 @@
 package com.sevenfive.app.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -8,23 +21,30 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.sevenfive.app.ui.components.GlassPill
+import com.sevenfive.app.ui.components.PrimaryPill
+import com.sevenfive.app.ui.components.SlimBar
+import com.sevenfive.app.ui.theme.LocalAppColors
+import com.sevenfive.app.ui.theme.Motion
+import com.sevenfive.app.ui.theme.frosted
+import com.sevenfive.app.ui.theme.glassSurface
+import com.sevenfive.app.ui.theme.pressable
+import dev.chrisbanes.haze.HazeState
 
 /** What a step's button makes happen on the demo server. */
 enum class DemoAction(val label: String) {
@@ -110,53 +130,106 @@ object DemoTour {
 
 data class TourState(val index: Int = 0, val result: String? = null, val busy: Boolean = false)
 
-/** The tour's guide, docked above the tabs while the real app shows behind it. */
+/**
+ * The tour's guide: a frosted card floating above the tabs while the real app shows behind it.
+ * Moving between steps slides the text the way you went.
+ */
 @Composable
 fun DemoBar(
     state: TourState,
+    haze: HazeState,
     onBack: () -> Unit,
     onNext: () -> Unit,
     onAct: () -> Unit,
     onClose: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val step = DemoTour.steps[state.index]
     val last = state.index == DemoTour.steps.lastIndex
-    Surface(color = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer) {
-        Column(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "Demo ${state.index + 1}/${DemoTour.steps.size} · ${step.title}",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f),
-                )
-                IconButton(onClick = onClose) { Icon(Icons.Outlined.Close, contentDescription = "End the demo") }
-            }
-            Text(step.say, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(end = 12.dp))
-            if (state.result != null) {
-                Row(Modifier.padding(top = 4.dp, end = 12.dp), verticalAlignment = Alignment.Top) {
-                    Icon(Icons.Outlined.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(state.result, style = MaterialTheme.typography.labelMedium)
-                }
-            }
-            Row(
-                Modifier.fillMaxWidth().padding(top = 2.dp, end = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+    val app = LocalAppColors.current
+    val progress by animateFloatAsState(
+        (state.index + 1f) / DemoTour.steps.size,
+        spring(stiffness = Spring.StiffnessLow),
+        label = "tour progress",
+    )
+    val shape = RoundedCornerShape(26.dp)
+    Column(
+        modifier
+            .fillMaxWidth()
+            .frosted(haze, shape)
+            .padding(start = 16.dp, end = 10.dp, top = 12.dp, bottom = 12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "DEMO  ${state.index + 1} OF ${DemoTour.steps.size}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.weight(1f),
+            )
+            Box(
+                Modifier
+                    .size(28.dp)
+                    .pressable(onClick = onClose)
+                    .glassSurface(shape = CircleShape, strong = true),
+                contentAlignment = Alignment.Center,
             ) {
-                TextButton(onClick = onBack, enabled = state.index > 0) { Text("Back") }
-                Spacer(Modifier.weight(1f))
-                if (step.action != null) {
-                    Button(onClick = onAct, enabled = !state.busy) {
-                        if (state.busy) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                        else Text(step.action.label)
-                    }
-                }
-                FilledTonalButton(onClick = if (last) onClose else onNext, enabled = !state.busy) {
-                    Text(if (last) "Finish" else "Next")
-                }
+                Icon(Icons.Outlined.Close, contentDescription = "End the demo", tint = app.secondaryLabel, modifier = Modifier.size(16.dp))
             }
+        }
+        SlimBar(progress, MaterialTheme.colorScheme.primary, Modifier.padding(top = 6.dp, end = 6.dp, bottom = 8.dp))
+        AnimatedContent(
+            targetState = state.index,
+            transitionSpec = {
+                val forward = targetState > initialState
+                (slideInHorizontally(Motion.screen) { if (forward) it / 3 else -it / 3 } + fadeIn(Motion.fade)) togetherWith
+                    (slideOutHorizontally(Motion.screen) { if (forward) -it / 3 else it / 3 } + fadeOut(Motion.fade))
+            },
+            label = "tour step",
+        ) { index ->
+            val shown = DemoTour.steps[index]
+            Column(Modifier.fillMaxWidth().padding(end = 6.dp)) {
+                Text(shown.title, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    shown.say,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = app.secondaryLabel,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+        }
+        AnimatedVisibility(
+            visible = state.result != null,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically(),
+        ) {
+            Row(Modifier.padding(top = 8.dp, end = 6.dp), verticalAlignment = Alignment.Top) {
+                Icon(
+                    Icons.Outlined.CheckCircle,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(state.result.orEmpty(), style = MaterialTheme.typography.labelMedium)
+            }
+        }
+        Row(
+            Modifier.fillMaxWidth().padding(top = 10.dp, end = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            GlassPill(
+                "Back",
+                onClick = onBack,
+                enabled = state.index > 0 && !state.busy,
+                icon = Icons.AutoMirrored.Outlined.ArrowBack,
+                tint = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.weight(1f))
+            if (step.action != null) {
+                GlassPill(step.action.label, onClick = onAct, busy = state.busy)
+            }
+            PrimaryPill(if (last) "Finish" else "Next", onClick = if (last) onClose else onNext, enabled = !state.busy)
         }
     }
 }
