@@ -34,7 +34,8 @@ def app(tmp_path, monkeypatch):
         import psycopg
         with psycopg.connect(url, autocommit=True) as c:
             c.execute("DROP TABLE IF EXISTS audit, reminders, calendar, pending_approvals,"
-                      " used_approvals, items, events, subjects, students CASCADE")
+                      " used_approvals, notifications, devices, calls, jobs, items, events,"
+                      " subjects, students CASCADE")
 
     def make(jev=None, llm=None):
         a = build(url, jev=jev or ScriptedDecider({}), llm=llm or ScriptedLLM({}))

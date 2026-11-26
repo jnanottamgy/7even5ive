@@ -54,14 +54,8 @@ class Router:
 
     async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
         if scope["type"] == "lifespan":
-            # None of the three apps uses startup or shutdown events.
-            while True:
-                message = await receive()
-                if message["type"] == "lifespan.startup":
-                    await send({"type": "lifespan.startup.complete"})
-                elif message["type"] == "lifespan.shutdown":
-                    await send({"type": "lifespan.shutdown.complete"})
-                    return
+            await self._lifespan(receive, send)
+            return
         path = scope.get("path", "")
         REQUEST_ORIGIN.set(origin_of(scope))
         if path.startswith(PREFIXES_CORE):
@@ -74,6 +68,46 @@ class Router:
             await self.core({**scope, "path": "/", "raw_path": b"/"}, receive, send)
         else:
             await self.portal(scope, receive, send)
+
+
+    async def _lifespan(self, receive: Any, send: Any) -> None:
+        """The background loop (reminders, calls, mail) runs for as long as the service is up.
+
+        It lives here, not in the core app, because a demo reset swaps the core app for a fresh
+        one: each job looks up the current app when it runs. PortMax's API and the mock portal
+        have no startup work. On Lambda (lambda_demo) there is no lifespan and no loop.
+        """
+        from .scheduler import Scheduler
+
+        scheduler = None
+        while True:
+            message = await receive()
+            if message["type"] == "lifespan.startup":
+                if self.app is not None:
+                    scheduler = Scheduler(lambda: self.app.db, current_jobs(self))
+                    scheduler.start()
+                await send({"type": "lifespan.startup.complete"})
+            elif message["type"] == "lifespan.shutdown":
+                if scheduler is not None:
+                    await scheduler.stop()
+                await send({"type": "lifespan.shutdown.complete"})
+                return
+
+
+def current_jobs(router: Router) -> list[Any]:
+    """The core app's jobs, each re-bound to whichever app the router holds when it runs."""
+    from dataclasses import replace
+
+    def runner(name: str) -> Any:
+        def run() -> object:
+            for job in router.app.jobs():
+                if job.name == name:
+                    return job.run()
+            return None
+
+        return run
+
+    return [replace(job, run=runner(job.name)) for job in router.app.jobs()]
 
 
 def public_url() -> str | None:

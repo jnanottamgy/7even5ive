@@ -9,23 +9,40 @@ connection-minutes cost money and the demo does not need them.
 from __future__ import annotations
 
 import json
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, AsyncIterator
 
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 
-from . import ask, files, notify, tools
+from . import ask, calls, clock, files, notify, tools
 from .app import App, build
+from .config import settings
 from .gateway import Denied, read_token
 from .ingress import BadSignature, accept, verify
+from .scheduler import Scheduler
 
 WEB = Path(__file__).parent / "web"
 
 
-def create(app_state: App | None = None) -> FastAPI:
+def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
+    """The core's HTTP face. run_jobs=True also runs the background loop (reminders, calls,
+    mail) for as long as the server is up -- the online service and the laptop demo do."""
     state = app_state or build()
-    api = FastAPI(title="75")
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        scheduler = Scheduler(state.db, state.jobs()) if run_jobs else None
+        if scheduler is not None:
+            scheduler.start()
+        try:
+            yield
+        finally:
+            if scheduler is not None:
+                await scheduler.stop()
+
+    api = FastAPI(title="75", lifespan=lifespan)
 
     def student_from(auth: str | None) -> int:
         # Prototype sign-in: the student's personal token as a Bearer header.
@@ -176,6 +193,89 @@ def create(app_state: App | None = None) -> FastAPI:
             return state.gateway.call(sid, tool, args)
         except Denied as err:
             raise HTTPException(403, str(err)) from err
+
+    # --- the outbox and the phones it wakes -------------------------------------------
+    @api.get("/api/notifications")
+    def notifications(after: int = 0, limit: int = 50,
+                      authorization: str | None = Header(None)) -> dict[str, Any]:
+        """What 7even5ive sent the student since `after`. A phone opening for the first time
+        asks with after=-1 to learn latest_id without being handed old messages."""
+        sid = student_from(authorization)
+        latest = state.db.latest_notification_id(sid)
+        if after < 0:
+            return {"notifications": [], "latest_id": latest}
+        rows = state.db.notifications(sid, after, max(1, min(limit, 100)))
+        return {"notifications": [{"id": r["id"], "kind": r["kind"], "title": r["title"],
+                                   "body": r["body"], "item_id": r["item_id"],
+                                   "created_at": r["created_at"]} for r in rows],
+                "latest_id": latest}
+
+    @api.post("/api/devices")
+    def add_device(body: dict[str, Any], authorization: str | None = Header(None)) -> dict[str, Any]:
+        sid = student_from(authorization)
+        token = str(body.get("token") or "").strip()
+        if not token or len(token) > 4096:
+            raise HTTPException(400, "token required")
+        platform = str(body.get("platform") or "android")[:20]
+        state.db.add_device(token, sid, platform, clock.iso(clock.now()))
+        return {"ok": True}
+
+    @api.post("/api/devices/remove")
+    def remove_device(body: dict[str, Any],
+                      authorization: str | None = Header(None)) -> dict[str, Any]:
+        sid = student_from(authorization)
+        return {"removed": state.db.remove_device(str(body.get("token") or ""), sid)}
+
+    # --- the urgent call ------------------------------------------------------------------
+    @api.get("/api/settings")
+    def get_settings(authorization: str | None = Header(None)) -> dict[str, Any]:
+        sid = student_from(authorization)
+        return {"calls": calls.call_settings(state.db, sid),
+                # True when Firebase is configured: the phone is woken at once, not on its pull.
+                "push": {"wakeups": getattr(state.sender, "wake", None) is not None}}
+
+    @api.post("/api/settings/calls")
+    def set_call_settings(body: dict[str, Any],
+                          authorization: str | None = Header(None)) -> dict[str, Any]:
+        sid = student_from(authorization)
+        enabled = body.get("enabled")
+        if enabled is not None and not isinstance(enabled, bool):
+            raise HTTPException(400, "enabled must be true or false")
+        try:
+            out = calls.update_settings(state.db, sid, enabled=enabled,
+                                        quiet_start=body.get("quiet_start"),
+                                        quiet_end=body.get("quiet_end"))
+        except ValueError as err:
+            raise HTTPException(400, str(err)) from err
+        state.db.audit(sid, "call_settings", "allow", "student", clock.iso(clock.now()))
+        return out
+
+    @api.get("/api/calls")
+    def call_history(authorization: str | None = Header(None)) -> dict[str, Any]:
+        sid = student_from(authorization)
+        return {"calls": calls.history(state.db, sid)}
+
+    @api.post("/api/calls/test")
+    def test_call(authorization: str | None = Header(None)) -> dict[str, Any]:
+        sid = student_from(authorization)
+        try:
+            return calls.test_call(state.db, state.caller, state.sender, sid)
+        except ValueError as err:
+            raise HTTPException(409, str(err)) from err
+
+    @api.post("/api/calls/webhook")
+    async def call_webhook(request: Request) -> dict[str, Any]:
+        # ElevenLabs' post-call webhook. Signed; anything unsigned or stale is refused.
+        body = await request.body()
+        try:
+            calls.verify_webhook(body, request.headers.get("elevenlabs-signature"),
+                                 settings.elevenlabs_webhook_secret)
+            event = json.loads(body)
+        except (calls.BadWebhook, ValueError) as err:
+            raise HTTPException(401, str(err)) from err
+        if not isinstance(event, dict):
+            raise HTTPException(400, "event must be an object")
+        return calls.handle_webhook(state.db, state.sender, event)
 
     @api.get("/api/health")
     def health() -> dict[str, Any]:

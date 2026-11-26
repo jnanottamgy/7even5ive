@@ -40,6 +40,9 @@ POLICY: dict[str, str] = {
     "set_reminder": "allow",
     "list_reminders": "allow",
     "cancel_reminder": "allow",
+    # Marking one of the student's own cards done, and undoing it, stays inside 7even5ive.
+    "mark_done": "allow",
+    "reopen": "allow",
     "add_to_calendar": "ask",
     "send_email": "deny",  # Gmail is read-only for 75
     "submit_on_portal": "deny",
@@ -57,6 +60,8 @@ OWN: dict[str, Callable[..., Any]] = {
     "set_reminder": notify.set_reminder,
     "list_reminders": notify.list_reminders,
     "cancel_reminder": notify.cancel_reminder,
+    "mark_done": tools.mark_done,
+    "reopen": tools.reopen,
 }
 WRITES: dict[str, Callable[..., Any]] = {"add_to_calendar": tools.add_to_calendar}
 

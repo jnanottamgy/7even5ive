@@ -1,0 +1,47 @@
+name: Release APK
+
+# Builds the APK and attaches it to a GitHub Release, so it downloads as a plain
+# .apk (tap-to-install on a phone) instead of the zip the Actions artifact page
+# forces. The release tag `apk-latest` is moved to each new build.
+
+on:
+  push:
+    branches: ["claude/busy-pasteur-lake3c"]
+    paths:
+      - "android/**"
+      - ".github/workflows/release-apk.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build demo + debug APKs
+        working-directory: android
+        run: ./gradlew --no-daemon assembleDemo assembleDebug
+
+      - name: Publish to the apk-latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete apk-latest --yes --cleanup-tag || true
+          gh release create apk-latest \
+            android/app/build/outputs/apk/demo/app-demo.apk \
+            android/app/build/outputs/apk/debug/app-debug.apk \
+            --title "Latest test APK" \
+            --notes "Auto-built from ${{ github.sha }}. Install app-demo.apk." \
+            --prerelease \
+            --target ${{ github.sha }}

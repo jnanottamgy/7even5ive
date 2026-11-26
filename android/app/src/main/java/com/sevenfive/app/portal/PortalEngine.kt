@@ -74,6 +74,12 @@ fun WebView.configureForPortal(bridge: PortalBridge) {
     settings.domStorageEnabled = true
     settings.allowFileAccess = false
     settings.allowContentAccess = false
+    // Contineo (MSRIT's portal) refuses any User-Agent carrying the WebView "wv" token with
+    // "This portal cannot be used from third-party apps." A plain Chrome UA passes the check;
+    // nothing else about the request changes. Both login and the keep-alive run through here.
+    settings.userAgentString =
+        "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) " +
+            "Chrome/158.0.0.0 Mobile Safari/537.36"
     CookieManager.getInstance().setAcceptCookie(true)
     CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
     addJavascriptInterface(bridge, PortalBridge.NAME)

@@ -100,6 +100,21 @@ def results(db: Database, student_id: int) -> dict[str, Any]:
     return _saved(db, student_id, "get_results")
 
 
+def mark_done(db: Database, student_id: int, item_id: int) -> dict[str, Any]:
+    """The student finished it: it leaves "due this week", and its reminders and calls are
+    skipped. For you, with undo (reopen)."""
+    if not db.set_item_status(student_id, int(item_id), "filed", "done"):
+        raise ValueError("no open item with that id")
+    return {"item_id": int(item_id), "status": "done"}
+
+
+def reopen(db: Database, student_id: int, item_id: int) -> dict[str, Any]:
+    """Undo for mark_done. Reminders that came due while it was done stay skipped."""
+    if not db.set_item_status(student_id, int(item_id), "done", "filed"):
+        raise ValueError("no done item with that id")
+    return {"item_id": int(item_id), "status": "filed"}
+
+
 def calendar_key(student_id: int, item_id: int) -> str:
     # Fixed per item, so a retry rewrites the same calendar event, never a second one.
     return "75" + hashlib.sha256(f"{student_id}:{item_id}".encode()).hexdigest()[:24]
