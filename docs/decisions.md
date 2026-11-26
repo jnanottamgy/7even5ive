@@ -92,3 +92,12 @@ the open question below before either is wired to production.
 | 26 | **A keep-alive reads one page; every `refresh_minutes` (3 hours by default, per college) it runs the whole plan.** | Least load on the portal. |
 | 27 | **Bunk math is a sixth tool, `get_attendance_plan`, computed from the saved answers.** Each college's minimum lives in its manifest (75 by default). | Exact fractions, so a student at exactly the minimum is never told they are short; no model writes the sentences. |
 | 28 | **The Android app is a Must.** | Decisions 19–20 put the portal login and keep-alive inside it. |
+
+**Permission update (26 Nov 2026).** The team reports that the college has granted permission to
+use the app against its portal, which is the condition decision 22 set for a real portal (and the
+condition IT Act s.43 turns on). On that basis an `msrit` connector and live in-app fetching are
+being built. Decision 22 still stands as written: file the **written** grant (who authorised it,
+scope, date) alongside this log, and keep asking for an official read-only feed as the robust
+long-term route so a demo can't break if the portal's third-party block changes. The in-app login
+remains the student's own, with their own credentials; the app automates no login and solves no
+CAPTCHA. _To fill in: authoriser, scope, date of the written permission._

@@ -22,6 +22,10 @@ android {
         buildConfigField("String", "DEFAULT_HOST", "\"${prop("sevenfive.defaultHost", "10.0.2.2")}\"")
         buildConfigField("String", "STUDENT_TOKEN", "\"${prop("sevenfive.studentToken", "demo-student-token")}\"")
         buildConfigField("String", "COLLEGE", "\"${prop("sevenfive.college", "mockcollege")}\"")
+        // The portal the WebView opens, when it is not the demo server's own mock portal. Set it
+        // with the matching college to point the app at a real portal (e.g. MSRIT), uploads still
+        // going to sevenfive.defaultServer. Empty = use the server's mock portal.
+        buildConfigField("String", "PORTAL", "\"${prop("sevenfive.portal", "")}\"")
     }
 
     // One committed debug key, so every CI build signs the same way and installs as an update

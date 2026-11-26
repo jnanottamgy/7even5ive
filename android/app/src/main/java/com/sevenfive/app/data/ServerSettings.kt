@@ -11,8 +11,12 @@ data class ServerConfig(
     val portmaxUrl: String,
     val portalUrl: String,
 ) {
-    /** The online service: one address for everything. A laptop setup uses three ports. */
-    val isOnline: Boolean get() = coreUrl == portmaxUrl && coreUrl == portalUrl
+    /**
+     * The online (cloud) service: core and PortMax are one HTTPS address. The portal may differ
+     * — a college whose own portal the WebView opens (e.g. MSRIT) still uploads to this cloud —
+     * so the portal is deliberately not part of this check, which only tells cloud from laptop.
+     */
+    val isOnline: Boolean get() = coreUrl == portmaxUrl && coreUrl.startsWith("https://")
 
     companion object {
         /** One HTTPS address serving the core, PortMax and the portal (seventy5.cloud). */
@@ -45,12 +49,26 @@ data class ServerConfig(
 }
 
 /** Server addresses only. The token is a build constant and is never written to disk here. */
-class ServerSettings(context: Context, defaultHost: String, private val defaultServer: String = "") {
+class ServerSettings(
+    context: Context,
+    defaultHost: String,
+    private val defaultServer: String = "",
+    defaultPortal: String = "",
+) {
     private val prefs = context.getSharedPreferences("servers", Context.MODE_PRIVATE)
 
-    /** The build's own choice: its online server if it has one, else the laptop default. */
+    /**
+     * The build's own choice: its online server if it has one, else the laptop default. When the
+     * build names a separate portal (`sevenfive.portal`, e.g. the college's real portal), that
+     * address replaces the portal URL while core and PortMax stay on the cloud server.
+     */
     val buildDefault: ServerConfig =
-        if (defaultServer.isNotBlank()) ServerConfig.forOnline(defaultServer) else ServerConfig.forHost(defaultHost)
+        (if (defaultServer.isNotBlank()) ServerConfig.forOnline(defaultServer)
+        else ServerConfig.forHost(defaultHost)).let {
+            if (defaultPortal.isBlank()) it
+            else it.copy(portalUrl = defaultPortal.trim().trimEnd('/')
+                .let { p -> if (p.startsWith("http")) p else "https://$p" })
+        }
 
     private val _config = MutableStateFlow(load())
     val config: StateFlow<ServerConfig> = _config.asStateFlow()

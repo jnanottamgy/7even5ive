@@ -1,0 +1,26 @@
+college: msrit
+name: M. S. Ramaiah Institute of Technology
+vendor: contineo
+# Scheme and host only (the upload check compares every page's origin to this). The portal
+# lives under /newparents; that prefix is in login_path and in every fetch-plan path.
+base_url: https://parents.msrit.edu
+login_path: /newparents/index.php
+fetch_mode: phone
+# Checked in the WebView by the runner to tell the login page from a logged-in page.
+# PROVISIONAL — confirm both selectors against a real capture (see fixtures/README).
+markers:
+  logged_in: 'a[href*="com_studentdashboard"]'
+  login_page: "form#login-form"
+session:
+  # Measured on-device 25 Nov: the session dies between 45 and 61 minutes idle. Take the low end.
+  idle_timeout_minutes: 45
+  one_session_per_student: true
+# get_marks is deliberately absent: CIE marks load via an XHR that has not been captured yet
+# (ciedetails ships an empty `var chartData = []`). Add it once that request is recorded.
+tools: [get_attendance, get_timetable, get_results, get_profile]
+attendance_minimum_percent: 75
+refresh_minutes: 180
+connector_version: 0.1.0
+verified_at: null
+made_by:
+  hand_written: true
