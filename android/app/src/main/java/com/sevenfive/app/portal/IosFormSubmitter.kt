@@ -40,6 +40,8 @@ data class SubmitReport(
     val redirect: String?,
     val millis: Long,
     val fieldCount: Int,
+    /** Every field name sent, in order (names only). */
+    val fieldNames: List<String>,
     val emptyFields: List<String>,
     /** null: the form had no reCAPTCHA field; true/false: its token was filled in or not. */
     val captchaToken: Boolean?,
@@ -75,10 +77,15 @@ class IosFormSubmitter(
      * anything that isn't a same-site GET, which the WebView then fetches as usual (Google's
      * reCAPTCHA included).
      */
+    /** How many portal GETs went out the iPhone way (for the test screen's checks). */
+    @Volatile var pagesFetched = 0
+        private set
+
     fun interceptGet(request: android.webkit.WebResourceRequest): android.webkit.WebResourceResponse? {
         val url = request.url
         if (!request.method.equals("GET", ignoreCase = true)) return null
         if (!PortalCheck.sameSite(portalHost, url.host, url.scheme)) return null
+        pagesFetched++
         val cookies = CookieManager.getInstance()
         val asked = request.requestHeaders.entries.associate { it.key.lowercase() to it.value }
         val builder = Request.Builder().url(url.toString()).get()
@@ -94,10 +101,20 @@ class IosFormSubmitter(
         }
         asked["referer"]?.let { builder.header("Referer", it) }
         cookies.getCookie(url.toString())?.let { builder.header("Cookie", it) }
+        val t0 = System.currentTimeMillis()
+        val kind = if (request.isForMainFrame) "PAGE" else "res"
         return try {
             val r = client.newCall(builder.build()).execute()
+            val setNames = r.headers("Set-Cookie").map { it.substringBefore('=').trim() }
             r.headers("Set-Cookie").forEach { cookies.setCookie(url.toString(), it) }
             val location = r.header("Location")
+            if (request.isForMainFrame || r.code >= 400 || setNames.isNotEmpty()) {
+                PortalLog.add("GET $kind ${PortalLog.where(url.toString())} -> ${r.code} " +
+                    "${System.currentTimeMillis() - t0}ms" +
+                    (if (location != null) " redirect ${PortalLog.where(location)}" else "") +
+                    (if (setNames.isNotEmpty()) " set-cookie ${setNames.joinToString()}" else "") +
+                    " cookies-sent ${cookies.getCookie(url.toString())?.split(';')?.size ?: 0}")
+            }
             if (r.isRedirect && location != null) {
                 r.close()
                 val next = java.net.URI(url.toString()).resolve(location).toString()
@@ -117,6 +134,7 @@ class IosFormSubmitter(
                 .associateWith { r.header(it).orEmpty() }
             android.webkit.WebResourceResponse(mime, charset, r.code, r.message.ifBlank { "OK" }, headers, body.byteStream())
         } catch (e: Exception) {
+            PortalLog.add("GET $kind ${PortalLog.where(url.toString())} FAILED ${e.javaClass.simpleName}: ${e.message}")
             null  // the WebView tries itself, which is no worse than before
         }
     }
@@ -124,8 +142,17 @@ class IosFormSubmitter(
     @JavascriptInterface
     fun post(action: String, fieldsJson: String, referer: String) {
         val target = Uri.parse(action)
-        if (!PortalCheck.sameSite(portalHost, target.host, target.scheme)) return
+        if (!PortalCheck.sameSite(portalHost, target.host, target.scheme)) {
+            PortalLog.add("POST refused: ${PortalLog.where(action)} is not the portal's site")
+            return
+        }
         io.execute { send(action, fieldsJson, referer) }
+    }
+
+    /** The intercept script's own notes (which form, skipped or sent, and why). No values. */
+    @JavascriptInterface
+    fun log(msg: String) {
+        PortalLog.add("js: ${msg.take(300)}")
     }
 
     private fun send(rawAction: String, fieldsJson: String, referer: String) {
@@ -150,6 +177,9 @@ class IosFormSubmitter(
                 fields += name to value.isNotBlank()
             }
         }
+        PortalLog.add("POST ${PortalLog.where(action)} fields(${fields.size}): " +
+            fields.joinToString { it.first + if (it.second) "" else "=EMPTY" } +
+            " | cookies-sent: ${sent.keys.joinToString().ifEmpty { "none" }}")
         val captcha = fields.filter { it.first.contains("recaptcha", true) || it.first.contains("captcha-response", true) }
         val started = System.currentTimeMillis()
         val origin = Uri.parse(action).let { "${it.scheme}://${it.authority}" }
@@ -184,6 +214,7 @@ class IosFormSubmitter(
                     redirect = next?.let { Uri.parse(it) }?.let { "${it.host}${it.path.orEmpty()}" },
                     millis = System.currentTimeMillis() - started,
                     fieldCount = fields.size,
+                    fieldNames = fields.map { it.first },
                     emptyFields = fields.filter { !it.second }.map { it.first },
                     captchaToken = if (captcha.isEmpty()) null else captcha.any { it.second },
                     cookiesSent = sent.keys.toList(),
@@ -192,6 +223,9 @@ class IosFormSubmitter(
                 // setCookie is asynchronous: load the next page only once every cookie has landed,
                 // or the portal sees a request without its new session and shows the login again.
                 // Its callback needs a Looper, so this runs on the main thread.
+                PortalLog.add("POST answer ${r.code} ${summary.millis}ms" +
+                    (summary.redirect?.let { " redirect $it" } ?: " page ${html.length} chars") +
+                    " | set-cookie: ${set.joinToString { "${it.first} ${it.second}" }.ifEmpty { "none" }}")
                 main.post {
                     report(summary)
                     val load = {
@@ -207,6 +241,7 @@ class IosFormSubmitter(
                 }
             }
         } catch (e: Exception) {
+            PortalLog.add("POST FAILED ${e.javaClass.simpleName}: ${e.message}")
             main.post {
                 web.evaluateJavascript("alert('Couldn\\'t reach the portal. Check your connection and try again.')", null)
             }
@@ -228,15 +263,21 @@ class IosFormSubmitter(
          */
         const val INTERCEPT_JS =
             "(function(){if(window.__sfIos)return;window.__sfIos=1;var B=window." + NAME + ";if(!B)return;" +
-                "function go(f,sub){if((f.getAttribute('method')||'get').toLowerCase()!=='post')return false;" +
+                "function L(m){try{B.log(m)}catch(e){}}" +
+                "function id(f){return (f.id||f.getAttribute('name')||'form')+'@'+(f.getAttribute('action')||'')}" +
+                "function go(f,sub,via){var m=(f.getAttribute('method')||'get').toLowerCase();" +
+                "if(m!=='post'){L(via+' '+id(f)+': '+m+' form, left to the WebView');return false;}" +
                 "var fd;try{fd=new FormData(f,sub||undefined);}catch(e){fd=new FormData(f);}" +
                 "var out=[],file=false;fd.forEach(function(v,k){if(typeof v==='string')out.push([k,v]);else file=true;});" +
-                "if(file)return false;var a=new URL(f.getAttribute('action')||location.href,location.href).href;" +
+                "if(file){L(via+' '+id(f)+': has a file, left to the WebView');return false;}" +
+                "var a=new URL(f.getAttribute('action')||location.href,location.href).href;" +
+                "L(via+' '+id(f)+': sending '+out.length+' fields as iPhone');" +
                 "B.post(a,JSON.stringify(out),location.href);return true;}" +
-                "window.addEventListener('submit',function(e){if(e.defaultPrevented)return;" +
-                "if(go(e.target,e.submitter))e.preventDefault();},false);" +
+                "window.addEventListener('submit',function(e){if(e.defaultPrevented){L('submit '+id(e.target)+': page cancelled it (handled by its own script)');return;}" +
+                "if(go(e.target,e.submitter,'submit'))e.preventDefault();},false);" +
                 "var s=HTMLFormElement.prototype.submit;" +
-                "HTMLFormElement.prototype.submit=function(){if(!go(this,null))return s.call(this);};" +
+                "HTMLFormElement.prototype.submit=function(){if(!go(this,null,'form.submit()'))return s.call(this);};" +
+                "L('hook installed on '+location.pathname);" +
                 "})();"
     }
 }

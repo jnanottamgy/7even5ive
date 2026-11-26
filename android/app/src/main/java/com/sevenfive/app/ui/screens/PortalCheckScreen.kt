@@ -12,6 +12,14 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
+import com.sevenfive.app.portal.PortalLog
+import com.sevenfive.app.portal.IosFormSubmitter
+import kotlinx.serialization.json.JsonArray
+import kotlinx.coroutines.delay
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.heightIn
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.jsonPrimitive
@@ -93,6 +101,45 @@ fun PortalCheckScreen(vm: AppViewModel, portalUrl: String, onBack: () -> Unit) {
     var onLoginPage by remember { mutableStateOf<Boolean?>(null) }
     var everOnLogin by remember { mutableStateOf(false) }
     var portalMessage by remember { mutableStateOf<String?>(null) }
+    var recaptchaState by remember { mutableStateOf<String?>(null) }
+    var pageChecks by remember { mutableStateOf<List<Check>>(emptyList()) }
+    var iosRef by remember { mutableStateOf<IosFormSubmitter?>(null) }
+    var pagesFetched by remember { mutableIntStateOf(0) }
+
+    // What the probe found on the page: is it a login form, the portal's notice, and the checks.
+    val applyProbe: (String?) -> Unit = { v ->
+        val o = runCatching { Json.parseToJsonElement(v ?: "") as JsonObject }.getOrNull()
+        if (o != null) {
+            val login = o["login"]?.jsonPrimitive?.booleanOrNull
+            onLoginPage = login
+            if (login == true) everOnLogin = true
+            recaptchaState = o["rc"]?.jsonPrimitive?.contentOrNull?.ifBlank { null }
+            portalMessage = o["msg"]?.jsonPrimitive?.contentOrNull
+                ?.replace(Regex("\\s+"), " ")?.trim()?.ifBlank { null }
+            val checks = (o["checks"] as? JsonArray).orEmpty().mapNotNull { c ->
+                val a = c as? JsonArray ?: return@mapNotNull null
+                Check(a[0].jsonPrimitive.content, a[1].jsonPrimitive.content.toIntOrNull() ?: 1,
+                    a.getOrNull(2)?.jsonPrimitive?.contentOrNull.orEmpty())
+            }
+            if (checks != pageChecks) {
+                PortalLog.add("checks: login=$login " + checks.joinToString(" | ") {
+                    (when (it.state) { 2 -> "OK "; 0 -> "FAIL "; else -> "WAIT " }) + it.name +
+                        (if (it.detail.isNotEmpty()) " (${it.detail})" else "")
+                } + (portalMessage?.let { " | portal says: $it" } ?: ""))
+            }
+            pageChecks = checks
+        }
+    }
+
+    // Re-run the probe every 2 s, so the checks follow the page (the reCAPTCHA token and the
+    // anti-tamper field change after it has loaded).
+    LaunchedEffect(webKey) {
+        while (true) {
+            delay(2000)
+            pagesFetched = iosRef?.pagesFetched ?: 0
+            webView?.evaluateJavascript(LOGIN_PROBE_JS, applyProbe)
+        }
+    }
 
     BackHandler {
         val web = webView
@@ -127,6 +174,8 @@ fun PortalCheckScreen(vm: AppViewModel, portalUrl: String, onBack: () -> Unit) {
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 6.dp)
                     .glassSurface(shape = MaterialTheme.shapes.medium, strong = true)
+                    .heightIn(max = 330.dp)
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(3.dp),
             ) {
@@ -137,6 +186,20 @@ fun PortalCheckScreen(vm: AppViewModel, portalUrl: String, onBack: () -> Unit) {
                     Text(verdict.headline, style = MaterialTheme.typography.titleSmall, color = verdict.level.color,
                         maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
+                val appChecks = appChecks(identity, pagesFetched, lastSend, onLoginPage)
+                val all = pageChecks + appChecks
+                if (all.isNotEmpty()) {
+                    val passed = all.count { it.state == 2 }
+                    Text(
+                        "Checks: $passed of ${all.size} passing" +
+                            (if (identity != PortalIdentity.IPHONE) " (iPhone checks fail in Android mode)" else ""),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = LocalAppColors.current.secondaryLabel,
+                    )
+                    all.forEach { CheckRow(it) }
+                    Spacer(Modifier.height(4.dp))
+                }
+                LogButtons(appContext)
                 StatusRow("Browser", "${identity.label} · tap to switch", MaterialTheme.colorScheme.primary) {
                     val next = if (identity == PortalIdentity.IPHONE) PortalIdentity.ANDROID_CHROME
                     else PortalIdentity.IPHONE
@@ -152,10 +215,14 @@ fun PortalCheckScreen(vm: AppViewModel, portalUrl: String, onBack: () -> Unit) {
                 }
                 StatusRow("Page", where + (if (title.isNotBlank()) " · $title" else ""))
                 StatusRow("Login form", when (onLoginPage) { true -> "showing"; false -> "not on this page"; null -> "-" })
+                recaptchaState?.let {
+                    StatusRow("reCAPTCHA page", it, if (it.startsWith("token ready")) null else StatusRed)
+                }
                 lastSend?.let { r ->
                     StatusRow("Sent", "HTTP ${r.code}" + (r.redirect?.let { " → $it" } ?: " (page)") + " · ${r.millis} ms")
                     StatusRow("Fields", "${r.fieldCount} sent" +
                         (if (r.emptyFields.isEmpty()) ", none empty" else ", empty: ${r.emptyFields.joinToString()}"))
+                    StatusRow("Field names", r.fieldNames.joinToString { it.take(14) }, lines = 4)
                     StatusRow(
                         "reCAPTCHA",
                         when (r.captchaToken) { null -> "no token field"; true -> "token included"; false -> "token EMPTY" },
@@ -202,11 +269,22 @@ fun PortalCheckScreen(vm: AppViewModel, portalUrl: String, onBack: () -> Unit) {
                                 hardenPortalWebView()
                                 // iPhone mode: the login POST goes out with Safari's headers.
                                 val ios = sendPortalFormsAsIphone(portalHost) { lastSend = it }
+                                iosRef = ios
                                 webChromeClient = object : WebChromeClient() {
                                     override fun onReceivedTitle(view: WebView, t: String?) {
                                         title = t.orEmpty()
                                     }
+
+                                    // The portal page's own console: its script errors show up here.
+                                    override fun onConsoleMessage(m: android.webkit.ConsoleMessage): Boolean {
+                                        PortalLog.add("console ${m.messageLevel()}: ${m.message().take(240)} " +
+                                            "(${PortalLog.where(m.sourceId())}:${m.lineNumber()})")
+                                        return true
+                                    }
                                 }
+                                PortalLog.add("--- WebView opened: ${identity.label} mode, $portalHost, " +
+                                    "WebView ${androidx.webkit.WebViewCompat.getCurrentWebViewPackage(ctx)?.versionName ?: "?"}, " +
+                                    "Android ${android.os.Build.VERSION.RELEASE}, app ${com.sevenfive.app.BuildConfig.VERSION_NAME}")
                                 webViewClient = object : WebViewClient() {
                                     // iPhone mode: the portal's GETs go out with iPhone headers too.
                                     override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
@@ -222,26 +300,22 @@ fun PortalCheckScreen(vm: AppViewModel, portalUrl: String, onBack: () -> Unit) {
                                             host == "recaptcha.net" || host.endsWith(".recaptcha.net")
                                         if (recaptcha || PortalCheck.sameSite(portalHost, target.host, target.scheme)) return false
                                         problem = "Stayed on $portalHost: the page tried to open ${target.host ?: "another app"}"
+                                        PortalLog.add("navigation blocked to ${PortalLog.where(target.toString())}")
                                         return true
                                     }
 
                                     override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
+                                        PortalLog.add("page started ${PortalLog.where(url)}")
                                         loading = true
                                         problem = null
                                     }
 
                                     override fun onPageFinished(view: WebView, url: String?) {
+                                        PortalLog.add("page finished ${PortalLog.where(url)}")
                                         loading = false
                                         // Two facts about the page, nothing else: is it a login form, and
                                         // the portal's own notice (Joomla's message box) if it shows one.
-                                        view.evaluateJavascript(LOGIN_PROBE_JS) { v ->
-                                            val o = runCatching { Json.parseToJsonElement(v ?: "") as JsonObject }.getOrNull()
-                                            val login = o?.get("login")?.jsonPrimitive?.booleanOrNull
-                                            onLoginPage = login
-                                            if (login == true) everOnLogin = true
-                                            portalMessage = o?.get("msg")?.jsonPrimitive?.contentOrNull
-                                                ?.replace(Regex("\\s+"), " ")?.trim()?.ifBlank { null }
-                                        }
+                                        view.evaluateJavascript(LOGIN_PROBE_JS, applyProbe)
                                         // Host and path only: a query string can carry personal details.
                                         val u = url?.let(Uri::parse)
                                         if (u?.host != null) where = u.host + u.path.orEmpty()
@@ -251,6 +325,7 @@ fun PortalCheckScreen(vm: AppViewModel, portalUrl: String, onBack: () -> Unit) {
                                         if (!request.isForMainFrame) return
                                         loading = false
                                         problem = "Couldn't open the page: ${error.description}"
+                                        PortalLog.add("page error ${error.errorCode} ${error.description} at ${PortalLog.where(request.url.toString())}")
                                     }
 
                                     override fun onReceivedHttpError(
@@ -260,6 +335,7 @@ fun PortalCheckScreen(vm: AppViewModel, portalUrl: String, onBack: () -> Unit) {
                                     ) {
                                         if (!request.isForMainFrame) return
                                         problem = "The portal answered HTTP ${errorResponse.statusCode}"
+                                        PortalLog.add("http error ${errorResponse.statusCode} at ${PortalLog.where(request.url.toString())}")
                                     }
 
                                     override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
@@ -335,19 +411,114 @@ private fun verdictOf(
 }
 
 @Composable
-private fun StatusRow(label: String, value: String, color: Color? = null, onClick: (() -> Unit)? = null) {
+private fun StatusRow(label: String, value: String, color: Color? = null, lines: Int = 2, onClick: (() -> Unit)? = null) {
     Row(if (onClick != null) Modifier.pressable(onClick = onClick) else Modifier) {
         Text(label, style = MaterialTheme.typography.labelMedium,
             color = LocalAppColors.current.secondaryLabel, modifier = Modifier.width(92.dp))
         Text(value, style = MaterialTheme.typography.labelMedium, color = color ?: MaterialTheme.colorScheme.onSurface,
-            maxLines = 2, overflow = TextOverflow.Ellipsis)
+            maxLines = lines, overflow = TextOverflow.Ellipsis)
     }
 }
 
-/** Returns {login, msg}: a login form on the page (password box or the portal's login text), and its notice. */
-private const val LOGIN_PROBE_JS =
-    "(function(){var t=(document.body&&document.body.innerText)||'';" +
-        "var login=!!document.querySelector('input[type=password]')||/log\\s*in to your account|forgot password/i.test(t);" +
-        "var e=document.querySelector('#system-message-container .alert,#system-message-container .alert-message," +
-        ".alert-error,.alert-danger,.alert-warning');" +
-        "return {login:login,msg:e?e.innerText.trim().slice(0,200):''};})()"
+/** One check on the test screen: state 2 passes (green), 1 is unknown or not yet (yellow), 0 fails (red). */
+private data class Check(val name: String, val state: Int, val detail: String = "")
+
+/** The fields a real browser's login sends (seen on the MSRIT portal); any missing one fails the login. */
+private val REQUIRED_LOGIN_FIELDS =
+    listOf("username", "passwd", "cs_cap", "cs_env", "cs_n", "captcha-response", "g-recaptcha-response")
+
+/** The app's own steps: pages fetched as an iPhone, the login sent, its fields, cookie and outcome. */
+private fun appChecks(identity: PortalIdentity, pages: Int, sent: SubmitReport?, onLogin: Boolean?): List<Check> {
+    val iphone = identity == PortalIdentity.IPHONE
+    val out = mutableListOf<Check>()
+    out += Check("Pages fetched as iPhone", if (!iphone) 1 else if (pages > 0) 2 else 0, "$pages requests")
+    if (sent == null) {
+        out += Check("Login sent as iPhone", 1, "log in to run")
+        return out
+    }
+    out += Check("Login sent as iPhone", 2, "HTTP ${sent.code}, ${sent.millis} ms")
+    val missing = REQUIRED_LOGIN_FIELDS.filter { it !in sent.fieldNames }
+    out += Check("Required login fields", if (missing.isEmpty()) 2 else 0,
+        if (missing.isEmpty()) "all ${REQUIRED_LOGIN_FIELDS.size} present" else "missing: ${missing.joinToString()}")
+    val emptyNeeded = REQUIRED_LOGIN_FIELDS.filter { it in sent.emptyFields }
+    out += Check("Required fields filled", if (emptyNeeded.isEmpty()) 2 else 0,
+        if (emptyNeeded.isEmpty()) "none empty" else "empty: ${emptyNeeded.joinToString()}")
+    out += Check("Session cookie sent", if (sent.cookiesSent.isNotEmpty()) 2 else 0, "${sent.cookiesSent.size} cookies")
+    val session = sent.cookiesSet.firstOrNull()?.second
+    out += Check("Portal kept/renewed session", if (session == null) 1 else 2, session ?: "no cookie set")
+    out += Check("Still logged in after", when (onLogin) { false -> 2; true -> 0; null -> 1 },
+        when (onLogin) { false -> "past the login"; true -> "back on login page"; null -> "checking" })
+    return out
+}
+
+@Composable
+private fun CheckRow(c: Check) {
+    val color = when (c.state) { 2 -> StatusGreen; 0 -> StatusRed; else -> StatusYellow }
+    val icon = when (c.state) { 2 -> Icons.Filled.CheckCircle; 0 -> Icons.Filled.Cancel; else -> Icons.Filled.Schedule }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(14.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(c.name, style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(170.dp),
+            maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(c.detail, style = MaterialTheme.typography.labelSmall, color = LocalAppColors.current.secondaryLabel,
+            maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/**
+ * Probes the page: a login form, the portal's notice, the reCAPTCHA state, and checks of
+ * everything the portal's own detectors read (UA, userAgentData, platform, window.chrome, its
+ * cs_env field and its anti-tamper field). Reads no field values except those two detector fields.
+ */
+private val LOGIN_PROBE_JS = """
+(function(){
+var t=(document.body&&document.body.innerText)||'';
+var login=!!document.querySelector('input[type=password]')||/log\s*in to your account|forgot password/i.test(t);
+var e=document.querySelector('#system-message-container .alert,#system-message-container .alert-message,.alert-error,.alert-danger,.alert-warning');
+var g=document.querySelector('[name=g-recaptcha-response]'),c=document.getElementById('captcha-response');
+var tok=!!((g&&g.value)||(c&&c.value));
+var rc=!login?'':(typeof grecaptcha==='undefined'?'script not loaded':!g?'loaded, widget missing':tok?'token ready':'loaded, no token yet');
+var ua=navigator.userAgent||'',k=[];
+function add(n,s,d){k.push([n,String(s),d||''])}
+add('UA says iPhone Safari',/iPhone/.test(ua)&&!/Chrome|CriOS|; wv/.test(ua)?2:0,ua.slice(13,45));
+add('userAgentData hidden',navigator.userAgentData===undefined?2:0);
+add('platform is iPhone',navigator.platform==='iPhone'?2:0,navigator.platform);
+add('vendor is Apple',/Apple/.test(navigator.vendor||'')?2:0,navigator.vendor);
+add('no window.chrome',!window.chrome?2:0);
+add('webdriver off',!navigator.webdriver?2:0);
+add('no flutter/WebView bridge',typeof window.flutter_inappwebview==='undefined'?2:0);
+var ce=document.getElementById('cs_env');
+add('cs_env detector says ok',!ce?1:(ce.value==='ok'?2:0),ce?(ce.value||'empty'):'not on page');
+var at=null;document.querySelectorAll('input[type=hidden]').forEach(function(i){if(/^u\d+\./.test(i.value))at=i});
+if(at){var fl=at.value.split('.').slice(1).join('.');add('anti-tamper clean',fl?0:2,fl?('flags: '+fl):('taps seen: '+at.value.split('.')[0].slice(1)))}else add('anti-tamper clean',1,'not on page');
+add('reCAPTCHA script loaded',typeof grecaptcha!=='undefined'?2:(login?0:1));
+add('reCAPTCHA token ready',tok?2:(login?0:1),tok?'yes':'none yet');
+add('iPhone form hook in page',window.__sfIos?2:0);
+return {login:login,rc:rc,checks:k,msg:e?e.innerText.trim().slice(0,200):''};
+})()
+""".trimIndent()
+
+/** Copy or share the portal log (paste it to whoever is debugging), or clear it before a fresh try. */
+@Composable
+private fun LogButtons(context: android.content.Context) {
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    var note by remember { mutableStateOf<String?>(null) }
+    Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("Copy log", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.pressable {
+                clipboard.setText(androidx.compose.ui.text.AnnotatedString(PortalLog.dump()))
+                note = "copied"
+            })
+        Text("Share log", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.pressable {
+                val send = android.content.Intent(android.content.Intent.ACTION_SEND)
+                    .setType("text/plain")
+                    .putExtra(android.content.Intent.EXTRA_TEXT, PortalLog.dump())
+                context.startActivity(android.content.Intent.createChooser(send, "Share portal log")
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+            })
+        Text("Clear log", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.pressable { PortalLog.clear(); note = "cleared" })
+        note?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = LocalAppColors.current.secondaryLabel) }
+    }
+}
