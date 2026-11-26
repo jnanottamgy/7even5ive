@@ -12,6 +12,16 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.Json
+import com.sevenfive.app.portal.SubmitReport
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -79,7 +89,10 @@ fun PortalCheckScreen(vm: AppViewModel, portalUrl: String, onBack: () -> Unit) {
     var where by remember { mutableStateOf(portalHost) }
     var problem by remember { mutableStateOf<String?>(null) }
     var identity by remember { mutableStateOf(PortalSettings.identity) }
-    var lastSend by remember { mutableStateOf<String?>(null) }
+    var lastSend by remember { mutableStateOf<SubmitReport?>(null) }
+    var onLoginPage by remember { mutableStateOf<Boolean?>(null) }
+    var everOnLogin by remember { mutableStateOf(false) }
+    var portalMessage by remember { mutableStateOf<String?>(null) }
 
     BackHandler {
         val web = webView
@@ -108,65 +121,62 @@ fun PortalCheckScreen(vm: AppViewModel, portalUrl: String, onBack: () -> Unit) {
         },
     ) { inner ->
         Column(Modifier.padding(inner).fillMaxSize()) {
-            Row(
+            val verdict = verdictOf(loading, problem, lastSend, onLoginPage, everOnLogin, portalMessage)
+            Column(
                 Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 6.dp)
                     .glassSurface(shape = MaterialTheme.shapes.medium, strong = true)
                     .padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                verticalArrangement = Arrangement.spacedBy(3.dp),
             ) {
-                Icon(Icons.Outlined.Science, contentDescription = null, tint = LocalAppColors.current.event,
-                    modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    "A test only. You log in yourself on the portal's own page. In iPhone mode the " +
-                        "app sends the portal's forms to the portal itself, with iPhone headers; " +
-                        "nothing is saved or sent anywhere else.",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-            Column(
-                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                Text(
-                    "On: $where",
-                    style = MaterialTheme.typography.labelMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                lastSend?.let {
-                    Text(it, style = MaterialTheme.typography.labelMedium,
-                        color = LocalAppColors.current.secondaryLabel, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(verdict.icon, contentDescription = verdict.level.name, tint = verdict.level.color,
+                        modifier = Modifier.size(22.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(verdict.headline, style = MaterialTheme.typography.titleSmall, color = verdict.level.color,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
-                // Which browser the portal sees. Switching rebuilds the WebView from the start page.
-                Text(
-                    "Looks like: ${identity.label} · tap to switch",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.pressable {
-                        val next = if (identity == PortalIdentity.IPHONE) PortalIdentity.ANDROID_CHROME
-                        else PortalIdentity.IPHONE
-                        PortalSettings.identity = next
-                        identity = next
-                        problem = null
-                        webView = null
-                        webKey++
-                    },
-                )
-                if (title.isNotBlank()) {
-                    Text(
-                        "Page: $title",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = LocalAppColors.current.secondaryLabel,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                StatusRow("Browser", "${identity.label} · tap to switch", MaterialTheme.colorScheme.primary) {
+                    val next = if (identity == PortalIdentity.IPHONE) PortalIdentity.ANDROID_CHROME
+                    else PortalIdentity.IPHONE
+                    PortalSettings.identity = next
+                    identity = next
+                    problem = null
+                    lastSend = null
+                    onLoginPage = null
+                    everOnLogin = false
+                    portalMessage = null
+                    webView = null
+                    webKey++
+                }
+                StatusRow("Page", where + (if (title.isNotBlank()) " · $title" else ""))
+                StatusRow("Login form", when (onLoginPage) { true -> "showing"; false -> "not on this page"; null -> "-" })
+                lastSend?.let { r ->
+                    StatusRow("Sent", "HTTP ${r.code}" + (r.redirect?.let { " → $it" } ?: " (page)") + " · ${r.millis} ms")
+                    StatusRow("Fields", "${r.fieldCount} sent" +
+                        (if (r.emptyFields.isEmpty()) ", none empty" else ", empty: ${r.emptyFields.joinToString()}"))
+                    StatusRow(
+                        "reCAPTCHA",
+                        when (r.captchaToken) { null -> "no token field"; true -> "token included"; false -> "token EMPTY" },
+                        if (r.captchaToken == false) StatusRed else null,
                     )
+                    StatusRow(
+                        "Cookies sent",
+                        if (r.cookiesSent.isEmpty()) "none" else "${r.cookiesSent.size}: ${r.cookiesSent.joinToString { it.take(12) }}",
+                        if (r.cookiesSent.isEmpty()) StatusRed else null,
+                    )
+                    StatusRow("Cookies set",
+                        if (r.cookiesSet.isEmpty()) "none" else r.cookiesSet.joinToString { "${it.first.take(12)} ${it.second}" })
                 }
-                problem?.let {
-                    Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
-                }
+                portalMessage?.let { StatusRow("Portal says", it, StatusRed) }
+                problem?.let { StatusRow("Problem", it, StatusRed) }
+                Text(
+                    "You log in yourself. In iPhone mode the app sends the portal's forms to the portal " +
+                        "with iPhone headers; nothing is saved or sent anywhere else.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = LocalAppColors.current.secondaryLabel,
+                )
             }
             Box(Modifier.fillMaxWidth().height(3.dp)) {
                 if (loading) {
@@ -218,15 +228,15 @@ fun PortalCheckScreen(vm: AppViewModel, portalUrl: String, onBack: () -> Unit) {
 
                                     override fun onPageFinished(view: WebView, url: String?) {
                                         loading = false
-                                        // The portal's own notice (Joomla's message box), e.g. "invalid
-                                        // security code", shown here so a refused login says why.
-                                        view.evaluateJavascript(
-                                            "(function(){var e=document.querySelector('#system-message-container .alert," +
-                                                "#system-message-container,.alert-error,.alert-danger,.alert-warning,.alert-message');" +
-                                                "return e?e.innerText.trim().slice(0,160):'';})()",
-                                        ) { v ->
-                                            val msg = v?.trim('"')?.replace("\n", " ")?.trim().orEmpty()
-                                            if (msg.isNotEmpty() && msg != "null") problem = "Portal says: $msg"
+                                        // Two facts about the page, nothing else: is it a login form, and
+                                        // the portal's own notice (Joomla's message box) if it shows one.
+                                        view.evaluateJavascript(LOGIN_PROBE_JS) { v ->
+                                            val o = runCatching { Json.parseToJsonElement(v ?: "") as JsonObject }.getOrNull()
+                                            val login = o?.get("login")?.jsonPrimitive?.booleanOrNull
+                                            onLoginPage = login
+                                            if (login == true) everOnLogin = true
+                                            portalMessage = o?.get("msg")?.jsonPrimitive?.contentOrNull
+                                                ?.replace(Regex("\\s+"), " ")?.trim()?.ifBlank { null }
                                         }
                                         // Host and path only: a query string can carry personal details.
                                         val u = url?.let(Uri::parse)
@@ -281,3 +291,59 @@ fun PortalCheckScreen(vm: AppViewModel, portalUrl: String, onBack: () -> Unit) {
         }
     }
 }
+
+private val StatusGreen = Color(0xFF2E9E4F)
+private val StatusYellow = Color(0xFFD99A00)
+private val StatusRed = Color(0xFFD93F3F)
+
+private enum class Level(val color: Color) { GREEN(StatusGreen), YELLOW(StatusYellow), RED(StatusRed) }
+
+private class Verdict(val level: Level, val headline: String) {
+    val icon: ImageVector
+        get() = when (level) {
+            Level.GREEN -> Icons.Filled.CheckCircle
+            Level.YELLOW -> Icons.Filled.Schedule
+            Level.RED -> Icons.Filled.Cancel
+        }
+}
+
+/**
+ * Green: past the login form after logging in. Red: a page error, the portal's error notice, or
+ * sent back to the login form after submitting it. Yellow: nothing tried yet, or still loading.
+ */
+private fun verdictOf(
+    loading: Boolean,
+    problem: String?,
+    sent: SubmitReport?,
+    onLogin: Boolean?,
+    everOnLogin: Boolean,
+    message: String?,
+): Verdict = when {
+    problem != null -> Verdict(Level.RED, "Failed: page error")
+    loading -> Verdict(Level.YELLOW, "Loading…")
+    sent != null && onLogin == true ->
+        Verdict(Level.RED, if (message != null) "Refused: the portal sent you back to login"
+        else "Refused: back on the login page, no reason given")
+    onLogin == false && (sent != null || everOnLogin) -> Verdict(Level.GREEN, "Passed: you're past the login")
+    message != null -> Verdict(Level.RED, "The portal shows an error")
+    onLogin == true -> Verdict(Level.YELLOW, "Log in on the page below to run the test")
+    else -> Verdict(Level.YELLOW, "Waiting for the login page")
+}
+
+@Composable
+private fun StatusRow(label: String, value: String, color: Color? = null, onClick: (() -> Unit)? = null) {
+    Row(if (onClick != null) Modifier.pressable(onClick = onClick) else Modifier) {
+        Text(label, style = MaterialTheme.typography.labelMedium,
+            color = LocalAppColors.current.secondaryLabel, modifier = Modifier.width(92.dp))
+        Text(value, style = MaterialTheme.typography.labelMedium, color = color ?: MaterialTheme.colorScheme.onSurface,
+            maxLines = 2, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** Returns {login, msg}: a login form on the page (password box or the portal's login text), and its notice. */
+private const val LOGIN_PROBE_JS =
+    "(function(){var t=(document.body&&document.body.innerText)||'';" +
+        "var login=!!document.querySelector('input[type=password]')||/log\\s*in to your account|forgot password/i.test(t);" +
+        "var e=document.querySelector('#system-message-container .alert,#system-message-container .alert-message," +
+        ".alert-error,.alert-danger,.alert-warning');" +
+        "return {login:login,msg:e?e.innerText.trim().slice(0,200):''};})()"

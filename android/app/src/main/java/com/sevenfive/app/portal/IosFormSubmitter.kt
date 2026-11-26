@@ -30,11 +30,29 @@ import java.util.concurrent.TimeUnit
  * is left alone. Field values are held in memory for the one request and never logged or stored.
  * Not covered: the TLS handshake is OkHttp's, not Safari's.
  */
+/**
+ * What one iPhone-style POST did, for the test screen. Names and counts only: never a field's
+ * value, a cookie's value or a query string.
+ */
+data class SubmitReport(
+    val code: Int,
+    /** Where the portal redirected (host + path), or null when it answered with a page. */
+    val redirect: String?,
+    val millis: Long,
+    val fieldCount: Int,
+    val emptyFields: List<String>,
+    /** null: the form had no reCAPTCHA field; true/false: its token was filled in or not. */
+    val captchaToken: Boolean?,
+    val cookiesSent: List<String>,
+    /** Each cookie the portal set: name to "kept", "replaced" or "new". */
+    val cookiesSet: List<Pair<String, String>>,
+)
+
 class IosFormSubmitter(
     private val web: WebView,
     private val portalHost: String,
-    /** A one-line summary of each answer (status, redirect path, cookie names), on the main thread. */
-    private val report: (String) -> Unit = {},
+    /** What each POST did, on the main thread. */
+    private val report: (SubmitReport) -> Unit = {},
 ) {
     private val main = Handler(Looper.getMainLooper())
     private val io = Executors.newSingleThreadExecutor()
@@ -64,10 +82,18 @@ class IosFormSubmitter(
         val sent = sentCookie.split(';').map { it.trim() }.filter { '=' in it }
             .associate { it.substringBefore('=') to it.substringAfter('=') }
         val form = FormBody.Builder()
+        val fields = mutableListOf<Pair<String, Boolean>>()  // name to "has a value"
         runCatching { Json.parseToJsonElement(fieldsJson) as JsonArray }.getOrNull()?.forEach { pair ->
             val p = pair as? JsonArray ?: return@forEach
-            if (p.size == 2) form.add(p[0].jsonPrimitive.content, p[1].jsonPrimitive.content)
+            if (p.size == 2) {
+                val name = p[0].jsonPrimitive.content
+                val value = p[1].jsonPrimitive.content
+                form.add(name, value)
+                fields += name to value.isNotBlank()
+            }
         }
+        val captcha = fields.filter { it.first.contains("recaptcha", true) || it.first.contains("captcha-response", true) }
+        val started = System.currentTimeMillis()
         val origin = Uri.parse(action).let { "${it.scheme}://${it.authority}" }
         val request = Request.Builder().url(action).post(form.build())
             .header("User-Agent", IOS_USER_AGENT)
@@ -88,19 +114,23 @@ class IosFormSubmitter(
                 val type = r.body?.contentType()
                 val html = if (next == null) r.body?.string().orEmpty() else ""
                 val charset = type?.charset()?.name() ?: "utf-8"
-                // Host and path only (a query can carry personal details); cookie names, never values.
-                // Each cookie the portal set, marked "kept" if it's the value we sent and "new"
-                // if it replaced it (a new session). Names only, never values.
-                val names = setCookies.map { c ->
+                // Each cookie the portal set: "kept" if it's the value we sent, "replaced" if it
+                // swapped it (a new session), "new" if we had none. Names only, never values.
+                val set = setCookies.map { c ->
                     val name = c.substringBefore('=').trim()
                     val value = c.substringAfter('=').substringBefore(';').trim()
-                    when (sent[name]) { null -> "$name (new)"; value -> "$name (kept)"; else -> "$name (replaced)" }
+                    name to when (sent[name]) { null -> "new"; value -> "kept"; else -> "replaced" }
                 }.distinct()
-                val where = next?.let { Uri.parse(it) }?.let { " -> ${it.host}${it.path.orEmpty()}" } ?: ""
-                val summary = "Sent as iPhone with cookies: " +
-                    (if (sent.isEmpty()) "none" else sent.keys.joinToString()) +
-                    ". Answer: HTTP ${r.code}$where" +
-                    (if (names.isEmpty()) ", no cookies set" else ", cookies set: ${names.joinToString()}")
+                val summary = SubmitReport(
+                    code = r.code,
+                    redirect = next?.let { Uri.parse(it) }?.let { "${it.host}${it.path.orEmpty()}" },
+                    millis = System.currentTimeMillis() - started,
+                    fieldCount = fields.size,
+                    emptyFields = fields.filter { !it.second }.map { it.first },
+                    captchaToken = if (captcha.isEmpty()) null else captcha.any { it.second },
+                    cookiesSent = sent.keys.toList(),
+                    cookiesSet = set,
+                )
                 // setCookie is asynchronous: load the next page only once every cookie has landed,
                 // or the portal sees a request without its new session and shows the login again.
                 // Its callback needs a Looper, so this runs on the main thread.
@@ -132,8 +162,9 @@ class IosFormSubmitter(
         const val NAME = "SevenFiveIosSubmit"
 
         /**
-         * Catches form POSTs before the WebView sends them, in the bubbling phase so the page's own
-         * handlers run first; one that cancels the submit (to send it by fetch) is left alone. Forms
+         * Catches form POSTs before the WebView sends them, on window in the bubbling phase so every
+         * handler the page has (on the form or on document, e.g. the one that adds the reCAPTCHA
+         * token or builds the password) runs first; one that cancels the submit is left alone. Forms
          * with files, and GET forms, go through the WebView as normal. form.submit() is routed the
          * same way, since it fires no submit event.
          */
@@ -144,7 +175,7 @@ class IosFormSubmitter(
                 "var out=[],file=false;fd.forEach(function(v,k){if(typeof v==='string')out.push([k,v]);else file=true;});" +
                 "if(file)return false;var a=new URL(f.getAttribute('action')||location.href,location.href).href;" +
                 "B.post(a,JSON.stringify(out),location.href);return true;}" +
-                "document.addEventListener('submit',function(e){if(e.defaultPrevented)return;" +
+                "window.addEventListener('submit',function(e){if(e.defaultPrevented)return;" +
                 "if(go(e.target,e.submitter))e.preventDefault();},false);" +
                 "var s=HTMLFormElement.prototype.submit;" +
                 "HTMLFormElement.prototype.submit=function(){if(!go(this,null))return s.call(this);};" +
@@ -157,7 +188,7 @@ class IosFormSubmitter(
  * origins get the intercept script; reCAPTCHA's frames are left untouched.
  */
 @android.annotation.SuppressLint("JavascriptInterface")
-fun WebView.sendPortalFormsAsIphone(portalHost: String, report: (String) -> Unit = {}) {
+fun WebView.sendPortalFormsAsIphone(portalHost: String, report: (SubmitReport) -> Unit = {}) {
     if (PortalSettings.identity != PortalIdentity.IPHONE || portalHost.isBlank()) return
     if (!androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.DOCUMENT_START_SCRIPT)) return
     addJavascriptInterface(IosFormSubmitter(this, portalHost, report), IosFormSubmitter.NAME)
