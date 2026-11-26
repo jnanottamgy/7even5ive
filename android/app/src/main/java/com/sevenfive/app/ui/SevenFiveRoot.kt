@@ -58,6 +58,7 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import android.Manifest
 import android.os.Build
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
@@ -167,13 +168,17 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
     LaunchedEffect(Unit) {
         vm.openUrl.collect { url -> runCatching { uri.openUri(url) }.onFailure { vm.say("No browser to open the sign-in page") } }
     }
-    // Android 13+: asked once it makes sense (the first reminder, or from Settings).
+    // Android 13+: asked once it makes sense (a reminder pending, the urgent call turned on, or
+    // from the "Notifications are off" rows). Once Android would no longer show its prompt (the
+    // student declined twice), those rows open the system settings instead.
     val askPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (!granted) vm.say("Reminders will stay in the app: notifications are off")
     }
+    val activity = LocalActivity.current
     LaunchedEffect(Unit) {
         vm.askNotifications.collect {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val shows = activity == null || com.sevenfive.app.notify.Notifications.promptStillShows(activity)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && shows) {
                 com.sevenfive.app.notify.Notifications.markAsked(vm.container.appContext)
                 askPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
             }

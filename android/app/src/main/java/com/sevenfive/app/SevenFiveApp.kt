@@ -8,11 +8,11 @@ import android.webkit.WebView
 import androidx.core.app.NotificationManagerCompat
 import com.sevenfive.app.data.Accounts
 import com.sevenfive.app.data.ApiException
+import com.sevenfive.app.data.AuthConfigStore
 import com.sevenfive.app.data.CardsRepository
 import com.sevenfive.app.data.CoreApi
 import com.sevenfive.app.data.Http
 import com.sevenfive.app.data.PortMaxApi
-import com.sevenfive.app.data.Saved
 import com.sevenfive.app.data.ServerFinder
 import com.sevenfive.app.data.ServerSettings
 import com.sevenfive.app.data.SessionStore
@@ -40,8 +40,12 @@ class SevenFiveApp : Application() {
         Diagnostics.install(this)
         container = AppContainer(this)
         // Who was signed in, read off the main thread (the Keystore is slow); the app shows its
-        // start screen until then.
-        Thread({ container.accounts.start() }, "accounts-start").start()
+        // start screen until then. An account made on the server an older build used is signed
+        // out if this build moved the app to another one.
+        Thread({
+            container.accounts.start(movedFrom = container.servers.movedFrom)
+            container.servers.movedHandled()
+        }, "accounts-start").start()
         Notifications.createChannels(this)
         // Every 15 minutes the outbox is pulled even while the app is closed; Firebase, when the
         // build has it, wakes the phone sooner. The portal session is kept alive every 30.
@@ -58,7 +62,10 @@ class AppContainer(context: Context) {
     private val sessions = SessionStore(context)
 
     /** Who is signed in. The demo's token is public (it is "Try the demo"); accounts use Supabase. */
-    val accounts = Accounts(sessions, SupabaseAuth(okhttp3.OkHttpClient()), BuildConfig.STUDENT_TOKEN)
+    val accounts = Accounts(
+        sessions, SupabaseAuth(okhttp3.OkHttpClient()), BuildConfig.STUDENT_TOKEN,
+        configCache = AuthConfigStore(context),
+    )
     private val http = Http(accounts)
     val core = CoreApi(http) { servers.config.value.coreUrl }
     val portmax = PortMaxApi(http) { servers.config.value.portmaxUrl }
@@ -73,28 +80,30 @@ class AppContainer(context: Context) {
 
     init {
         accounts.core = core
-        accounts.onSwitch = { leaving, token -> forget(leaving, token) }
+        accounts.onSwitch = { forget() }
+        accounts.onLeft = { token, server -> unregister(token, server) }
         accounts.onArrive = { Push.register(appContext) }
     }
 
-    /**
-     * Someone else uses the app now: nothing of the last person's may stay. Their phone
-     * registration (so their reminders stop waking this phone; sent with their own [token], as
-     * it is), their cards, the outbox position, the portal login and everything the portal's
-     * WebView stored, shown notifications, the briefing's audio. Each step on its own: one
-     * failing (a WebView being updated) never stops the rest.
-     */
-    private suspend fun forget(leaving: Saved, token: String?) {
-        if (leaving != Saved.Nobody && token != null) {
-            Push.currentToken(appContext)?.let { device ->
-                try {
-                    core.removeDeviceAs(token, device)
-                } catch (e: ApiException) {
-                    // Their session may be over already; the next sign-in on this phone moves
-                    // the registration to that student anyway.
-                }
-            }
+    /** Their reminders stop waking this phone: sent with their own [token], as it is, to the
+     * [server] they used. Only with Firebase (Push.kt); best effort. */
+    private suspend fun unregister(token: String, server: String) {
+        val device = Push.currentToken(appContext) ?: return
+        try {
+            core.removeDeviceAs(token, device, server)
+        } catch (e: ApiException) {
+            // Their session may be over already; the next sign-in on this phone moves the
+            // registration to that student anyway.
         }
+    }
+
+    /**
+     * Someone else uses the app now: nothing of the last person's may stay on this phone. Their
+     * cards, the outbox position, the portal login and everything the portal's WebView stored,
+     * shown notifications, the briefing's audio. Each step on its own: one failing (a WebView
+     * being updated) never stops the rest.
+     */
+    private suspend fun forget() {
         cards.reset()
         outbox.forget()
         portmax.forget()

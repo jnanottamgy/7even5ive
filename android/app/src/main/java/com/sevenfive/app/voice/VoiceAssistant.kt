@@ -1,10 +1,12 @@
 package com.sevenfive.app.voice
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.AudioDeviceInfo
+import android.media.AudioFocusRequest
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
@@ -13,6 +15,8 @@ import android.media.MediaRecorder
 import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.NoiseSuppressor
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Base64
 import androidx.core.content.ContextCompat
 import com.sevenfive.app.data.ApiException
@@ -65,6 +69,10 @@ import java.util.concurrent.atomic.AtomicLong
  * closing, a dropped connection) moves the generation on, under one lock, so a session that
  * arrives late, a socket that opens late or a callback from an old socket finds itself stale and
  * does nothing: the microphone can only ever be on for the conversation on screen.
+ *
+ * The conversation holds the phone's audio for itself while it lasts (other apps pause; a phone
+ * call ends it) and talks through what the student is wearing: a Bluetooth or wired headset or
+ * earphones, and the loudspeaker only when there is none.
  */
 class VoiceAssistant(
     private val context: Context,
@@ -109,6 +117,9 @@ class VoiceAssistant(
     @Volatile private var interruptedThrough = -1
     @Volatile private var lastAudioAt = 0L
     private var savedMode: Int? = null
+    private var focus: AudioFocusRequest? = null
+    /** Before Android 12: a Bluetooth headset's call channel was opened for this conversation. */
+    private var legacySco = false
 
     fun hasMicPermission(): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
@@ -333,19 +344,18 @@ class VoiceAssistant(
         }
         val audio = context.getSystemService(AudioManager::class.java)
         if (audio != null) {
+            if (!takeFocus(audio, gen)) {
+                stop("Your phone is busy with other audio (a call?). Try again when it's done.")
+                return false
+            }
             // A call-style session: the phone's echo canceller hears what the speaker plays.
             if (savedMode == null) savedMode = audio.mode
             audio.mode = AudioManager.MODE_IN_COMMUNICATION
-            routeToSpeaker(audio)
+            routeOutput(audio)
         }
         val outMin = AudioTrack.getMinBufferSize(outputRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT)
         val out = AudioTrack.Builder()
-            .setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                    .build(),
-            )
+            .setAudioAttributes(VOICE)
             .setAudioFormat(
                 AudioFormat.Builder()
                     .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
@@ -437,7 +447,7 @@ class VoiceAssistant(
         noise = null
     }
 
-    /** Called with the lock held. The speaker, the player and the phone's audio mode. */
+    /** Called with the lock held. The speaker, the player, the phone's audio mode and focus. */
     private fun releaseOutput() {
         playback.close()
         playbackJob?.cancel()
@@ -450,28 +460,97 @@ class VoiceAssistant(
         val audio = context.getSystemService(AudioManager::class.java)
         val mode = savedMode
         if (audio != null && mode != null) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) audio.clearCommunicationDevice() else legacySpeaker(audio, false)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) audio.clearCommunicationDevice() else legacyRelease(audio)
             audio.mode = mode
         }
         savedMode = null
+        focus?.let { audio?.abandonAudioFocusRequest(it) }
+        focus = null
     }
 
-    private fun routeToSpeaker(audio: AudioManager) {
+    /**
+     * The phone's audio for this conversation alone: music and the briefing pause, notification
+     * sounds wait. Losing it to a phone call (or an alarm, another assistant) ends the
+     * conversation: the microphone must not keep listening under it. False when another app holds
+     * it and won't let go (a call in progress).
+     */
+    private fun takeFocus(audio: AudioManager, gen: Long): Boolean {
+        val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
+            .setAudioAttributes(VOICE)
+            .setOnAudioFocusChangeListener({ change ->
+                if (change == AudioManager.AUDIOFOCUS_LOSS || change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
+                    if (gen == generation) stop("The conversation stopped: your phone needed its audio for something else.")
+                }
+            }, Handler(Looper.getMainLooper()))
+            .build()
+        if (audio.requestAudioFocus(request) != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) return false
+        focus = request
+        return true
+    }
+
+    /** Through what the student is wearing ([preferredOutput]); the loudspeaker when nothing is. */
+    private fun routeOutput(audio: AudioManager) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            audio.availableCommunicationDevices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
-                ?.let { audio.setCommunicationDevice(it) }
+            val devices = audio.availableCommunicationDevices
+            preferredOutput(devices.map { it.type })?.let { audio.setCommunicationDevice(devices[it]) }
         } else {
-            legacySpeaker(audio, true)
+            legacyRoute(audio)
         }
     }
 
-    /** Before Android 12 the speaker is chosen with the old switch. */
+    /** Before Android 12: the loudspeaker is the old switch, and a Bluetooth headset's call
+     * channel (SCO) is opened by hand. A wired headset takes a call-style session by itself. */
     @Suppress("DEPRECATION")
-    private fun legacySpeaker(audio: AudioManager, on: Boolean) {
-        audio.isSpeakerphoneOn = on
+    private fun legacyRoute(audio: AudioManager) {
+        val outputs = audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS).map { it.type }
+        when (preferredOutput(outputs)?.let { outputs[it] }) {
+            AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> {
+                audio.isSpeakerphoneOn = false
+                audio.startBluetoothSco()
+                audio.isBluetoothScoOn = true
+                legacySco = true
+            }
+            AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, null -> audio.isSpeakerphoneOn = true
+            else -> audio.isSpeakerphoneOn = false
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun legacyRelease(audio: AudioManager) {
+        if (legacySco) {
+            audio.isBluetoothScoOn = false
+            audio.stopBluetoothSco()
+            legacySco = false
+        }
+        audio.isSpeakerphoneOn = false
     }
 
     companion object {
+        private val VOICE: AudioAttributes by lazy {
+            AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build()
+        }
+
+        /** What a conversation talks through, best first: what the student is wearing, then the
+         * loudspeaker (the phone is held in front of them, the transcript on screen). The earpiece
+         * never: it would sound like the conversation went silent. */
+        @SuppressLint("InlinedApi") // plain numbers: on older Android they simply never match
+        private val PREFERRED_OUTPUTS = listOf(
+            AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+            AudioDeviceInfo.TYPE_BLE_HEADSET,
+            AudioDeviceInfo.TYPE_WIRED_HEADSET,
+            AudioDeviceInfo.TYPE_USB_HEADSET,
+            AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+            AudioDeviceInfo.TYPE_HEARING_AID,
+            AudioDeviceInfo.TYPE_BUILTIN_SPEAKER,
+        )
+
+        /** The index in [types] (the phone's devices, by AudioDeviceInfo type) to talk through. */
+        fun preferredOutput(types: List<Int>): Int? =
+            PREFERRED_OUTPUTS.firstNotNullOfOrNull { wanted -> types.indexOf(wanted).takeIf { it >= 0 } }
+
         private const val MAX_RESULT_CHARS = 8_000
         private const val DRAIN_MILLIS = 4_000L
         private const val TAIL_MILLIS = 600L

@@ -3,7 +3,6 @@ package com.sevenfive.app.data
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.put
 
 /*
@@ -69,7 +68,7 @@ data class OpenedFile(
 )
 
 suspend fun CoreApi.library(): LibraryTree =
-    tool("list_library").result?.let { AppJson.decodeFromJsonElement<LibraryTree>(it) }
+    tool("list_library").result?.let { decodeAnswer<LibraryTree>(it) }
         ?: LibraryTree()
 
 suspend fun CoreApi.libraryFiles(subjectId: Int?, shelf: String?, unsorted: Boolean, offset: Int): FilePage {
@@ -83,9 +82,9 @@ suspend fun CoreApi.libraryFiles(subjectId: Int?, shelf: String?, unsorted: Bool
         put("offset", offset)
     }
     return tool("list_library_files", args).result
-        ?.let { AppJson.decodeFromJsonElement<FilePage>(it) } ?: FilePage()
+        ?.let { decodeAnswer<FilePage>(it) } ?: FilePage()
 }
 
 suspend fun CoreApi.openFile(id: Int): OpenedFile =
     tool("open_file", buildJsonObject { put("file_id", id) }).result
-        ?.let { AppJson.decodeFromJsonElement<OpenedFile>(it) } ?: OpenedFile()
+        ?.let { decodeAnswer<OpenedFile>(it) } ?: OpenedFile()

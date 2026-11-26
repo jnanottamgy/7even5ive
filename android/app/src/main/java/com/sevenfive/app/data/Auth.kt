@@ -89,6 +89,38 @@ data class PersonalToken(
     @SerialName("mcp_url") val mcpUrl: String = "",
 )
 
+/** `GET /api/me/connections`: the MCP address, and the AI apps signed in to it (the demo has none). */
+@Serializable
+data class McpConnections(
+    @SerialName("mcp_url") val mcpUrl: String = "",
+    val connections: List<McpConnection> = emptyList(),
+)
+
+/** One AI app (Claude Code, Codex) the student signed in to with OAuth. Times are ISO, +05:30. */
+@Serializable
+data class McpConnection(
+    val id: Int = 0,
+    /** The name the app gave itself; null when it gave none. */
+    val name: String? = null,
+    @SerialName("connected_at") val connectedAt: String? = null,
+    /** Null until the app first uses the connection. */
+    @SerialName("last_used_at") val lastUsedAt: String? = null,
+) {
+    /** What the list calls it. */
+    val label: String get() = name?.takeIf { it.isNotBlank() } ?: "An AI app"
+}
+
+/** `POST /api/me/connections/{id}/delete`. */
+@Serializable
+data class Disconnected(val deleted: Boolean = false)
+
+/** Where the last sign-in settings are remembered, with the server they came from, so a
+ * signed-in app can open without asking for them again ([Accounts.hasConfigFor]). */
+interface ConfigCache {
+    fun load(): Pair<String, AuthConfig>?
+    fun save(server: String, config: AuthConfig)
+}
+
 /** `POST /api/me/whatsapp`: the code to send to the bot. */
 @Serializable
 data class WhatsAppLink(
@@ -227,7 +259,7 @@ class SupabaseAuth(private val client: OkHttpClient, private val now: () -> Long
 
     /** A username sign-in comes back from our server as Supabase's own answer. */
     fun sessionFrom(config: AuthConfig, raw: String): Session =
-        session(config, AppJson.decodeFromString<SupabaseAnswer>(raw))
+        session(config, decodeAnswer<SupabaseAnswer>(raw))
 
     private fun session(config: AuthConfig, answer: SupabaseAnswer): Session {
         val access = answer.accessToken

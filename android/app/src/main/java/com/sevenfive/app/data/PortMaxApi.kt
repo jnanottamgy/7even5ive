@@ -1,6 +1,5 @@
 package com.sevenfive.app.data
 
-import kotlinx.serialization.SerializationException
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -16,7 +15,7 @@ class PortMaxApi(private val http: Http, private val baseUrl: () -> String) {
         val raw = http.get("${baseUrl()}/v1/connectors/$college")
         val info = try {
             AppJson.decodeFromString<ConnectorInfo>(raw)
-        } catch (e: SerializationException) {
+        } catch (e: IllegalArgumentException) { // SerializationException is one
             // Say what came back: settings hold no secrets, and a wrong server shows itself here.
             val start = raw.take(120).replace(Regex("\\s+"), " ")
             throw ApiException(0, "PortMax sent settings this app can't read: \"$start\" (${e.message?.take(160)})")
@@ -37,7 +36,7 @@ class PortMaxApi(private val http: Http, private val baseUrl: () -> String) {
             put("college", college)
             put("pages", pages)
         }
-        return AppJson.decodeFromString(http.post("${baseUrl()}/v1/pages", body.toString()))
+        return decodeAnswer(http.post("${baseUrl()}/v1/pages", body.toString()))
     }
 
     fun forget() {

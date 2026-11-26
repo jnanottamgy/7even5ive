@@ -4,6 +4,7 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import androidx.core.content.edit
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -138,5 +139,26 @@ class SessionStore(context: Context, private val sealer: Sealer = KeystoreSealer
         const val SEALED = "sealed"
         const val DEMO = "demo"
         const val ACCOUNT = "account"
+    }
+}
+
+/**
+ * The last sign-in settings and the server they came from ([ConfigCache]), so someone signed in
+ * opens the app without asking for them again. Nothing secret: [AuthConfig] says why.
+ */
+class AuthConfigStore(context: Context) : ConfigCache {
+    private val prefs = context.getSharedPreferences("auth_config", Context.MODE_PRIVATE)
+
+    override fun load(): Pair<String, AuthConfig>? {
+        val server = prefs.getString("server", null) ?: return null
+        val json = prefs.getString("config", null) ?: return null
+        return runCatching { server to AppJson.decodeFromString<AuthConfig>(json) }.getOrNull()
+    }
+
+    override fun save(server: String, config: AuthConfig) {
+        prefs.edit {
+            putString("server", server)
+            putString("config", AppJson.encodeToString(config))
+        }
     }
 }

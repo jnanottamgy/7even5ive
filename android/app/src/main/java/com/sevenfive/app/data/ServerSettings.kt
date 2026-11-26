@@ -1,6 +1,7 @@
 package com.sevenfive.app.data
 
 import android.content.Context
+import androidx.core.content.edit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -45,7 +46,7 @@ data class ServerConfig(
 }
 
 /** Server addresses only. The token is a build constant and is never written to disk here. */
-class ServerSettings(context: Context, defaultHost: String, private val defaultServer: String = "") {
+class ServerSettings(context: Context, private val defaultHost: String, private val defaultServer: String = "") {
     private val prefs = context.getSharedPreferences("servers", Context.MODE_PRIVATE)
 
     /** The build's own choice: its online server if it has one, else the laptop default. */
@@ -55,11 +56,28 @@ class ServerSettings(context: Context, defaultHost: String, private val defaultS
     private val _config = MutableStateFlow(load())
     val config: StateFlow<ServerConfig> = _config.asStateFlow()
 
+    /**
+     * The server an older build of the app used, when this build's own default took over from
+     * it: an account signed in there belongs to that server, so it is signed out (the demo just
+     * moves along). Kept until [movedHandled], so a restart before then still signs it out.
+     */
+    val movedFrom: String? get() = prefs.getString(MOVED_FROM, null)
+
+    fun movedHandled() {
+        prefs.edit { remove(MOVED_FROM) }
+    }
+
     private fun load(): ServerConfig {
         // A build with a new online server takes over from whatever an older build saved,
         // so installing it is enough. A choice made under this same build is kept.
-        if (prefs.getString("default_seen", "") != defaultServer) {
-            prefs.edit().clear().putString("default_seen", defaultServer).apply()
+        val seen = prefs.getString(DEFAULT_SEEN, null)
+        if ((seen ?: "") != defaultServer) {
+            val moved = movedFrom(seen, prefs.getString("core", null), defaultServer, defaultHost)
+            prefs.edit {
+                clear()
+                putString(DEFAULT_SEEN, defaultServer)
+                if (moved != null) putString(MOVED_FROM, moved)
+            }
             return buildDefault
         }
         return ServerConfig(
@@ -81,5 +99,25 @@ class ServerSettings(context: Context, defaultHost: String, private val defaultS
             .putString("portal", clean.portalUrl)
             .apply()
         _config.value = clean
+    }
+
+    companion object {
+        private const val DEFAULT_SEEN = "default_seen"
+        private const val MOVED_FROM = "moved_from"
+
+        /**
+         * The core address the app used before, when this build's [defaultServer] takes over from
+         * the one an older build last saw ([seen]: null on a new install): the address chosen then
+         * ([savedCore]), else that build's own default. Null when the app stays where it was.
+         */
+        fun movedFrom(seen: String?, savedCore: String?, defaultServer: String, defaultHost: String): String? {
+            if ((seen ?: "") == defaultServer) return null
+            if (seen == null && savedCore == null) return null // a new install: nothing was used before
+            val before = savedCore
+                ?: if (seen.isNullOrBlank()) ServerConfig.forHost(defaultHost).coreUrl else ServerConfig.forOnline(seen).coreUrl
+            val now = if (defaultServer.isNotBlank()) ServerConfig.forOnline(defaultServer).coreUrl
+            else ServerConfig.forHost(defaultHost).coreUrl
+            return before.trimEnd('/').takeIf { it != now.trimEnd('/') }
+        }
     }
 }

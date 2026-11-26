@@ -50,6 +50,21 @@ import java.time.Instant
 
 data class KindStyle(val label: String, val icon: ImageVector)
 
+/**
+ * Keys for a lazy list that never repeat (a repeated key closes the app): each item's [key], and
+ * for a second item with the same one "CS301#2", "CS301#3"... Unlike the plain index, a key stays
+ * with its item when the list is re-sorted, so items still animate to their new place.
+ */
+fun <T> uniqueKeys(items: List<T>, key: (T) -> String): List<String> {
+    val seen = HashMap<String, Int>()
+    return items.map { item ->
+        val k = key(item)
+        val n = (seen[k] ?: 0) + 1
+        seen[k] = n
+        if (n == 1) k else "$k#$n"
+    }
+}
+
 fun kindStyle(kind: String): KindStyle = when (kind) {
     "deadline" -> KindStyle("Deadline", Icons.AutoMirrored.Outlined.Assignment)
     "exam" -> KindStyle("Exam", Icons.Outlined.Quiz)

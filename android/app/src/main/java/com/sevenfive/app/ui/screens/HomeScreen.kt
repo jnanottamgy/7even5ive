@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
@@ -70,6 +71,7 @@ import com.sevenfive.app.ui.components.SectionHeader
 import com.sevenfive.app.ui.components.TabScaffold
 import com.sevenfive.app.ui.components.kindColor
 import com.sevenfive.app.ui.components.kindStyle
+import com.sevenfive.app.ui.components.uniqueKeys
 import com.sevenfive.app.ui.theme.LocalAppColors
 import com.sevenfive.app.ui.theme.LocalStatusColors
 import com.sevenfive.app.ui.theme.Motion
@@ -85,10 +87,8 @@ fun HomeScreen(vm: AppViewModel, onSettings: () -> Unit) {
     val approved by vm.approved.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     val cards = state.cards
-    LaunchedEffect(Unit) {
-        vm.refreshSettings()
-        vm.loadBriefing()
-    }
+    // After the cards, one request at a time (AppViewModel.loadHome).
+    LaunchedEffect(Unit) { vm.loadHome() }
     val due = cards?.dueThisWeek.orEmpty()
     val name = cards?.student?.name?.substringBefore(' ')?.takeIf { it.isNotBlank() }
 
@@ -322,8 +322,10 @@ private fun TodayClasses(classes: List<ClassSlot>, modifier: Modifier = Modifier
     val app = LocalAppColors.current
     Column(modifier) {
         SectionHeader("Today's classes")
+        // Two slots can share a start and a subject (a lab split in two): keys must still differ.
+        val keys = uniqueKeys(classes) { "${it.start}-${it.subjectCode}" }
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(classes, key = { "${it.start}-${it.subjectCode}" }) { c ->
+            itemsIndexed(classes, key = { i, _ -> keys[i] }) { _, c ->
                 Column(
                     Modifier
                         .glassSurface(shape = MaterialTheme.shapes.medium)

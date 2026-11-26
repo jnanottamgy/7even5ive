@@ -4,6 +4,7 @@ import com.sevenfive.app.data.AccountState
 import com.sevenfive.app.data.Accounts
 import com.sevenfive.app.data.ApiException
 import com.sevenfive.app.data.AuthConfig
+import com.sevenfive.app.data.ConfigCache
 import com.sevenfive.app.data.CoreApi
 import com.sevenfive.app.data.Http
 import com.sevenfive.app.data.ProfileForm
@@ -234,7 +235,7 @@ class AccountsTest {
         }
         store.saved = Saved.Account(session(expiresIn = 10))
         accounts.start()
-        accounts.onSwitch = { _, token -> if (token != null) accounts.core.removeDeviceAs(token, "phone-1") }
+        accounts.onLeft = { token, _ -> accounts.core.removeDeviceAs(token, "phone-1") }
         withContext(Dispatchers.Default) {
             withTimeout(5_000) {
                 accounts.signOut()
@@ -249,8 +250,9 @@ class AccountsTest {
     fun `the phone is unregistered with the leaving student's own token`() = runTest {
         store.saved = Saved.Account(session())
         accounts.start()
-        accounts.onSwitch = { _, token -> if (token != null) accounts.core.removeDeviceAs(token, "phone-1") }
+        accounts.onLeft = { token, _ -> accounts.core.removeDeviceAs(token, "phone-1") }
         accounts.signOut()
+        waitFor { requests("/api/devices/remove").isNotEmpty() && requests("/auth/v1/logout").isNotEmpty() }
         val remove = requests("/api/devices/remove").single()
         assertEquals("Bearer access-1", remove.getHeader("Authorization"))
         assertEquals("Bearer access-1", requests("/auth/v1/logout").single().getHeader("Authorization"))
@@ -261,6 +263,7 @@ class AccountsTest {
         store.saved = Saved.Account(session(expiresIn = 20))
         accounts.start()
         accounts.signOut()
+        waitFor { requests("/auth/v1/logout").isNotEmpty() }
         assertEquals("Bearer access-2", requests("/auth/v1/logout").single().getHeader("Authorization"))
     }
 
@@ -401,12 +404,72 @@ class AccountsTest {
         store.saved = Saved.Account(session())
         accounts.start()
         val left = mutableListOf<Saved>()
-        accounts.onSwitch = { leaving, _ -> left += leaving }
+        accounts.onSwitch = { leaving -> left += leaving }
         accounts.signOut()
+        waitFor { requests("/auth/v1/logout").isNotEmpty() }
         val logout = requests("/auth/v1/logout").single()
         assertEquals("Bearer access-1", logout.getHeader("Authorization"))
         assertEquals(listOf<Saved>(Saved.Account(session())), left)
         assertEquals(AccountState.SignedOut(null), accounts.state.value)
+    }
+
+    @Test
+    fun `logging out moves on at once and leaves the slow part to the background`() = runTest {
+        refreshDelay = 3_000 // Supabase answering very slowly
+        store.saved = Saved.Account(session(expiresIn = 20)) // about to expire: a refresh comes first
+        accounts.start()
+        val left = mutableListOf<Saved>()
+        accounts.onSwitch = { leaving -> left += leaving }
+        withContext(Dispatchers.Default) { withTimeout(1_000) { accounts.signOut() } }
+        assertEquals(AccountState.SignedOut(null), accounts.state.value)
+        assertEquals(1, left.size) // this phone already forgot them
+        assertNull(accounts.token())
+        // Then, in its own time, the session really ends at Supabase with a fresh token.
+        withContext(Dispatchers.Default) { withTimeout(10_000) { while (requests("/auth/v1/logout").isEmpty()) delay(20) } }
+        assertEquals("Bearer access-2", requests("/auth/v1/logout").single().getHeader("Authorization"))
+    }
+
+    @Test
+    fun `an account made on the server an older build used is signed out, on its own server`() = runTest {
+        store.saved = Saved.Account(session())
+        val left = mutableListOf<Saved>()
+        accounts.onSwitch = { leaving -> left += leaving }
+        val unregistered = CopyOnWriteArrayList<String>()
+        accounts.onLeft = { _, server -> unregistered += server }
+        accounts.start(movedFrom = "https://old.example")
+        assertEquals(AccountState.SignedOut(Accounts.MOVED), accounts.state.value)
+        assertEquals(Saved.Nobody, store.saved)
+        assertNull(accounts.token())
+        waitFor { left.size == 1 && unregistered.size == 1 && requests("/auth/v1/logout").isNotEmpty() }
+        assertEquals(listOf("https://old.example"), unregistered.toList()) // the phone leaves the old server
+        assertTrue(requests("/api/me").isEmpty()) // nothing asked of the new server as them
+    }
+
+    @Test
+    fun `the demo moves along with the app`() = runTest {
+        store.saved = Saved.Demo
+        accounts.start(movedFrom = "https://old.example")
+        assertEquals(AccountState.Demo, accounts.state.value)
+        assertEquals("demo-student-token", accounts.token())
+    }
+
+    @Test
+    fun `remembered sign-in settings let a signed-in app open without asking`() = runTest {
+        val cache = MemoryConfigCache()
+        cache.saved = base to AuthConfig(enabled = true, supabaseUrl = base, publishableKey = "sb_publishable_x")
+        accounts = Accounts(store, SupabaseAuth(OkHttpClient()) { now }, "demo-student-token", { now }, configCache = cache)
+        accounts.core = CoreApi(Http(accounts)) { coreBase }
+        store.saved = Saved.Account(session())
+        accounts.start()
+        assertTrue(accounts.hasConfigFor(base))
+        assertTrue(!accounts.hasConfigFor("https://another.example"))
+        assertEquals("sb_publishable_x", accounts.config.value?.publishableKey)
+        assertTrue(requests("/api/auth/config").isEmpty())
+        // Each answer is remembered for the next start.
+        coreBase = "$base/older"
+        accounts.loadConfig()
+        assertEquals("$base/older", cache.saved?.first)
+        assertTrue(cache.saved?.second?.usable == false)
     }
 
     @Test
@@ -445,6 +508,14 @@ class AccountsTest {
     fun `a config without a key offers only the demo`() {
         assertTrue(!AuthConfig(enabled = true, supabaseUrl = "https://x.supabase.co").usable)
         assertTrue(AuthConfig(enabled = true, supabaseUrl = "https://x.supabase.co", publishableKey = "k").usable)
+    }
+
+    private class MemoryConfigCache : ConfigCache {
+        @Volatile var saved: Pair<String, AuthConfig>? = null
+        override fun load(): Pair<String, AuthConfig>? = saved
+        override fun save(server: String, config: AuthConfig) {
+            saved = server to config
+        }
     }
 
     private class MemoryStore : SavedAccount {

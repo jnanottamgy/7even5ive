@@ -1,7 +1,5 @@
 package com.sevenfive.app.ui.screens
 
-import android.content.Intent
-import android.provider.Settings
 import android.webkit.CookieManager
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Bedtime
@@ -10,6 +8,7 @@ import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.LinkOff
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.PhoneInTalk
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material3.AlertDialog
@@ -17,11 +16,14 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.sevenfive.app.data.CallRecord
-import com.sevenfive.app.notify.Notifications
+import androidx.activity.compose.LocalActivity
+import androidx.compose.ui.graphics.Color
 import com.sevenfive.app.notify.Push
 import com.sevenfive.app.ui.LocalOpenVoice
 import com.sevenfive.app.ui.components.CallConsentDialog
 import com.sevenfive.app.ui.components.GroupSwitchRow
+import com.sevenfive.app.ui.components.rememberNotificationsPermitted
+import com.sevenfive.app.ui.components.turnOnNotifications
 import com.sevenfive.app.util.Time
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -353,41 +355,37 @@ private fun NotificationsSection(vm: AppViewModel) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val keepAlive by vm.keepAlive.collectAsStateWithLifecycle()
     val context = vm.container.appContext
-    val activity = androidx.compose.ui.platform.LocalContext.current as? android.app.Activity
+    val activity = LocalActivity.current
     val app = LocalAppColors.current
     // Read again whenever Settings comes back to the front (after the prompt or system settings).
-    var permitted by remember { mutableStateOf(Notifications.permitted(context)) }
-    LifecycleResumeEffect(Unit) {
-        permitted = Notifications.permitted(context)
-        onPauseOrDispose { }
-    }
+    val permitted = rememberNotificationsPermitted()
+    // Without Firebase a closed app is checked every 15 minutes, and Android holds those checks
+    // back while the phone is idle (Doze): say so rather than promise a time.
+    val instant = Push.configured && settings?.push?.wakeups == true
     Group(
         header = "Notifications and background",
         footer = "Notifications are only your own reminders and a missed urgent call. The briefing and " +
-            "attendance stay in the app.",
+            "attendance stay in the app." +
+            if (instant) "" else " Without Firebase a reminder can arrive late while the phone is idle: " +
+                "the team turns on instant delivery with the setup guide's Firebase step.",
     ) {
         GroupRow(
-            if (permitted) "Notifications are on" else "Allow notifications",
-            icon = Icons.Outlined.Notifications,
+            if (permitted) "Notifications are on" else "Notifications are off",
+            icon = if (permitted) Icons.Outlined.Notifications else Icons.Outlined.NotificationsOff,
             iconColor = if (permitted) LocalStatusColors.current.safe else MaterialTheme.colorScheme.error,
-            detail = if (permitted) "Reminders reach you even when the app is closed" else "Reminders will only show in the app",
+            titleColor = if (permitted) Color.Unspecified else MaterialTheme.colorScheme.error,
+            detail = when {
+                !permitted -> "Your reminders can't reach you while the app is closed. Tap to turn them on."
+                instant -> "Reminders reach you even when the app is closed"
+                else -> "Reminders reach you when the app is closed, but can be late while the phone is idle"
+            },
             chevron = !permitted,
-        ) {
-            if (Notifications.needsAsking(context) && activity != null && Notifications.promptStillShows(activity)) {
-                vm.askForNotifications()
-            } else {
-                context.startActivity(
-                    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                        .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                )
-            }
-        }
+        ) { turnOnNotifications(activity, context) { vm.askForNotifications() } }
         GroupDivider()
-        val instant = Push.configured && settings?.push?.wakeups == true
         GroupRow("Delivery", icon = Icons.Outlined.Sync, iconColor = app.material,
             detail = if (instant) "At once (Firebase wakes the phone; no content passes through it)"
-            else "At once while the app is open, within 15 minutes when it's closed")
+            else "At once while the app is open. When it's closed, about every 15 minutes, and later " +
+                "while the phone is idle")
         GroupDivider()
         GroupSwitchRow(
             "Keep the portal logged in",

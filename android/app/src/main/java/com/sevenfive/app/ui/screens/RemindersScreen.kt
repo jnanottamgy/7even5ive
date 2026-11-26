@@ -22,13 +22,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sevenfive.app.data.Reminder
+import com.sevenfive.app.notify.Push
 import com.sevenfive.app.ui.AppViewModel
 import com.sevenfive.app.ui.components.AppCard
 import com.sevenfive.app.ui.components.EmptyState
 import com.sevenfive.app.ui.components.GlassPill
 import com.sevenfive.app.ui.components.IconTile
+import com.sevenfive.app.ui.components.NotificationsOffCard
 import com.sevenfive.app.ui.components.ScreenIntro
 import com.sevenfive.app.ui.components.TabScaffold
+import com.sevenfive.app.ui.components.rememberNotificationsPermitted
 import com.sevenfive.app.ui.theme.LocalAppColors
 import com.sevenfive.app.ui.theme.Motion
 import com.sevenfive.app.util.Time
@@ -37,8 +40,13 @@ import com.sevenfive.app.util.Time
 fun RemindersScreen(vm: AppViewModel, onSettings: () -> Unit) {
     val state by vm.cards.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
+    val settings by vm.settings.collectAsStateWithLifecycle()
+    val permitted = rememberNotificationsPermitted()
     val reminders = state.cards?.reminders.orEmpty()
         .sortedBy { Time.parse(it.firesAt)?.toInstant() }
+    // Without Firebase a closed app is only checked every 15 minutes, which Android holds back
+    // while the phone is idle.
+    val instant = Push.configured && settings?.push?.wakeups == true
 
     TabScaffold("Reminders", vm, onSettings) { padding ->
         if (state.cards == null) {
@@ -47,6 +55,11 @@ fun RemindersScreen(vm: AppViewModel, onSettings: () -> Unit) {
         }
         LazyColumn(contentPadding = padding, verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item(key = "intro") { ScreenIntro("Only the ones you asked for.") }
+            if (!permitted) {
+                item(key = "notifications-off") {
+                    NotificationsOffCard(onAsk = { vm.askForNotifications() }, Modifier.animateItem(placementSpec = Motion.item))
+                }
+            }
             if (reminders.isEmpty()) {
                 item(key = "empty") {
                     EmptyState(Icons.Outlined.AlarmOff, "No reminders",
@@ -59,8 +72,9 @@ fun RemindersScreen(vm: AppViewModel, onSettings: () -> Unit) {
             if (reminders.isNotEmpty()) {
                 item(key = "note") {
                     Text(
-                        "Each one arrives as a notification at that time; a call reminder rings your phone " +
-                            "instead (Settings → Urgent call). Nothing else ever notifies you.",
+                        (if (instant) "Each one arrives as a notification at that time; "
+                        else "Each one arrives as a notification around that time (later while the phone is idle); ") +
+                            "a call reminder rings your phone instead (Settings → Urgent call). Nothing else ever notifies you.",
                         style = MaterialTheme.typography.bodySmall,
                         color = LocalAppColors.current.tertiaryLabel,
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),

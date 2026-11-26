@@ -1,5 +1,6 @@
 package com.sevenfive.app.ui.auth
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sevenfive.app.AppContainer
@@ -15,6 +16,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /** Where the signed-out flow is. */
@@ -29,6 +31,26 @@ sealed interface AuthStep {
 
     /** The emailed code and the new password. */
     data class Reset(val email: String) : AuthStep
+
+    companion object {
+        /** The step as plain strings, for the [SavedStateHandle]: which one, and its email. */
+        fun save(step: AuthStep): Pair<String, String?> = when (step) {
+            Login -> "login" to null
+            SignUp -> "signup" to null
+            is Code -> "code" to step.email
+            Forgot -> "forgot" to null
+            is Reset -> "reset" to step.email
+        }
+
+        /** Back from [save]; a step that needs an email it doesn't have starts that part over. */
+        fun restore(name: String?, email: String?): AuthStep = when (name) {
+            "signup" -> SignUp
+            "code" -> if (email.isNullOrBlank()) SignUp else Code(email)
+            "forgot" -> Forgot
+            "reset" -> if (email.isNullOrBlank()) Forgot else Reset(email)
+            else -> Login
+        }
+    }
 }
 
 /** A username's state while it is typed. */
@@ -36,16 +58,28 @@ data class NameCheck(val name: String = "", val checking: Boolean = false, val r
 
 /**
  * Signing up, in, out and the profile, for the screens before the main app. Each action runs
- * once at a time ([busy]); a refusal comes back as [error], in the service's own words.
+ * once at a time ([busy]), except Log out, which never waits; a refusal comes back as [error],
+ * in the service's own words. The step (and its email) is kept in [saved], so a student who
+ * leaves to read the emailed code finds the code screen again even if Android closed the app.
  */
-class AuthViewModel(private val container: AppContainer) : ViewModel() {
+class AuthViewModel(
+    private val container: AppContainer,
+    private val saved: SavedStateHandle = SavedStateHandle(),
+) : ViewModel() {
     private val accounts = container.accounts
     val account: StateFlow<AccountState> = accounts.state
     val config: StateFlow<AuthConfig?> = accounts.config
     val server: StateFlow<ServerConfig> = container.servers.config
 
-    private val _step = MutableStateFlow<AuthStep>(AuthStep.Login)
+    private val _step = MutableStateFlow(AuthStep.restore(saved[STEP], saved[EMAIL]))
     val step: StateFlow<AuthStep> = _step.asStateFlow()
+
+    private fun setStep(step: AuthStep) {
+        _step.value = step
+        val (name, email) = AuthStep.save(step)
+        saved[STEP] = name
+        saved[EMAIL] = email
+    }
 
     private val _busy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
@@ -64,15 +98,32 @@ class AuthViewModel(private val container: AppContainer) : ViewModel() {
     val name: StateFlow<NameCheck> = _name.asStateFlow()
     private var nameJob: Job? = null
 
+    private var configJob: Job? = null
+    /** The action in flight ([run]), so Log out can drop it. */
+    private var job: Job? = null
+
     init {
-        reloadConfig()
+        // This server's sign-in settings, unless someone is signed in already and they are known
+        // (remembered from an earlier start): opening the app then asks the server for nothing
+        // extra. The login screen always gets fresh ones (below), and so does a new server.
+        loadConfig {
+            val first = accounts.state.first { it != AccountState.Starting }
+            val known = first !is AccountState.SignedOut && accounts.hasConfigFor(container.servers.config.value.coreUrl)
+            if (!known) accounts.loadConfig()
+        }
         // A session saved on this phone whose profile hasn't been confirmed yet: ask now.
         if (accounts.state.value is AccountState.Checking) retryProfile()
-        // Once someone is in, the next time the login flow shows it starts at Log in again.
         viewModelScope.launch {
+            var last: AccountState = accounts.state.value
             accounts.state.collect { state ->
+                // Signed out after using the app: the login screen asks for current settings.
+                if (state is AccountState.SignedOut && last !is AccountState.SignedOut && last != AccountState.Starting) {
+                    reloadConfig()
+                }
+                last = state
+                // Once someone is in, the next time the login flow shows it starts at Log in again.
                 if (state.usesApp || state is AccountState.NeedsProfile) {
-                    _step.value = AuthStep.Login
+                    setStep(AuthStep.Login)
                     _error.value = null
                     _notice.value = null
                 }
@@ -80,27 +131,34 @@ class AuthViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    private var configJob: Job? = null
-
     /** Asks the server for its sign-in settings. [force]: a load already under way (perhaps to
      * the previous address) is replaced. */
     fun reloadConfig(force: Boolean = false) {
         if (configJob?.isActive == true && !force) return
         configJob?.cancel()
+        loadConfig { accounts.loadConfig() }
+    }
+
+    /** Runs [block] as the one config load, with [loadingConfig] on meanwhile. A load replaced by
+     * a newer one leaves the flag to that one. */
+    private fun loadConfig(block: suspend () -> Unit) {
         _loadingConfig.value = true
-        configJob = viewModelScope.launch {
+        lateinit var self: Job
+        self = viewModelScope.launch(start = kotlinx.coroutines.CoroutineStart.LAZY) {
             try {
-                accounts.loadConfig()
+                block()
             } finally {
-                _loadingConfig.value = false
+                if (configJob === self) _loadingConfig.value = false
             }
         }
+        configJob = self
+        self.start()
     }
 
     fun go(step: AuthStep) {
         _error.value = null
         _notice.value = null
-        _step.value = step
+        setStep(step)
     }
 
     fun clearError() {
@@ -116,7 +174,7 @@ class AuthViewModel(private val container: AppContainer) : ViewModel() {
                 // Signed up but never entered the code: a new one, and the code screen.
                 val email = login.trim().lowercase()
                 runCatching { accounts.resendSignUpCode(email) }
-                _step.value = AuthStep.Code(email)
+                setStep(AuthStep.Code(email))
                 _notice.value = "Confirm your email first: we sent you a new code."
                 return@run
             }
@@ -127,7 +185,7 @@ class AuthViewModel(private val container: AppContainer) : ViewModel() {
     fun signUp(email: String, password: String) = run {
         when (val result = accounts.signUp(email, password)) {
             is SignUpResult.CodeSent -> {
-                _step.value = AuthStep.Code(result.email)
+                setStep(AuthStep.Code(result.email))
                 _notice.value = null
             }
             is SignUpResult.SignedIn -> Unit // the account state moves on by itself
@@ -143,20 +201,37 @@ class AuthViewModel(private val container: AppContainer) : ViewModel() {
 
     fun sendResetCode(email: String) = run {
         accounts.sendPasswordCode(email)
-        _step.value = AuthStep.Reset(email.trim().lowercase())
+        setStep(AuthStep.Reset(email.trim().lowercase()))
         _notice.value = "If $email has an account, a code is on its way."
     }
 
     fun resetPassword(email: String, code: String, password: String) = run {
         accounts.resetPassword(email, code, password)
-        _step.value = AuthStep.Login
+        setStep(AuthStep.Login)
     }
 
     fun tryDemo() = run { accounts.useDemo() }
 
-    fun logOut() = run {
-        accounts.signOut()
-        _step.value = AuthStep.Login
+    /**
+     * Never ignored and never held up: whatever else is in flight (a profile check on a slow
+     * network) is dropped, the screen moves to Log in at once, and what needs the network
+     * happens afterwards in the background (Accounts.signOut).
+     */
+    fun logOut() {
+        job?.cancel()
+        _busy.value = false
+        _error.value = null
+        _notice.value = null
+        viewModelScope.launch {
+            try {
+                accounts.signOut()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Signed out on this phone either way.
+            }
+            setStep(AuthStep.Login)
+        }
     }
 
     fun retryProfile() = run { accounts.refreshMe() }
@@ -209,7 +284,7 @@ class AuthViewModel(private val container: AppContainer) : ViewModel() {
         if (_busy.value) return
         _busy.value = true
         _error.value = null
-        viewModelScope.launch {
+        job = viewModelScope.launch {
             try {
                 block()
             } catch (e: ApiException) {
@@ -226,6 +301,9 @@ class AuthViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     companion object {
+        private const val STEP = "auth_step"
+        private const val EMAIL = "auth_email"
+
         /** The server's rules, checked here first so a typo is pointed out at once. */
         fun localProblem(name: String): String? = when {
             name.length < 3 || name.length > 30 -> "Use 3 to 30 characters."

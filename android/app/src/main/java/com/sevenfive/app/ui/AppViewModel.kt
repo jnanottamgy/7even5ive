@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.sevenfive.app.AppContainer
 import com.sevenfive.app.data.AccountState
 import com.sevenfive.app.data.ApiException
+import com.sevenfive.app.data.AuthConfig
+import com.sevenfive.app.data.McpConnection
 import com.sevenfive.app.data.PersonalToken
 import com.sevenfive.app.data.WhatsAppLink
 import com.sevenfive.app.data.AppSettings
@@ -22,10 +24,14 @@ import com.sevenfive.app.portal.PortalStatus
 import com.sevenfive.app.voice.VoiceAssistant
 import com.sevenfive.app.util.Diagnostics
 import com.sevenfive.app.util.Time
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -37,6 +43,16 @@ data class DoneApproval(val approval: Approval, val title: String)
 
 /** A snackbar line, optionally with one action ("Undo"). */
 data class UiMessage(val text: String, val action: String? = null, val onAction: (() -> Unit)? = null)
+
+/** Settings → Connect Claude Code or Codex: the MCP address and the AI apps signed in to it. */
+data class ConnectionsState(
+    val loading: Boolean = false,
+    /** The server's MCP address; null until it has answered (the screen shows its own guess). */
+    val mcpUrl: String? = null,
+    val connections: List<McpConnection> = emptyList(),
+    /** Why the list couldn't be read, in the server's words. */
+    val problem: String? = null,
+)
 
 class AppViewModel(val container: AppContainer) : ViewModel() {
     val cards: StateFlow<CardsState> = container.cards.state
@@ -109,6 +125,22 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     /** The code to send the bot, while the student links WhatsApp. */
     val whatsapp: StateFlow<WhatsAppLink?> = _whatsapp.asStateFlow()
 
+    private val _connections = MutableStateFlow(ConnectionsState())
+    val connections: StateFlow<ConnectionsState> = _connections.asStateFlow()
+    /** Moves on when the person changes: a list asked for by the last one is never shown. */
+    private var connectionsFor = 0
+
+    /** How this server's students sign in: whether it has accounts at all, or only the demo. */
+    val authConfig: StateFlow<AuthConfig?> = container.accounts.config
+
+    /** When the settings and the briefing were last read (This week asks again after a while). */
+    private var settingsAt = 0L
+    private var briefingAt = 0L
+    private var homeJob: Job? = null
+
+    /** Android's notification prompt is asked for at most once per run of the app by itself. */
+    private var notificationsAsked = false
+
     init {
         viewModelScope.launch { container.finder.messages.collect { say(it) } }
         // Someone else is using the app now: nothing of the last person's stays on screen.
@@ -126,10 +158,22 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
                     _settings.value = null
                     _callHistory.value = emptyList()
                     _briefing.value = null
+                    settingsAt = 0L
+                    briefingAt = 0L
                     _tour.value = null
                     _personalToken.value = null
                     _whatsapp.value = null
+                    connectionsFor++
+                    _connections.value = ConnectionsState()
                 }
+            }
+        }
+        // Reminders reach a closed app only as notifications. Whenever the student has one
+        // pending, however it was set (a tap, the voice assistant, WhatsApp, an AI app), and
+        // Android 13+ hasn't allowed them yet, ask.
+        viewModelScope.launch {
+            cards.map { it.cards?.reminders?.isNotEmpty() == true }.distinctUntilChanged().collect { pending ->
+                if (pending) askForNotificationsIfNeeded()
             }
         }
         if (Diagnostics.hasUnseen(container.appContext)) {
@@ -284,10 +328,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
             val r = container.core.setReminder(item.id, beforeMinutes, channel)
             val at = Time.parse(r.firesAt)?.let { Time.dayAndTime(it) } ?: "later"
             say(if (r.channel == "call") "We'll call you $at" else "Reminder set for $at")
-            // The first reminder is when a notification permission makes sense to ask for (once;
-            // after that the Settings row takes the student to the system settings).
-            val ctx = container.appContext
-            if (Notifications.needsAsking(ctx) && !Notifications.asked(ctx)) _askNotifications.trySend(Unit)
+            askForNotificationsIfNeeded()
         } catch (e: ApiException) {
             say(e.detail)
         }
@@ -327,12 +368,31 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     }
 
     // --- settings: calls, Google, background ----------------------------------------------------
-    fun refreshSettings() = viewModelScope.launch {
+    fun refreshSettings() = viewModelScope.launch { fetchSettings() }
+
+    private suspend fun fetchSettings() {
         try {
             _settings.value = container.core.settings()
             _callHistory.value = container.core.callHistory().calls
+            settingsAt = System.currentTimeMillis()
         } catch (e: ApiException) {
             // Settings shows what it has; the offline banner already says why.
+        }
+    }
+
+    /**
+     * What This week shows beside the cards: the call settings (for "Call me") and today's
+     * briefing. Asked for once the cards have answered, one request after another, so opening
+     * the app doesn't send a sleeping server several requests at once; and not again for a
+     * couple of minutes, as the tab is opened often.
+     */
+    fun loadHome() {
+        if (homeJob?.isActive == true) return
+        homeJob = viewModelScope.launch {
+            cards.first { !it.loading }
+            val now = System.currentTimeMillis()
+            if (_settings.value == null || now - settingsAt > HOME_FRESH_MILLIS) fetchSettings()
+            if (_briefing.value == null || now - briefingAt > HOME_FRESH_MILLIS) fetchBriefing()
         }
     }
 
@@ -341,6 +401,8 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
             val calls = container.core.setCalls(enabled = enabled)
             _settings.value = _settings.value?.copy(calls = calls)
             say(if (enabled) "Urgent calls are on" else "Urgent calls are off; your call reminders stay, as notifications")
+            // A call that can't ring becomes a notification.
+            if (enabled) askForNotificationsIfNeeded()
         } catch (e: ApiException) {
             say(e.detail)
         }
@@ -415,6 +477,14 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         _askNotifications.trySend(Unit)
     }
 
+    /** Asks Android for notifications (13+) when they aren't allowed, at most once per run by
+     * itself; after that the "Notifications are off" rows in Reminders and Settings ask. */
+    private fun askForNotificationsIfNeeded() {
+        if (notificationsAsked || !Notifications.needsAsking(container.appContext)) return
+        notificationsAsked = true
+        _askNotifications.trySend(Unit)
+    }
+
     // --- college mail ---------------------------------------------------------------------------
     fun checkMail() {
         if (_checkingMail.value) return
@@ -440,9 +510,10 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     }
 
     // --- the briefing ----------------------------------------------------------------------------
-    fun loadBriefing() = viewModelScope.launch {
+    private suspend fun fetchBriefing() {
         try {
             _briefing.value = container.core.briefing()
+            briefingAt = System.currentTimeMillis()
         } catch (e: ApiException) {
             // The card stays as it was; the offline banner says why.
         }
@@ -456,7 +527,11 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun stopBriefing() = container.briefingPlayer.stop()
 
     // --- the voice assistant -----------------------------------------------------------------------
-    fun startVoice() = container.voice.start()
+    /** One voice at a time: the briefing stops rather than talk over the conversation. */
+    fun startVoice() {
+        container.briefingPlayer.stop()
+        container.voice.start()
+    }
 
     fun stopVoice() = container.voice.stop()
 
@@ -474,13 +549,13 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     }
 
     // --- the account ----------------------------------------------------------------------------
+    /** The screen moves to the login at once; what needs the network follows in the background. */
     fun logOut() = action("account") {
-        try {
-            container.accounts.signOut()
-        } catch (e: ApiException) {
-            say(e.detail)
-        }
+        container.accounts.signOut()
     }
+
+    /** This server's sign-in settings again (whether it has accounts), for Settings. */
+    fun refreshAuthConfig() = viewModelScope.launch { container.accounts.loadConfig() }
 
     /** Only from the delete dialog, after typing DELETE. */
     fun deleteAccount() = action("delete") {
@@ -502,6 +577,39 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
 
     fun dismissPersonalToken() {
         _personalToken.value = null
+    }
+
+    // --- AI apps (MCP): Claude Code and Codex sign in with OAuth --------------------------------
+    /** The MCP address and the AI apps connected to it. Without the server's list (an older
+     * server, the network) the screen still shows the commands, with its own guess of the address. */
+    fun loadConnections() {
+        if (_connections.value.loading) return
+        _connections.update { it.copy(loading = true, problem = null) }
+        val asked = connectionsFor
+        viewModelScope.launch {
+            val next = try {
+                val out = container.core.connections()
+                ConnectionsState(mcpUrl = out.mcpUrl.ifBlank { null }, connections = out.connections)
+            } catch (e: ApiException) {
+                val problem = if (e.status == 404) "This server can't list connected apps yet." else e.detail
+                _connections.value.copy(loading = false, problem = problem)
+            }
+            if (asked == connectionsFor) _connections.value = next
+        }
+    }
+
+    /** Only after the student confirmed. An app that wasn't connected any more just leaves the list. */
+    fun disconnect(connection: McpConnection) = action("mcp:${connection.id}") {
+        try {
+            container.core.disconnect(connection.id)
+            say("${connection.label} can't reach your account any more")
+        } catch (e: ApiException) {
+            if (e.status != 404) {
+                say(e.detail)
+                return@action
+            }
+        }
+        _connections.update { s -> s.copy(connections = s.connections.filterNot { it.id == connection.id }) }
     }
 
     fun deletePersonalToken() = action("token") {
@@ -558,6 +666,11 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         container.accounts.loadConfig()
         if (!signedIn) refresh()
         say(if (signedIn) "Server changed to ${config.coreUrl}: log in there." else "Saved. Connecting to ${config.coreUrl}")
+    }
+
+    private companion object {
+        /** This week's settings and briefing are read again after this long. */
+        const val HOME_FRESH_MILLIS = 2 * 60_000L
     }
 
     private fun action(key: String, block: suspend () -> Unit) {

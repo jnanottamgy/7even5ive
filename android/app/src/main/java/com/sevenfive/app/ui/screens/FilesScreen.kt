@@ -112,7 +112,9 @@ fun FilesScreen(vm: AppViewModel, onSettings: () -> Unit) {
             if (!page.available) {
                 vm.say(page.reason ?: "The library can't be reached right now.")
             } else {
-                files = if (offset == 0) page.files else files + page.files
+                // A file added or removed between pages shifts the next page: one already shown
+                // can come again, and a repeated key would close the app.
+                files = (if (offset == 0) page.files else files + page.files).distinctBy { it.id }
                 nextOffset = page.nextOffset
             }
         } catch (e: ApiException) {

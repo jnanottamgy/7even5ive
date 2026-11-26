@@ -48,7 +48,7 @@ interface TokenSource {
     suspend fun rejected(used: String, status: Int, code: String?): String? = null
 }
 
-/** One fixed token (tests, and the one call made for someone leaving: [Accounts.onSwitch]). */
+/** One fixed token (tests, and the one call made for someone leaving: [Accounts.onLeft]). */
 class FixedToken(private val value: String) : TokenSource {
     override suspend fun token(): String = value
 }
@@ -66,8 +66,10 @@ class FixedToken(private val value: String) : TokenSource {
  * started for one person (a refresh, a request) and comes back after a change is dropped: a late
  * refresh can't bring back a session that was logged out, and a late answer meant for one student
  * is never applied to the next. A change of person ([adopt], [useDemo], [signOut]) runs to the
- * end even if the screen that asked is gone ([durable]), and the clean-up it runs ([onSwitch])
- * never calls back into this class, so nothing here can wait on itself.
+ * end even if the screen that asked is gone ([durable]), and the clean-up it runs ([onSwitch],
+ * [onLeft]) never calls back into this class, so nothing here can wait on itself. What needs the
+ * network for whoever left runs afterwards in the background ([leaveLater]): a slow network
+ * never holds up the screen or the next person.
  */
 class Accounts(
     private val store: SavedAccount,
@@ -76,16 +78,25 @@ class Accounts(
     private val now: () -> Long = { System.currentTimeMillis() / 1000 },
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     private val disk: kotlinx.coroutines.CoroutineDispatcher = Dispatchers.IO,
+    /** Where the last sign-in settings are remembered across starts (null: nowhere). */
+    private val configCache: ConfigCache? = null,
 ) : TokenSource {
     lateinit var core: CoreApi
 
     /**
      * Runs when the person using the app changes, after the new state is in place: clears what
-     * belonged to [leaving] (cards, the portal login, notifications). [token] is a live token of
-     * theirs for one last call (unregistering this phone), or null when there is none; it must be
-     * used as it is (FixedToken), never through this class.
+     * belonged to [leaving] on this phone (cards, the portal login, notifications). Needs no
+     * network.
      */
-    var onSwitch: suspend (leaving: Saved, token: String?) -> Unit = { _, _ -> }
+    var onSwitch: suspend (leaving: Saved) -> Unit = {}
+
+    /**
+     * Then, in the background and best effort, the one last call for whoever left: unregistering
+     * this phone from their wake-ups on [server], the one they used. [token] is a live token of
+     * theirs and must be used as it is (FixedToken), never through this class. Not called when
+     * no live token could be had.
+     */
+    var onLeft: suspend (token: String, server: String) -> Unit = { _, _ -> }
 
     /** Runs when someone can use the app (an account with its profile, or the demo): registers
      * this phone for their wake-ups. */
@@ -112,15 +123,42 @@ class Accounts(
      * started the process) waits for it a moment instead of going out as no one. */
     private val started = CompletableDeferred<Unit>()
 
-    /** Reads what this phone remembers. Called off the main thread: the Keystore is slow. */
-    fun start() {
-        val loaded = store.load()
+    /**
+     * Reads what this phone remembers. Called off the main thread: the Keystore is slow.
+     * [movedFrom]: the server the app used before this build's own took over
+     * (ServerSettings.movedFrom). An account belongs to the server it was made on, so it is
+     * signed out (and its session ended); the demo moves along with the app.
+     */
+    fun start(movedFrom: String? = null) {
+        var loaded = store.load()
+        val stranded = if (movedFrom != null) loaded as? Saved.Account else null
+        if (stranded != null) {
+            loaded = Saved.Nobody
+            try {
+                store.save(Saved.Nobody)
+            } catch (e: Exception) {
+                // The store keeps the session in memory only (SessionStore says why).
+            }
+        }
+        val cached = try {
+            configCache?.load()
+        } catch (e: Exception) {
+            null
+        }
         val checking = synchronized(lock) {
+            if (cached != null && _config.value == null) {
+                _config.value = cached.second
+                configFrom = cached.first
+            }
             saved = loaded
-            _state.value = stateOf(loaded)
+            _state.value = if (stranded != null) AccountState.SignedOut(MOVED) else stateOf(loaded)
             _state.value is AccountState.Checking
         }
         started.complete(Unit)
+        if (stranded != null && movedFrom != null) {
+            scope.launch { forgetHere(stranded) }
+            leaveLater(stranded, movedFrom)
+        }
         if (checking) scope.launch { refreshMe() }
         if (loaded == Saved.Demo || _state.value is AccountState.Ready) scope.launch { arrive() }
     }
@@ -227,6 +265,9 @@ class Accounts(
                     ended = s.session
                     null
                 } else {
+                    // A 401 or 403 here can be a publishable key the project no longer accepts
+                    // (rotated): this server's current settings are asked for, for the next try.
+                    if (e.status == 401 || e.status == 403) scope.launch { runCatching { loadConfig() } }
                     s.session.accessToken // offline or Supabase busy: the server decides
                 }
             }
@@ -248,11 +289,7 @@ class Accounts(
             current
         }
         persist()
-        try {
-            onSwitch(leaving, null)
-        } catch (e: Exception) {
-            // Clean-up is best effort; the session is gone either way.
-        }
+        forgetHere(leaving)
     }
 
     /** The publishable key to refresh with: the server's current one for this project (keys can
@@ -273,29 +310,38 @@ class Accounts(
 
     // --- the server's sign-in settings -------------------------------------------------------------
     /** Asks the server how to sign in. If it can't be reached, the last answer is kept only if
-     * it came from this same server: another server's Supabase project is never used. */
+     * it came from this same server: another server's Supabase project is never used. Each
+     * answer is remembered ([configCache]) for the next start. */
     suspend fun loadConfig(): AuthConfig? {
         val from = core.baseUrl()
-        try {
-            val loaded = core.authConfig()
-            synchronized(lock) {
-                _config.value = loaded
-                configFrom = from
-            }
+        val answer = try {
+            core.authConfig()
         } catch (e: ApiException) {
-            synchronized(lock) {
-                if (e.status == 404) {
-                    // A server from before accounts: it answers, it just has only the demo.
-                    _config.value = AuthConfig(enabled = false, demo = true)
-                    configFrom = from
-                } else if (configFrom != from) {
-                    _config.value = null
-                    configFrom = null
-                }
+            // A server from before accounts: it answers, it just has only the demo.
+            if (e.status == 404) AuthConfig(enabled = false, demo = true) else null
+        }
+        synchronized(lock) {
+            if (answer != null) {
+                _config.value = answer
+                configFrom = from
+            } else if (configFrom != from) {
+                _config.value = null
+                configFrom = null
+            }
+        }
+        if (answer != null) {
+            try {
+                configCache?.save(from, answer)
+            } catch (e: Exception) {
+                // Asked for again at the next start.
             }
         }
         return _config.value
     }
+
+    /** Whether [server]'s sign-in settings are known already (asked for, or remembered from an
+     * earlier start): someone signed in opens the app without asking for them again. */
+    fun hasConfigFor(server: String): Boolean = synchronized(lock) { _config.value != null && configFrom == server }
 
     private suspend fun requireConfig(): AuthConfig {
         val config = _config.value?.takeIf { it.usable && configFrom == core.baseUrl() } ?: loadConfig()
@@ -353,7 +399,7 @@ class Accounts(
         changing.withLock {
             val leaving = synchronized(lock) { saved }
             if (leaving == Saved.Demo) return@withLock
-            val last = (leaving as? Saved.Account)?.let { liveToken(it.session) }
+            val server = core.baseUrl()
             synchronized(lock) {
                 saved = Saved.Demo
                 epoch++
@@ -361,7 +407,8 @@ class Accounts(
                 _state.value = AccountState.Demo
             }
             persist()
-            leave(leaving, last)
+            forgetHere(leaving)
+            leaveLater(leaving, server)
         }
         arrive()
     }
@@ -370,7 +417,7 @@ class Accounts(
         changing.withLock {
             val leaving = synchronized(lock) { saved }
             val same = leaving is Saved.Account && leaving.session.userId == session.userId
-            val last = if (!same) (leaving as? Saved.Account)?.let { liveToken(it.session) } else null
+            val server = core.baseUrl()
             synchronized(lock) {
                 if (!same) {
                     epoch++
@@ -382,25 +429,52 @@ class Accounts(
                 _state.value = if (me != null) stateOf(saved) else AccountState.Checking()
             }
             persist()
-            if (!same) leave(leaving, last)
+            if (!same) {
+                forgetHere(leaving)
+                leaveLater(leaving, server)
+            }
         }
         refreshMe()
     }
 
-    /** The one last call for whoever just left, with their own token, then their clean-up. */
-    private suspend fun leave(leaving: Saved, last: Session?) {
+    /** Clears this phone of whoever left ([onSwitch]). Best effort. */
+    private suspend fun forgetHere(leaving: Saved) {
         if (leaving == Saved.Nobody) return
-        val token = when (leaving) {
-            Saved.Demo -> demoToken
-            is Saved.Account -> last?.accessToken
-            Saved.Nobody -> null
-        }
         try {
-            onSwitch(leaving, token)
+            onSwitch(leaving)
         } catch (e: Exception) {
             // Clean-up is best effort.
         }
-        last?.let { supabase.signOut(it) }
+    }
+
+    /**
+     * What needs a live token of whoever left, in the app's own scope so it never holds up the
+     * screen or the next person: unregistering this phone on [server] ([onLeft]), then ending the
+     * session at Supabase (refreshed first if it is about to expire, so Supabase really ends it).
+     * Best effort: offline, it simply doesn't happen.
+     */
+    private fun leaveLater(leaving: Saved, server: String) {
+        if (leaving == Saved.Nobody) return
+        scope.launch {
+            try {
+                val last = (leaving as? Saved.Account)?.let { liveToken(it.session) }
+                val token = when (leaving) {
+                    Saved.Demo -> demoToken
+                    is Saved.Account -> last?.accessToken
+                    Saved.Nobody -> null
+                }
+                if (token != null) {
+                    try {
+                        onLeft(token, server)
+                    } catch (e: Exception) {
+                        // Their session may be over already; the next sign-in moves this phone anyway.
+                    }
+                }
+                last?.let { supabase.signOut(it) }
+            } catch (e: Exception) {
+                // Best effort: never a crash for someone who has already left.
+            }
+        }
     }
 
     /** Asks the server for the profile and moves to Ready or NeedsProfile. Offline: Checking
@@ -453,24 +527,27 @@ class Accounts(
     }
 
     // --- leaving ---------------------------------------------------------------------------------
-    /** Log out: the state flips first (nothing more is sent as them), then the session ends at
-     * Supabase with a token that still works, and this phone forgets everything of theirs. */
+    /** Log out: the state flips first, before anything touches the network (the screen moves to
+     * the login at once and nothing more is sent as them), and this phone forgets everything of
+     * theirs. Ending the session at Supabase and unregistering this phone follow in the
+     * background ([leaveLater]). */
     suspend fun signOut() = durable {
         changing.withLock {
-            val leaving = synchronized(lock) { saved }
-            if (leaving == Saved.Nobody) {
+            val server = core.baseUrl()
+            val leaving = synchronized(lock) {
+                val leaving = saved
+                if (leaving != Saved.Nobody) {
+                    saved = Saved.Nobody
+                    epoch++
+                    earlier.clear()
+                }
                 _state.value = AccountState.SignedOut()
-                return@withLock
+                leaving
             }
-            val last = (leaving as? Saved.Account)?.let { liveToken(it.session) }
-            synchronized(lock) {
-                saved = Saved.Nobody
-                epoch++
-                earlier.clear()
-                _state.value = AccountState.SignedOut()
-            }
+            if (leaving == Saved.Nobody) return@withLock
             persist()
-            leave(leaving, last)
+            forgetHere(leaving)
+            leaveLater(leaving, server)
         }
     }
 
@@ -490,11 +567,7 @@ class Accounts(
             }
             persist()
             // The server already removed its devices with the account; nothing more to send.
-            try {
-                onSwitch(leaving, null)
-            } catch (e: Exception) {
-                // Best effort.
-            }
+            forgetHere(leaving)
         }
     }
 
@@ -504,6 +577,9 @@ class Accounts(
 
         /** How long a request made while the app is starting waits for the saved session. */
         const val START_WAIT_MILLIS = 5_000L
+
+        /** Why someone was signed out when a new build of the app moved to another server. */
+        const val MOVED = "This version of the app uses a different server. Log in again."
 
         /** "asha@example.com" is an email; "asha.k" and "@asha.k" are usernames. */
         fun isEmail(login: String): Boolean = '@' in login.trim().removePrefix("@")

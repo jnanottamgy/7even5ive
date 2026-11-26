@@ -42,13 +42,17 @@ class CardsRepository(private val core: CoreApi) {
                 }
                 _state.value = CardsState(cards, loading = false, error = null, updatedAt = Instant.now())
             } catch (e: ApiException) {
-                _state.update { it.copy(loading = false, error = e.detail, unreachable = e.status == 0) }
+                // A busy server is asked again by the next poll by itself: the banner says so.
+                val said = if (e.busy) BUSY_RETRYING else e.detail
+                _state.update { it.copy(loading = false, error = said, unreachable = e.status == 0) }
             }
         }
     }
 
-    /** Runs until cancelled; the caller ties it to the foreground (repeatOnLifecycle STARTED). */
-    suspend fun pollForever() {
+    /** Runs until cancelled; the caller ties it to the foreground (repeatOnLifecycle STARTED).
+     * [firstAfter]: the caller has just asked once itself. */
+    suspend fun pollForever(firstAfter: Long = 0) {
+        delay(firstAfter)
         while (true) {
             refresh()
             delay(POLL_MILLIS)

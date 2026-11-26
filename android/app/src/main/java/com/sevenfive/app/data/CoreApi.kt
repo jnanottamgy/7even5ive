@@ -1,15 +1,13 @@
 package com.sevenfive.app.data
 
-import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.put
 
 /** 7even5ive core (port 8000): cards, approvals, and the gateway's tools. */
 class CoreApi(private val http: Http, val baseUrl: () -> String) {
 
-    suspend fun cards(): Cards = AppJson.decodeFromString(http.get("${baseUrl()}/api/cards"))
+    suspend fun cards(): Cards = decodeAnswer(http.get("${baseUrl()}/api/cards"))
 
     /** Runs one approval, once. A second tap answers 403 "approval already used". */
     suspend fun approve(token: String) {
@@ -19,7 +17,7 @@ class CoreApi(private val http: Http, val baseUrl: () -> String) {
 
     suspend fun tool(name: String, args: JsonObject = JsonObject(emptyMap())): ToolResponse {
         val body = buildJsonObject { put("args", args) }
-        return AppJson.decodeFromString(http.post("${baseUrl()}/api/tools/$name", body.toString()))
+        return decodeAnswer(http.post("${baseUrl()}/api/tools/$name", body.toString()))
     }
 
     /** [channel] push (a notification) or call (the opt-in urgent call). */
@@ -29,7 +27,7 @@ class CoreApi(private val http: Http, val baseUrl: () -> String) {
             put("before_minutes", beforeMinutes)
             put("channel", channel)
         })
-        return out.result?.let { AppJson.decodeFromJsonElement<SetReminderResult>(it) } ?: SetReminderResult()
+        return out.result?.let { decodeAnswer<SetReminderResult>(it) } ?: SetReminderResult()
     }
 
     suspend fun markDone(itemId: Int) {
@@ -50,7 +48,7 @@ class CoreApi(private val http: Http, val baseUrl: () -> String) {
     }
 
     // --- settings, the urgent call ---------------------------------------------------------------
-    suspend fun settings(): AppSettings = AppJson.decodeFromString(http.get("${baseUrl()}/api/settings"))
+    suspend fun settings(): AppSettings = decodeAnswer(http.get("${baseUrl()}/api/settings"))
 
     suspend fun setCalls(enabled: Boolean? = null, quietStart: String? = null, quietEnd: String? = null): CallSettings {
         val body = buildJsonObject {
@@ -58,24 +56,24 @@ class CoreApi(private val http: Http, val baseUrl: () -> String) {
             if (quietStart != null) put("quiet_start", quietStart)
             if (quietEnd != null) put("quiet_end", quietEnd)
         }
-        return AppJson.decodeFromString(http.post("${baseUrl()}/api/settings/calls", body.toString()))
+        return decodeAnswer(http.post("${baseUrl()}/api/settings/calls", body.toString()))
     }
 
-    suspend fun callHistory(): CallHistory = AppJson.decodeFromString(http.get("${baseUrl()}/api/calls"))
+    suspend fun callHistory(): CallHistory = decodeAnswer(http.get("${baseUrl()}/api/calls"))
 
-    suspend fun testCall(): CallOutcome = AppJson.decodeFromString(http.post("${baseUrl()}/api/calls/test", "{}"))
+    suspend fun testCall(): CallOutcome = decodeAnswer(http.post("${baseUrl()}/api/calls/test", "{}"))
 
     // --- briefing and voice ------------------------------------------------------------------------
-    suspend fun briefing(): Briefing = AppJson.decodeFromString(http.get("${baseUrl()}/api/briefing"))
+    suspend fun briefing(): Briefing = decodeAnswer(http.get("${baseUrl()}/api/briefing"))
 
     /** ElevenLabs' mp3 of today's briefing. 503 (with the reason) when the server has no voice. */
     suspend fun briefingAudio(): ByteArray = http.getBytes("${baseUrl()}/api/briefing/audio")
 
-    suspend fun voiceSession(): VoiceSession = AppJson.decodeFromString(http.get("${baseUrl()}/api/voice/session"))
+    suspend fun voiceSession(): VoiceSession = decodeAnswer(http.get("${baseUrl()}/api/voice/session"))
 
     // --- the outbox and wake-ups ------------------------------------------------------------------
     suspend fun notifications(after: Int): Outbox =
-        AppJson.decodeFromString(http.get("${baseUrl()}/api/notifications?after=$after"))
+        decodeAnswer(http.get("${baseUrl()}/api/notifications?after=$after"))
 
     suspend fun registerDevice(token: String) {
         http.post("${baseUrl()}/api/devices", buildJsonObject {
@@ -85,7 +83,7 @@ class CoreApi(private val http: Http, val baseUrl: () -> String) {
     }
 
     // --- Google and college mail -------------------------------------------------------------------
-    suspend fun googleStart(): GoogleStart = AppJson.decodeFromString(http.post("${baseUrl()}/api/google/start", "{}"))
+    suspend fun googleStart(): GoogleStart = decodeAnswer(http.post("${baseUrl()}/api/google/start", "{}"))
 
     /** Back from Google: the app, with its own token, hands over the code (google.py). */
     suspend fun googleFinish(code: String, state: String): GoogleFinish {
@@ -93,14 +91,14 @@ class CoreApi(private val http: Http, val baseUrl: () -> String) {
             put("code", code)
             put("state", state)
         }
-        return AppJson.decodeFromString(http.post("${baseUrl()}/api/google/finish", body.toString()))
+        return decodeAnswer(http.post("${baseUrl()}/api/google/finish", body.toString()))
     }
 
     suspend fun googleDisconnect(): GoogleDisconnect =
-        AppJson.decodeFromString(http.post("${baseUrl()}/api/google/disconnect", "{}"))
+        decodeAnswer(http.post("${baseUrl()}/api/google/disconnect", "{}"))
 
     /** "Check now": 429 with the reason when the last check was under five minutes ago. */
-    suspend fun checkMail(): MailCheckResult = AppJson.decodeFromString(http.post("${baseUrl()}/api/mail/check", "{}"))
+    suspend fun checkMail(): MailCheckResult = decodeAnswer(http.post("${baseUrl()}/api/mail/check", "{}"))
 
     suspend fun cancelReminder(reminderId: Int) {
         tool("cancel_reminder", buildJsonObject { put("reminder_id", reminderId) })
@@ -108,7 +106,7 @@ class CoreApi(private val http: Http, val baseUrl: () -> String) {
 
     /** Demo server only: a WhatsApp event sent through the real signed webhook (cloud.py). */
     suspend fun demoForward(kind: String): DemoForward =
-        AppJson.decodeFromString(http.post("${baseUrl()}/demo/forward/$kind", "{}"))
+        decodeAnswer(http.post("${baseUrl()}/demo/forward/$kind", "{}"))
 
     /** Demo server only: back to the demo morning, with a fresh mock portal. */
     suspend fun demoReset() {
@@ -118,11 +116,11 @@ class CoreApi(private val http: Http, val baseUrl: () -> String) {
     // --- accounts (the sign-in itself is Supabase's: SupabaseAuth) ------------------------------
     /** How this server's students sign in. No token needed. */
     suspend fun authConfig(): AuthConfig =
-        AppJson.decodeFromString(http.get("${baseUrl()}/api/auth/config", auth = false))
+        decodeAnswer(http.get("${baseUrl()}/api/auth/config", auth = false))
 
     suspend fun usernameCheck(username: String): UsernameCheck {
         val q = java.net.URLEncoder.encode(username, "UTF-8")
-        return AppJson.decodeFromString(http.get("${baseUrl()}/api/auth/username?u=$q", auth = false))
+        return decodeAnswer(http.get("${baseUrl()}/api/auth/username?u=$q", auth = false))
     }
 
     /** A username sign-in: the server answers with Supabase's own session JSON. */
@@ -134,10 +132,10 @@ class CoreApi(private val http: Http, val baseUrl: () -> String) {
         return http.post("${baseUrl()}/api/auth/login", body.toString(), auth = false)
     }
 
-    suspend fun me(): Me = AppJson.decodeFromString(http.get("${baseUrl()}/api/me"))
+    suspend fun me(): Me = decodeAnswer(http.get("${baseUrl()}/api/me"))
 
     suspend fun saveProfile(form: ProfileForm): Me =
-        AppJson.decodeFromString(http.post("${baseUrl()}/api/me", form.toJson().toString()))
+        decodeAnswer(http.post("${baseUrl()}/api/me", form.toJson().toString()))
 
     /** Every row, the mail read, the portal answers, then the login itself. */
     suspend fun deleteAccount() {
@@ -145,19 +143,27 @@ class CoreApi(private val http: Http, val baseUrl: () -> String) {
     }
 
     suspend fun newPersonalToken(): PersonalToken =
-        AppJson.decodeFromString(http.post("${baseUrl()}/api/me/token", "{}"))
+        decodeAnswer(http.post("${baseUrl()}/api/me/token", "{}"))
 
     suspend fun deletePersonalToken() {
         http.post("${baseUrl()}/api/me/token/delete", "{}")
     }
 
-    suspend fun linkWhatsApp(): WhatsAppLink = AppJson.decodeFromString(http.post("${baseUrl()}/api/me/whatsapp", "{}"))
+    /** The MCP address, and the AI apps (Claude Code, Codex) that signed in to it with OAuth. */
+    suspend fun connections(): McpConnections = decodeAnswer(http.get("${baseUrl()}/api/me/connections"))
 
-    suspend fun unlinkWhatsApp(): Me = AppJson.decodeFromString(http.post("${baseUrl()}/api/me/whatsapp/delete", "{}"))
+    /** That app can't reach the account any more. 404 `not_found` when it wasn't connected. */
+    suspend fun disconnect(connectionId: Int): Boolean =
+        decodeAnswer<Disconnected>(http.post("${baseUrl()}/api/me/connections/$connectionId/delete", "{}")).deleted
 
-    /** This phone stops being woken for the student signing out, as them ([bearer]). */
-    suspend fun removeDeviceAs(bearer: String, token: String) {
-        http.postAs("${baseUrl()}/api/devices/remove", buildJsonObject { put("token", token) }.toString(), bearer)
+    suspend fun linkWhatsApp(): WhatsAppLink = decodeAnswer(http.post("${baseUrl()}/api/me/whatsapp", "{}"))
+
+    suspend fun unlinkWhatsApp(): Me = decodeAnswer(http.post("${baseUrl()}/api/me/whatsapp/delete", "{}"))
+
+    /** This phone stops being woken for the student signing out, as them ([bearer]), on the
+     * server they used ([server]: the app may have moved to another one since). */
+    suspend fun removeDeviceAs(bearer: String, token: String, server: String = baseUrl()) {
+        http.postAs("$server/api/devices/remove", buildJsonObject { put("token", token) }.toString(), bearer)
     }
 
     /** The status a request with no token gets (the gateway's 401). */

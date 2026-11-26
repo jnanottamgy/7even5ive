@@ -15,7 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Lock
@@ -54,6 +54,7 @@ import com.sevenfive.app.ui.components.PrimaryPill
 import com.sevenfive.app.ui.components.ScreenIntro
 import com.sevenfive.app.ui.components.SectionHeader
 import com.sevenfive.app.ui.components.TabScaffold
+import com.sevenfive.app.ui.components.uniqueKeys
 import com.sevenfive.app.ui.theme.LocalAppColors
 import com.sevenfive.app.ui.theme.LocalStatusColors
 import com.sevenfive.app.ui.theme.Motion
@@ -89,7 +90,11 @@ fun AttendanceScreen(vm: AppViewModel, onSettings: () -> Unit, onPortal: () -> U
                         Modifier.animateItem(placementSpec = Motion.item),
                     )
                 }
-                items(subjects, key = { it.code }) { SubjectCard(it, Modifier.animateItem(placementSpec = Motion.item)) }
+                // A code can repeat (a theory and a lab paper, or a portal page with no codes).
+                val keys = uniqueKeys(subjects) { it.code }
+                itemsIndexed(subjects, key = { i, _ -> keys[i] }) { _, subject ->
+                    SubjectCard(subject, Modifier.animateItem(placementSpec = Motion.item))
+                }
             }
         }
     }
