@@ -5,8 +5,9 @@ One web service runs everything the phone app needs at one HTTPS address
 
 | Path | Served by |
 |---|---|
-| `/api/*`, `/bot/*` | 7even5ive core (cards, approvals, tools, `/api/health`, the bot webhook) |
+| `/api/*`, `/bot/*` | 7even5ive core (cards, approvals, tools, `/api/health`, the bot webhook, Google's sign-in return, the call outcome webhook) |
 | `/v1/*` | PortMax's phone API (portal settings, `runner.js`, page upload) |
+| `/mcp` | MCP over HTTP for the student's own Claude or ChatGPT (`Authorization: Bearer <token>`) |
 | `/dev` | the core's development page |
 | everything else | the mock college portal the app's WebView logs in to |
 
@@ -49,6 +50,25 @@ Supabase, is [`core/template.yaml`](../core/template.yaml) ([`deploy.md`](deploy
 6. Put **AppUrl** in `android/gradle.properties` as `sevenfive.defaultServer` and rebuild the APK.
 7. Once the app works on it, **delete the EC2 stack** below, if you made one: it is the
    always-on server this replaces.
+
+### Keys, the background tick, and moving an existing stack onto this template
+
+- **Keys** live in Parameter Store under `/7even5ive-demo/` (the `SettingsPath` parameter), as
+  SecureStrings in the stack's region; the function reads them at every cold start. The full
+  list and how to get each: [`keys.md`](keys.md). With none, everything runs on stand-ins.
+- **Background jobs**: Lambda has no always-on process, so `TickRule` (EventBridge) invokes the
+  function once a minute with `{"seventy5": "tick"}`. It fires due reminders and urgent calls,
+  checks college mail at 1 PM and 9 PM and syncs Classroom, each cut short to fit the 29 s.
+  `TickEnabled = false` turns it off. As a side effect it keeps the instance warm.
+- **Outputs**: besides `AppUrl` and `HealthCheck`, the stack prints `McpUrl`,
+  `GoogleRedirectUri` (paste into the Google OAuth client), `CallWebhookUrl` (ElevenLabs'
+  post-call webhook) and `BotWebhookUrl` (the WhatsApp bot's `SEVENTY5_WEBHOOK_URL`).
+- **A stack made from the older template** (before 27 Nov) keeps working, but has no tick, no
+  keys and no Bedrock permission. To move it: upload the new zip (below), then
+  **CloudFormation** → the stack → **Update** → **Replace current template** → upload
+  `deploy/aws/7even5ive-serverless.yaml` → keep the parameters (accept the defaults for
+  `SettingsPath` and `TickEnabled`) → tick the IAM acknowledgement → **Submit**. The address
+  (`AppUrl`) does not change, so the app needs no rebuild.
 
 **Update the code:** upload a new `7even5ive-lambda.zip` over the old one in the bucket, then
 **Lambda** → the function → **Code** → **Upload from** → **Amazon S3 location** →

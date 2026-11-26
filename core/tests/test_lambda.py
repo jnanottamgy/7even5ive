@@ -41,3 +41,17 @@ def test_no_permission_leaves_the_stand_ins():
 
     assert lambda_demo.load_settings("/7even5ive-demo", Refused()) == []
     assert lambda_demo.load_settings(None) == []
+
+
+def test_the_startup_report_names_features_never_values(monkeypatch):
+    from dataclasses import replace
+
+    from seventy5 import report
+
+    monkeypatch.setattr(report, "settings", replace(
+        report.settings, elevenlabs_api_key="xi-secret-value", elevenlabs_assistant_agent_id="agent_1",
+        google_client_id="", demo_student_phone="+919812345678"))
+    text = "\n".join(report.lines())
+    assert "live      ElevenLabs voice assistant" in text
+    assert "stand-in  Google sign-in" in text
+    assert "xi-secret-value" not in text and "9812345678" not in text

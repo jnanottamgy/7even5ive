@@ -13,3 +13,24 @@ services:
     envVars:
       - key: PORTMAX_DEV_TOKENS
         value: demo-student-token:demo
+      # Keys (docs/keys.md): Render asks for each value at Apply; none is in this file. Empty
+      # ones leave their stand-ins. The urgent call's provider and the like are plain settings.
+      - { key: APPROVAL_SECRET, sync: false }
+      - { key: TOKEN_ENCRYPTION_KEY, sync: false }
+      - { key: BOT_WEBHOOK_SECRET, sync: false }
+      - { key: LIBRARY_URL, sync: false }
+      - { key: LIBRARY_SERVICE_TOKEN, sync: false }
+      - { key: DEMO_PHONE, sync: false }
+      - { key: ANTHROPIC_API_KEY, sync: false }
+      - { key: JEV_API_KEY, sync: false }
+      - { key: GOOGLE_CLIENT_ID, sync: false }
+      - { key: GOOGLE_CLIENT_SECRET, sync: false }
+      - { key: ELEVENLABS_API_KEY, sync: false }
+      - { key: ELEVENLABS_ASSISTANT_AGENT_ID, sync: false }
+      - { key: ELEVENLABS_AGENT_ID, sync: false }
+      - { key: ELEVENLABS_PHONE_NUMBER_ID, sync: false }
+      - { key: ELEVENLABS_WEBHOOK_SECRET, sync: false }
+      - { key: DEMO_STUDENT_PHONE, sync: false }
+      - { key: FCM_SERVICE_ACCOUNT_JSON, sync: false }
+      - key: CALL_PROVIDER
+        value: twilio

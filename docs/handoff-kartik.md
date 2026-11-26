@@ -1,5 +1,10 @@
 # Handoff for Kartik: PortMax and the 7even5ive prototype
 
+> **Update, 27 Nov:** everything planned in section 5 is now built and wired into the app on the
+> serverless demo (calls, briefing, voice assistant, college mail, Google, MCP over HTTP,
+> notifications, the background keep-alive). What changed, the defaults chosen (P8–P18) and
+> what is still yours to decide: `plan.md`. Keys to hand over: [`keys.md`](keys.md).
+
 **As of 26 Nov 2026.** Code on branch `claude/busy-pasteur-lake3c`, commit `df21b28` (the
 repository moved to `jnanottamgy/7even5ive`; the old address still redirects). Written by
 Jnanottam's Claude sessions so you can pick up from here. Every number below was re-run today.

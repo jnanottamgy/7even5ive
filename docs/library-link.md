@@ -69,8 +69,11 @@ SEVENTY5_WEBHOOK_SECRET=<long random string B>
 SEVENTY5_PHONES=91XXXXXXXXXX          # your number; only linked students are served or reported
 ```
 
-**On the 7even5ive demo server**: AWS console → Systems Manager → Parameter Store →
-create each as a **SecureString** under `/7even5ive-demo/`:
+**On the 7even5ive demo server**: AWS console → Systems Manager → Parameter Store, **in the
+stack's own region** (the serverless demo is in Sydney, `ap-southeast-2`) → create each as a
+**SecureString** under `/7even5ive-demo/`. Both the serverless stack (read at every cold start)
+and the EC2 stack (read at every boot) use this path. `SEVENTY5_WEBHOOK_URL` is the stack's
+`BotWebhookUrl` output.
 
 | Name | Value |
 |---|---|
@@ -80,9 +83,11 @@ create each as a **SecureString** under `/7even5ive-demo/`:
 | `/7even5ive-demo/APPROVAL_SECRET` | another long random string |
 | `/7even5ive-demo/DEMO_PHONE` | your number, `91XXXXXXXXXX` |
 
-Then reboot the instance. The server reads them at every start; they never appear in the
-template, the EC2 console or the logs. **A stack created before this change** wrote its start
-script at first boot, so delete and recreate the stack once (about 15 minutes).
+Serverless: they apply at the next cold start (Lambda → the function → Configuration →
+Environment variables → Edit → Save starts fresh instances). EC2: reboot the instance. They
+never appear in the template, the console or the logs. **An EC2 stack created before this
+change** wrote its start script at first boot, so delete and recreate it once (about 15
+minutes).
 
 Without these settings everything still runs: Files shows an invented demo library and no
 deadlines are backfilled.

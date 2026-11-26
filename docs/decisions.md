@@ -50,6 +50,10 @@ decisions are Kartik's. Earlier entries 1–15 are replaced by 29 onwards (git h
 | 49 | **No sign-in in the prototype.** One demo student, identified by a fixed token. | Sign-in adds nothing to what the prototype has to show. |
 | 50 | **The prototype's only app is Android.** The web page in `core/` is a development view, not a product. | The Android app has to exist anyway for the portal login (decision 19). |
 
+The prototype's integration defaults (26–27 Nov), chosen on the team's behalf and changeable:
+`plan.md` P1–P18 (the serverless tick, the demo mailbox, mail cards as items, Google's scopes,
+the voice assistant's client tools, Exotel calls, what a demo reset keeps).
+
 ## Mail filter (51–58: built 25 Nov in `mailfilter/`; how it fits the core is Kartik's call)
 
 Built from an approved plan ([`mailfilter.md`](mailfilter.md)) in a session that ran alongside the
@@ -69,7 +73,8 @@ the open question below before either is wired to production.
 
 ### Open (mail filter)
 
-- **Push (decision 38) or twice-daily (51)?** Either keep the core's Gmail push and fold the mail
+- **Push (decision 38) or twice-daily (51)?** The prototype now uses the twice-daily mail filter
+  (plan.md P2, built 27 Nov); the core's push path stays in the code, unfed. Either keep the core's Gmail push and fold the mail
   filter's checks (quotes, date reading, link checks, merging) into the cascade, or feed the
   core's ingress from the mail filter's twice-daily check and drop push. Kartik's call.
 - Whether MSRIT's mail is Google Workspace, and whether its IT allows outside apps to read it.

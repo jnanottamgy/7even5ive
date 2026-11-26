@@ -135,6 +135,9 @@ def build_router(db_url: str | None = None) -> Router:
     # Counts only: logs never carry message or mail text (the hosts' logs may be CloudWatch).
     mode = "LIVE Jev + Claude" if live else "offline, recorded answers"
     print(f"mode: {mode}; replayed {len(lines)} demo messages", flush=True)
+    from .report import lines as report
+
+    print("\n".join(report()), flush=True)
 
     def connectors(college: str) -> Connector:
         # The mock portal is this service. Pages must come from the address the phone uses for

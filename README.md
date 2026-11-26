@@ -37,8 +37,9 @@ raw attendance numbers and never warns you before you're barred.
 | **In** | The student forwards to our WhatsApp bot, which pushes a signed event to 7even5ive. College mail (read-only), Google Classroom and the portal (through PortMax) are connected once. Voice notes come only through the bot. |
 | **Understand** | What the bot already filed is checked and kept. Everything else goes through a cascade: Classroom's own due date → **Jev** → **LLM**. Jev ticks boxes (what is it, which subject, is the mail spam or fake, is it relevant); the LLM reads dates and titles, or decides when Jev is unsure. Code checks every value against the student's real data before anything is written. |
 | **Library** | Every material filed by subject (5 subjects + Miscellaneous), one tap away. |
-| **Out** | "Due this week" on the phone; attendance with the exact classes to attend or skip; opportunities that fit the student's branch, year and interests; opt-in reminders and an opt-in urgent call. |
-| **Your own AI** | 7even5ive is an MCP server: plug it into Claude, ChatGPT, Claude Code or any MCP client. |
+| **Out** | "Due this week" on the phone; attendance with the exact classes to attend or skip; opportunities that fit the student's branch, year and interests; a morning briefing read aloud; opt-in reminders and an opt-in urgent call. |
+| **Voice** | Ask 7even5ive out loud (an ElevenLabs agent whose every tool runs through the gateway), the briefing in ElevenLabs' voice, and the urgent call ([`docs/voice.md`](docs/voice.md), [`docs/call.md`](docs/call.md)). |
+| **Your own AI** | 7even5ive is an MCP server: plug it into Claude, ChatGPT, Claude Code or any MCP client, at `<server>/mcp` with the student's token. |
 
 It organises and presents; it does **not** plan study schedules. It never notifies a student about
 a deadline they just forwarded themselves.
@@ -91,8 +92,10 @@ own. Plan: [`docs/portmax.md`](docs/portmax.md).
 |---|---|
 | [`core/`](core) | 7even5ive itself: ingress, cascade, gateway, tools, MCP server, web app |
 | [`portmax/`](portmax) | The portal connector and bunk math |
-| [`mailfilter/`](mailfilter) | A twice-daily college-mail check, built 25 Nov; overlaps the core's Gmail path, which one ships is open ([plan](docs/mailfilter.md)) |
+| [`mailfilter/`](mailfilter) | The twice-daily college-mail check; its cards are the core's college-mail cards in the prototype (decision P2, [plan](docs/mailfilter.md)) |
 | [`docs/decisions.md`](docs/decisions.md) | Decision log: the source of truth when anything disagrees |
+| [`docs/keys.md`](docs/keys.md) | Every key and account, where it goes, what it switches on |
+| [`docs/online.md`](docs/online.md) | The serverless demo on AWS (Lambda, API Gateway, the once-a-minute tick) |
 | [`docs/architecture.md`](docs/architecture.md) | Components and flows |
 | [`docs/policy.md`](docs/policy.md) | The control model enforced at the gateway |
 | `ppt/` · `video/` · `brand/` · `diagrams/` | Deck, film, brand kit, diagrams |

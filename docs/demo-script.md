@@ -46,15 +46,18 @@ The laptop driver below does the same from a terminal, if you prefer that.
 
 | # | Phone | Say (the script prints this) | You should see | If it doesn't |
 |---|---|---|---|---|
-| 1 | **This week** tab | One feed for the semester: WhatsApp, mail, Classroom, portal. Point at the small *via* tags. | 4 cards: DBMS Assignment 3 (*via bot*), IISc hackathon (*via jev+llm*), OS mini project (*via classroom*), DCN CIE-2 | Pull down to refresh. |
+| 1 | **This week** tab | One feed for the semester: WhatsApp, mail, Classroom, portal. Point at the small *via* tags. | The morning's 4 cards: DBMS Assignment 3 (*via bot*), IISc hackathon (*via jev+llm*), OS mini project (*via classroom*), DCN CIE-2, plus college mail with a deadline this week (*via mail*) | Pull down to refresh. |
+| 1b | **This week** → **Your day** → **Play** | The morning briefing, written by code from the student's own data, read aloud; never a notification. | The briefing plays (ElevenLabs, or the phone's voice without a key: the card says which) | Tap Stop and Play again. |
 | 2 | Stay on **This week**; laptop: Enter | A classmate posts a quiz in the group; the student forwards it to our bot. | **"DAA Quiz 2 (greedy + DP)"**, *via bot*, appears within ~7 s. The laptop says it was filed with no AI call. | Pull down. If the laptop said `ok`, the card is on the server. |
 | 3 | **Materials** → *Operating Systems* chip; laptop: Enter | Notes are filed by subject, one tap away. | **OS_Unit4_Deadlocks.pdf** under Operating Systems | Tap *All*, pull down. |
 | 4 | (laptop only) | Only the student's own, signed messages get in. | Laptop: unknown number → nothing filed; forged signature → **401** | — |
-| 5 | **Inbox** tab | College mail minus the scams. | "**2 spam or fake mails filtered out**", IISc hackathon **88% match** | — |
+| 5 | **Inbox** tab → **Check now** | College mail, read for you: placements, internships and exam notices; every date, quote and form link is checked against the mail itself; scams never get here. | Nimbus placement drive, Orbitly internship, CIE-3 notice; **Check now** adds the Zentry Labs internship; "**2 spam or fake mails filtered out**" | If it says "checked a moment ago", wait or skip. |
 | 6 | **Attendance** → **Refresh** → log in: USN `1MC24CS042`, DOB **14/08/2005**, code `PM42X`, **Next**, digits `2345`, **Log in** | Exact bunk math from the student's own portal session; we never see the password. Mention it's our test portal (MSRIT blocks apps). | Worst subject first (DBMS 73.33%: "attend the next 2 classes…"), then **Updated just now** | If the portal asks to log in again, do it; if it errors, show the existing attendance and move on. |
 | 7 | **This week**; laptop: Enter → **Approve** on the card → tap **Approved** again | Your own AI (Claude/ChatGPT over MCP) can ask; only you can approve a write. | **"Add to Google Calendar? DAA Quiz 2…"** at the top → *Added to Google Calendar* → second tap: **"approval already used"** | Pull down to see the card. |
 | 8 | (laptop only) | No prompt can make it send mail: the tool doesn't exist; the rules are in the gateway. | Laptop: `send_email` → **403**, no token → **401** | — |
-| 9 | Quiz card → **Remind me** → *1 hour before* → **Reminders** tab → **Cancel** | Reminders only when you ask. | The reminder appears, then disappears | — |
+| 9 | Quiz card → **Remind me** → *1 hour before* → **Reminders** tab → **Cancel** | Reminders only when you ask; they arrive as a notification. | The reminder appears, then disappears | — |
+| 9b | Settings → **Urgent call** → turn on (read the consent) → **Test call now** | For what really matters: ElevenLabs rings shortly before it's due; two a day at most, never at night; a missed call becomes one notification. | The phone rings (with the ElevenLabs keys set), or "Call recorded" without them | Show Settings' call list. |
+| 9c | Microphone at the top → **Start talking** → "What's due this week?" | Just ask. Every fact comes from the same gateway as a tap; adding to the calendar still waits for Approve. | The assistant answers with the week's items | Without ElevenLabs keys the screen says voice isn't set up: skip. |
 | 10 | (laptop) | All of it serverless on AWS: Lambda + API Gateway, nothing running when idle. | `demo complete` | — |
 
 ## Likely questions, honest answers

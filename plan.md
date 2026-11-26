@@ -74,81 +74,83 @@ Status: `[ ]` to do, `[~]` in progress, `[x]` done and tested, `[-]` decided not
 - [x] 1.4 `mark_done` / `reopen` tools (For you, undo); reminders and calls skip done items.
 - [x] 1.5 A moved due date moves its pending reminders by the same amount.
 
-- [ ] 1.6 The serverless demo (Lambda) has no lifespan, so no background loop: add a
+- [x] 1.6 The serverless demo (Lambda) has no lifespan, so no background loop: add a
       once-a-minute EventBridge schedule that runs the reminders job there (found 26 Nov).
 
 ### Phase 2: the urgent call (ElevenLabs)
-- [~] 2.1 `calls.py`: Caller protocol; ElevenLabs + Twilio caller; ElevenLabs + SIP/Exotel
+- [x] 2.1 `calls.py`: Caller protocol; ElevenLabs + Twilio caller; ElevenLabs + SIP/Exotel
       caller; `LogCaller` stand-in. Script template filled by code, titles cleaned.
-- [~] 2.2 Rules: opt-in with recorded consent; reminders get `channel` push|call; quiet hours
+- [x] 2.2 Rules: opt-in with recorded consent; reminders get `channel` push|call; quiet hours
       (22:00-08:00 default, per student); at most 2 calls a day, 1 per item; item still open and
       not past due; anything refused becomes one push.
-- [~] 2.3 `POST /api/calls/webhook`: ElevenLabs signature check, outcome recorded; missed,
+- [x] 2.3 `POST /api/calls/webhook`: ElevenLabs signature check, outcome recorded; missed,
       voicemail or failed -> one push, never a second call.
-- [ ] 2.4 Agent as code: prompt, first message, 90 s cap, voicemail detection, pushed by
+- [x] 2.4 Agent as code: prompt, first message, 90 s cap, voicemail detection, pushed by
       `python -m seventy5.calls setup-agent`; test call endpoint.
-- [ ] 2.5 Tests: quiet hours, caps, done item, missed -> push, overlapping runs, bad signature,
+- [x] 2.5 Tests: quiet hours, caps, done item, missed -> push, overlapping runs, bad signature,
       nasty title.
 
 ### Phase 3: the morning briefing
-- [ ] 3.1 `briefing.py`: template from today's data (due today and tomorrow, today's classes,
+- [x] 3.1 `briefing.py`: template from today's data (due today and tomorrow, today's classes,
       attendance at risk, new mail cards, reminders today); no model writes it.
-- [ ] 3.2 ElevenLabs TTS, generated on first tap and cached per student and day; stand-in: none
+- [x] 3.2 ElevenLabs TTS, generated on first tap and cached per student and day; stand-in: none
       (the app reads the text with Android's own text-to-speech).
-- [ ] 3.3 `GET /api/briefing`, `GET /api/briefing/audio`; MCP tool `briefing`.
+- [x] 3.3 `GET /api/briefing`, `GET /api/briefing/audio`; MCP tool `briefing`.
 
 ### Phase 4: college mail in the prototype (the mail filter)
-- [ ] 4.1 Core installs `../mailfilter`; Dockerfile too.
-- [ ] 4.2 `mail.py` bridge: offline demo mailbox (dates relative to today, scripted judge) or
+- [x] 4.1 Core installs `../mailfilter`; Dockerfile too.
+- [x] 4.2 `mail.py` bridge: offline demo mailbox (dates relative to today, scripted judge) or
       real Gmail with the student's Google token + Claude on Bedrock.
-- [ ] 4.3 Cards copied into core items (`ext_key`, link, organisation, role, category,
+- [x] 4.3 Cards copied into core items (`ext_key`, link, organisation, role, category,
       mail link); updated in place; reminders follow a moved deadline.
-- [ ] 4.4 Checks at 1 PM and 9 PM India time + "check now" (5-minute cooldown).
-- [ ] 4.5 `/api/cards` opportunities carry the new fields; "N mails left out".
+- [x] 4.4 Checks at 1 PM and 9 PM India time + "check now" (5-minute cooldown).
+- [x] 4.5 `/api/cards` opportunities carry the new fields; "N mails left out".
 
 ### Phase 5: Google account (one server-side sign-in)
-- [ ] 5.1 `google.py`: web-server OAuth with PKCE and a one-time connect code (no student token
+- [x] 5.1 `google.py`: web-server OAuth with PKCE and a one-time connect code (no student token
       in any URL); scopes Gmail read-only, Calendar events, Classroom read; refresh token
       encrypted at rest; disconnect revokes and deletes.
-- [ ] 5.2 Calendar: real event insert with the fixed per-item id when connected (409 -> update);
+- [x] 5.2 Calendar: real event insert with the fixed per-item id when connected (409 -> update);
       stand-in table otherwise.
-- [ ] 5.3 Classroom: courses + coursework with a future due date -> events into the cascade;
+- [x] 5.3 Classroom: courses + coursework with a future due date -> events into the cascade;
       a changed due date updates the card in place.
 
 ### Phase 6: MCP for the student's own AI, on the online server
-- [ ] 6.1 `/mcp` mounted in `cloud.py`, Bearer token per request, every call through the gateway.
-- [ ] 6.2 Tools added: `briefing`, `mark_done`, `reopen`, `timetable_today`, `check_mail_now`.
+- [x] 6.1 `/mcp` mounted in `cloud.py`, Bearer token per request, every call through the gateway.
+- [x] 6.2 Tools added: `briefing`, `mark_done`, `reopen`, `timetable_today`, `check_mail_now`.
 
 ### Phase 7: the WhatsApp tester
-- [ ] 7.1 `POST /api/dev/forward`: builds and signs exactly the event SHELF will send and runs
-      it through `/bot/webhook`'s own code path; `/dev` page gets a form.
+- [-] 7.1 `POST /api/dev/forward`: builds and signs exactly the event SHELF will send and runs
+      it through `/bot/webhook`'s own code path; `/dev` page gets a form. Covered by the demo
+      tour's `/demo/forward/{quiz,notes,stranger,forged}` (cloud.py), which signs exactly the
+      bot's events through the real webhook; no second tester was built.
 
 ### Phase 8: the Android app
-- [ ] 8.1 Notifications: channels, Android 13 permission, foreground pull, WorkManager pull
+- [x] 8.1 Notifications: channels, Android 13 permission, foreground pull, WorkManager pull
       every 15 min, optional FCM wake-up (initialised from build settings only when present).
-- [ ] 8.2 Reminders: "Call me" options with a one-time consent screen; channel shown.
-- [ ] 8.3 Settings: Google account, calls (consent, quiet hours, test call), notifications,
+- [x] 8.2 Reminders: "Call me" options with a one-time consent screen; channel shown.
+- [x] 8.3 Settings: Google account, calls (consent, quiet hours, test call), notifications,
       background portal keep-alive, demo tester.
-- [ ] 8.4 Home: briefing card (server audio or on-device speech), today's classes, mark done
+- [x] 8.4 Home: briefing card (server audio or on-device speech), today's classes, mark done
       with undo.
-- [ ] 8.5 Inbox: mail cards (category, organisation, role, dates, Open form, Open in Gmail),
+- [x] 8.5 Inbox: mail cards (category, organisation, role, dates, Open form, Open in Gmail),
       Check now, "N left out".
-- [ ] 8.6 Background portal keep-alive every 30 minutes (measured idle timeout 45-61 min),
+- [x] 8.6 Background portal keep-alive every 30 minutes (measured idle timeout 45-61 min),
       WebView in a worker, toggle, no notification on lapse.
-- [ ] 8.7 Unit tests for the new parsing; APK builds.
+- [x] 8.7 Unit tests for the new parsing; APK builds.
 
 ### Phase 9: configuration and docs
-- [ ] 9.1 `.env.example` with every key; startup prints which parts are live and which are
+- [x] 9.1 `.env.example` with every key; startup prints which parts are live and which are
       stand-ins.
-- [ ] 9.2 `render.yaml` env vars (secrets `sync: false`).
-- [ ] 9.3 Docs: README, architecture (prototype), decisions (new entries), `docs/call.md`,
+- [x] 9.2 `render.yaml` env vars (secrets `sync: false`).
+- [x] 9.3 Docs: README, architecture (prototype), decisions (new entries), `docs/call.md`,
       `docs/android.md` API reference, `docs/online.md`, `docs/keys.md`.
 
 ### Phase 10: end-to-end checks
-- [ ] 10.1 Every test suite green; ruff/mypy where the package uses them.
-- [ ] 10.2 Smoke run of the online server: reminder fires -> outbox -> call stand-in ->
+- [x] 10.1 Every test suite green; ruff/mypy where the package uses them.
+- [x] 10.2 Smoke run of the online server: reminder fires -> outbox -> call stand-in ->
       webhook -> missed push; mail check; briefing; MCP call; forward tester.
-- [ ] 10.3 APK built from the final code.
+- [x] 10.3 APK built from the final code.
 
 ## Decisions taken on the team's behalf (Kartik can change any)
 
@@ -162,9 +164,26 @@ Status: `[ ]` to do, `[~]` in progress, `[x]` done and tested, `[-]` decided not
 | P6 | One Google sign-in on the server (web client): Gmail read-only, Calendar events, Classroom read. | One consent; the phone never holds Google tokens. |
 | P7 | Background portal keep-alive every 30 min in the app, on by default, switchable. | Measured idle timeout 45-61 min. |
 
+| P8 | The serverless demo runs the background loop as an EventBridge tick once a minute; each tick's jobs share a 20 s budget. Keys come from Parameter Store `/7even5ive-demo/*` at every cold start. | Lambda has no always-on process; the tick also keeps the one instance warm. |
+| P9 | The demo mailbox is invented mail dated from today, judged by recorded answers; the first Check now always delivers one new mail, later ones keep the 5-minute cooldown. | The mail filter's samples have fixed 2026 dates; the demo needs "Check now finds something". |
+| P10 | A mail card's `due_at` is its deadline to register (kind deadline), else the exam or event day (a date with no time shows at 9 AM, as the LLM does); the event's own date is kept beside it. Mail deadlines also appear in "due this week". | One table drives the list, reminders and calls; a registration deadline is something due. |
+| P11 | The mail judge uses Bedrock when `BEDROCK_MODEL_ID` is set, else the Anthropic API key. | Either key the team has works. |
+| P12 | Google's own OAuth `state` is the one-time code (10 minutes, single use, PKCE). Scopes: `openid email`, `gmail.readonly`, `calendar.events`, Classroom courses and own coursework read-only. A student may grant a subset; each feature checks its scope. | No student token in any URL, nothing else to invent. |
+| P13 | The voice assistant is a second ElevenLabs agent (Claude Haiku 5.5) whose tools are client tools the phone runs through `/api/tools`; signed URLs only; 5 minutes; nothing stored. | Same rules as a tap; no standing credential at ElevenLabs. |
+| P14 | Calls add Exotel (now native in ElevenLabs) beside Twilio and SIP; the call agent's only tools are ElevenLabs' hang-up and voicemail detection. | An Indian caller id without a SIP trunk; voicemail never gets a message. |
+| P15 | A demo reset keeps the student's setup (Google account, registered phones, call consent and quiet hours) and resets only the demo data and demo mailbox. | Reconnecting Google before every rehearsal would break the demo. |
+| P16 | Firebase is started from four build settings, without google-services.json or its plugin; absent, the app pulls every 15 minutes. | The APK builds and runs with no Firebase project. |
+| P17 | The briefing voice defaults to ElevenLabs' premade "George", mp3 at 64 kbps, cached per student, day and text. | Small enough for Lambda; a second tap is free. |
+| P18 | The demo morning's weekdays ("due Fri") mean the next such weekday after now. | On Fridays the old rule put "Fri" just outside "due this week". |
+
 ## Keys and accounts the team hands over at the end
 
-Filled in as each integration lands; full instructions go to `docs/keys.md`.
+The full checklist, where each goes and how to get it: [`docs/keys.md`](docs/keys.md). In short:
+`APPROVAL_SECRET`, `TOKEN_ENCRYPTION_KEY`; the bot's `BOT_WEBHOOK_SECRET`, `LIBRARY_URL`,
+`LIBRARY_SERVICE_TOKEN`, `DEMO_PHONE`; `ANTHROPIC_API_KEY` or `BEDROCK_MODEL_ID`; `JEV_API_KEY`;
+`GOOGLE_CLIENT_ID`/`SECRET`; ElevenLabs (`ELEVENLABS_API_KEY`, the two agent ids from the setup
+commands, the imported phone number's id, `CALL_PROVIDER`, the webhook secret,
+`DEMO_STUDENT_PHONE`); optionally Firebase (`FCM_SERVICE_ACCOUNT_JSON` and four app settings).
 
 ## Log
 
@@ -176,3 +195,16 @@ Filled in as each integration lands; full instructions go to `docs/keys.md`.
   Core tests: 52. Call module (`calls.py`) written, tests not yet.
 - 26 Nov: MSRIT refused the app's own WebView (teammates' test, `docs/portal-webview-test.md`);
   `docs/portmax.md` updated. Handoff for Kartik written: `docs/handoff-kartik.md`.
+- 26-27 Nov (the integration push, from Jnanottam's "integrate everything"): Phases 2-10 built
+  on the serverless demo. Calls finished (Exotel, voicemail hang-up, 24 tests). Briefing with
+  ElevenLabs voice. Voice assistant (server: signed URLs, agent and client tools as code; app:
+  WebSocket audio and tools through the gateway). College mail from the mail filter into items,
+  demo mailbox, Check now. Google sign-in on the server, real Calendar, Classroom. MCP over HTTP
+  at `/mcp`. Lambda: keys from Parameter Store, once-a-minute tick, Bedrock permission, new
+  outputs; the zip passes its smoke test (mail, briefing, voice fallback, MCP, tick). App:
+  notifications (outbox pull, WorkManager, optional Firebase), call opt-in, briefing, classes,
+  Done with Undo, mail cards, Google, voice screen, background portal keep-alive, demo tour
+  steps. Tests: core 127, PortMax 100, mail filter 206; Android 45 unit tests; debug and demo
+  APKs build. Not run here: a phone or emulator (none in this sandbox), and any live account
+  (no keys yet). Found and fixed: the demo's "due Fri" on Fridays (P18).
+

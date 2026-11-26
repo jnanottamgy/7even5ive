@@ -26,11 +26,17 @@ the LLM's answers are replayed from `seventy5/demo.py` and the printout says so.
 ## MCP
 
 ```bash
-SEVENTY5_TOKEN=demo-student-token python -m seventy5.mcp_server          # stdio
-python -m seventy5.mcp_server --http                                     # :8001, Bearer token
+SEVENTY5_TOKEN=demo-student-token python -m seventy5.mcp_server          # stdio, one student
+claude mcp add --transport http 7even5ive <server>/mcp --header "Authorization: Bearer demo-student-token"
 ```
 
-Tools: `due_this_week`, `materials`, `attendance`, `opportunities`, `set_reminder`, `list_reminders`, `cancel_reminder`, `add_to_calendar`.
+The online service (and the serverless demo) serves MCP over HTTP at `/mcp`, stateless with JSON
+answers, the student named by the Bearer token on every request.
+
+Tools: `due_this_week`, `briefing`, `timetable_today`, `materials`, `attendance`, `opportunities`,
+`check_mail_now`, `set_reminder`, `list_reminders`, `cancel_reminder`, `mark_done`, `reopen`,
+`add_to_calendar` (asks; the student approves on the phone), `list_library`,
+`list_library_files`, `open_file`.
 
 ## How it works
 

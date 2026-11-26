@@ -201,15 +201,41 @@ The same gateway an MCP client uses; body `{"args": {...}}`.
 
 | Tool | args | `result` |
 |---|---|---|
-| `set_reminder` | `item_id`, `before_minutes` (default 1440) | `{"reminder_id", "fires_at", "title"}` |
-| `list_reminders` | — | list like `cards.reminders` |
+| `set_reminder` | `item_id`, `before_minutes` (default 1440), `channel` (`push` or `call`) | `{"reminder_id", "fires_at", "title", "channel"}` |
+| `list_reminders` | — | list like `cards.reminders` (with `item_id`, `channel`) |
 | `cancel_reminder` | `reminder_id` | `{"cancelled": true}` |
+| `mark_done` · `reopen` | `item_id` | `{"item_id", "status"}` (Done with Undo) |
+| `briefing` · `timetable_today` · `check_mail_now` | — | as the endpoints below |
 | `due_this_week` · `materials` (`subject` optional) · `attendance` · `opportunities` | | same shapes as in `/api/cards` |
 
 Response: `{"status": "ok", "result": ...}`. A reminder can only be set on a filed, dated card
 whose reminder time is still in the future; otherwise `403` with the reason.
 `add_to_calendar` returns `{"status": "approval_needed"}` instead: the request then appears in
-`approvals` for the student to tap.
+`approvals` for the student to tap. Once approved it also writes the student's real Google
+Calendar when they connected Google (`result.google.ok`).
+
+### Added for the integration (26–27 Nov)
+
+`/api/cards` also carries `classes_today` (`[{start, end, subject_code, subject, room}]`, India
+time) and `mail` (the mailbox: `mode` demo|gmail, `address`, `checked_at`, `next_check_at`,
+`check_now_after` while cooling down, `left_out`). College-mail cards (`route: "mail"`) in
+`opportunities` and `due_this_week` add `category` (placement | internship | exam_notice),
+`organisation`, `role`, `link` (the form), `mail_link` (Gmail), `summary` and `event_at` (the
+drive or exam itself when `due_at` is the deadline to register). Reminders add `item_id` and
+`channel`.
+
+| Endpoint | What |
+|---|---|
+| `GET /api/notifications?after=<id>` | The outbox: `{notifications: [{id, kind (reminder\|call), title, body, item_id, created_at}], latest_id}`. `after=-1` returns only `latest_id` (a first start). |
+| `POST /api/devices` `{token, platform}` · `POST /api/devices/remove` `{token}` | Firebase wake-up tokens |
+| `GET /api/settings` | `{calls: {enabled, consent_at, quiet_start, quiet_end, phone (masked), live, max_per_day, lead_minutes, max_seconds}, push: {wakeups}, google: {configured, connected, email, gmail, calendar, classroom}, voice: {assistant, briefing_audio}}` |
+| `POST /api/settings/calls` `{enabled?, quiet_start?, quiet_end?}` | Consent on/off (off keeps call reminders as notifications) and quiet hours, `HH:MM` |
+| `GET /api/calls` · `POST /api/calls/test` | Recent calls (ids and outcomes only) · ring now about the soonest item (`409` with the reason when calls are off or there is no number) |
+| `GET /api/briefing` · `GET /api/briefing/audio` | Today: `{day, greeting, sections: [{key, title, lines}], classes, text, audio: {available}}` · ElevenLabs' mp3 (`503` with the reason when there is no voice: read `text` with TextToSpeech) |
+| `GET /api/voice/session` | `{available, signed_url, dynamic_variables, tools, max_seconds}` or `{available: false, reason}` ([`voice.md`](voice.md)) |
+| `POST /api/google/start` · `POST /api/google/disconnect` | Google's consent page to open in the browser · revoke and forget |
+| `GET /api/mail` · `POST /api/mail/check` | The mailbox status · Check now (`429` within 5 minutes of the last check) |
+| `POST /mcp` | MCP over HTTP for Claude or ChatGPT (`Authorization: Bearer <token>`) |
 
 ## 7. Portal login and refresh (PortMax)
 
@@ -244,13 +270,14 @@ Base: `http://<laptop-ip>:8002`. The college for the demo is `mockcollege`.
    periodic interval is 15 minutes. Running a WebView from a background worker is the hard
    part: for the prototype, refreshing on app open and while in the foreground is enough.
 
-## 8. Reminders
+## 8. Reminders and notifications
 
-- The student taps "Remind me" on a card → `set_reminder` (offer 1 day, 3 hours, 1 hour).
-- 7even5ive stores the reminder and fires it. **The push to the phone is not built yet** on
-  the backend (it currently records what it would send). The plan is Firebase Cloud
-  Messaging: the app registers its FCM token with the backend (endpoint to be added) and the
-  backend's reminder job sends the push. Until then, show reminders in the Reminders screen.
+- The student taps "Remind me" on a card → `set_reminder` (1 day, 3 hours, 1 hour), or
+  "Call me 2 hours before" (`channel: "call"`, after the one-time consent; [`call.md`](call.md)).
+- 7even5ive stores the reminder and fires it into the outbox; the app pulls the outbox every
+  20 s on screen and every 15 minutes in the background (WorkManager), and at once when
+  Firebase wakes it (`notify/`). The push carries no content. Android 13's permission is asked
+  at the first reminder. Only reminders and a missed urgent call ever become notifications.
 
 ## 9. Approvals
 
