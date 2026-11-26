@@ -50,6 +50,7 @@ import com.sevenfive.app.data.ApiException
 import com.sevenfive.app.data.Connector
 import com.sevenfive.app.portal.PortalBridge
 import com.sevenfive.app.portal.PortalCheck
+import com.sevenfive.app.portal.sendPortalFormsAsIphone
 import com.sevenfive.app.portal.SyncOutcome
 import com.sevenfive.app.portal.configureForPortal
 import com.sevenfive.app.portal.sameOrigin
@@ -190,6 +191,7 @@ fun PortalScreen(vm: AppViewModel, onDone: () -> Unit) {
                             WebView(ctx).apply {
                                 trail("WebView created; configuring")
                                 configureForPortal(bridge)
+                                sendPortalFormsAsIphone(portalOrigin.host ?: "")
                                 trail("WebView configured")
                                 // Without a chrome client the page's alert()/confirm() are silently
                                 // dropped, and a "Continue?" confirm on a later step never proceeds.

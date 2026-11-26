@@ -49,6 +49,7 @@ import com.sevenfive.app.portal.PortalCheck
 import com.sevenfive.app.portal.PortalIdentity
 import com.sevenfive.app.portal.PortalSettings
 import com.sevenfive.app.portal.hardenPortalWebView
+import com.sevenfive.app.portal.sendPortalFormsAsIphone
 import com.sevenfive.app.ui.AppViewModel
 import com.sevenfive.app.ui.components.GlassPill
 import com.sevenfive.app.ui.components.PushTopBar
@@ -118,8 +119,9 @@ fun PortalCheckScreen(vm: AppViewModel, portalUrl: String, onBack: () -> Unit) {
                     modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(10.dp))
                 Text(
-                    "A test only. You log in yourself on the portal's own page. 7even5ive adds " +
-                        "nothing to it, reads nothing from it and sends nothing anywhere.",
+                    "A test only. You log in yourself on the portal's own page. In iPhone mode the " +
+                        "app sends the portal's forms to the portal itself, with iPhone headers; " +
+                        "nothing is saved or sent anywhere else.",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -183,6 +185,8 @@ fun PortalCheckScreen(vm: AppViewModel, portalUrl: String, onBack: () -> Unit) {
                                 // no X-Requested-With, userAgentData removed) so the portal's
                                 // "no third-party apps" checks pass. No JS bridge is added.
                                 hardenPortalWebView()
+                                // iPhone mode: the login POST goes out with Safari's headers.
+                                sendPortalFormsAsIphone(portalHost)
                                 webChromeClient = object : WebChromeClient() {
                                     override fun onReceivedTitle(view: WebView, t: String?) {
                                         title = t.orEmpty()
