@@ -4,6 +4,7 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -58,7 +59,6 @@ import com.sevenfive.app.data.openFile
 import com.sevenfive.app.ui.AppViewModel
 import com.sevenfive.app.ui.components.AppCard
 import com.sevenfive.app.ui.components.EmptyState
-import com.sevenfive.app.ui.components.ScreenPadding
 import com.sevenfive.app.ui.components.TabScaffold
 import kotlinx.coroutines.launch
 
@@ -166,13 +166,13 @@ fun FilesScreen(vm: AppViewModel, onSettings: () -> Unit) {
         )
     }
 
-    TabScaffold("Files", vm, onSettings) {
+    TabScaffold("Files", vm, onSettings) { padding ->
         val current = tree
         if (current == null) {
             if (loading) {
-                Centered { CircularProgressIndicator() }
+                Box(Modifier.padding(padding)) { Centered { CircularProgressIndicator() } }
             } else {
-                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(Modifier.fillMaxWidth().padding(padding), horizontalAlignment = Alignment.CenterHorizontally) {
                     EmptyState(Icons.Outlined.CloudOff, "Library unavailable", problem ?: "Couldn't load your files.")
                     TextButton(onClick = { loadTree() }) { Text("Try again") }
                 }
@@ -180,14 +180,14 @@ fun FilesScreen(vm: AppViewModel, onSettings: () -> Unit) {
             return@TabScaffold
         }
         when {
-            subjectId == null && !unsorted -> SubjectList(current, onSubject = { id ->
+            subjectId == null && !unsorted -> SubjectList(current, padding, onSubject = { id ->
                 subjectId = id
                 shelf = current.subjects.firstOrNull { it.id == id }
                     ?.shelves?.firstOrNull { it.files > 0 }?.shelf ?: DEFAULT_SHELF
             }, onUnsorted = { unsorted = true })
             else -> {
                 val subject = current.subjects.firstOrNull { it.id == subjectId }
-                Column {
+                Column(Modifier.padding(top = padding.calculateTopPadding())) {
                     Row(Modifier.padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { subjectId = null; unsorted = false }) {
                             Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "All subjects")
@@ -211,7 +211,10 @@ fun FilesScreen(vm: AppViewModel, onSettings: () -> Unit) {
                             }
                         }
                     }
-                    LazyColumn(contentPadding = ScreenPadding, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LazyColumn(
+                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = padding.calculateBottomPadding() + 24.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
                         if (files.isEmpty() && !filesLoading) {
                             item { EmptyState(Icons.Outlined.FolderOpen, "Nothing here yet", "Forward files to the bot and they're filed here.") }
                         }
@@ -233,8 +236,8 @@ fun FilesScreen(vm: AppViewModel, onSettings: () -> Unit) {
 }
 
 @Composable
-private fun SubjectList(tree: LibraryTree, onSubject: (Int) -> Unit, onUnsorted: () -> Unit) {
-    LazyColumn(contentPadding = ScreenPadding, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+private fun SubjectList(tree: LibraryTree, padding: PaddingValues, onSubject: (Int) -> Unit, onUnsorted: () -> Unit) {
+    LazyColumn(contentPadding = padding, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (tree.subjects.isEmpty() && tree.unsorted == 0) {
             item {
                 EmptyState(Icons.Outlined.FolderOpen, "No files yet",
