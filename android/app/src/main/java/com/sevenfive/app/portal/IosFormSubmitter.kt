@@ -10,6 +10,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.FormBody
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.Executors
@@ -58,7 +59,17 @@ class IosFormSubmitter(
 ) {
     private val main = Handler(Looper.getMainLooper())
     private val io = Executors.newSingleThreadExecutor()
+    private val jar = PortalCookieJar()
+
+    /**
+     * The page a browser would name as Referer for the next page load: the page a form was sent
+     * from (a POST's redirect keeps it), else the last page shown. A WebView's loadUrl() sends no
+     * Referer; Safari always does after a login redirect, and the portal logged the session out
+     * on the first Referer-less page after login.
+     */
+    @Volatile private var lastPage: String? = null
     private val client = OkHttpClient.Builder()
+        .cookieJar(jar)
         .followRedirects(false)
         .followSslRedirects(false)
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -86,7 +97,6 @@ class IosFormSubmitter(
         if (!request.method.equals("GET", ignoreCase = true)) return null
         if (!PortalCheck.sameSite(portalHost, url.host, url.scheme)) return null
         pagesFetched++
-        val cookies = CookieManager.getInstance()
         val asked = request.requestHeaders.entries.associate { it.key.lowercase() to it.value }
         val builder = Request.Builder().url(url.toString()).get()
             .header("User-Agent", IOS_USER_AGENT)
@@ -99,21 +109,27 @@ class IosFormSubmitter(
         } else {
             builder.header("Accept", asked["accept"] ?: "*/*")
         }
-        asked["referer"]?.let { builder.header("Referer", it) }
-        cookies.getCookie(url.toString())?.let { builder.header("Cookie", it) }
+        val referer = asked["referer"] ?: if (request.isForMainFrame) lastPage else null
+        referer?.let { builder.header("Referer", it) }
+        val httpUrl = url.toString().toHttpUrlOrNull() ?: return null
+        val sentNames = jar.namesFor(httpUrl)
         val t0 = System.currentTimeMillis()
         val kind = if (request.isForMainFrame) "PAGE" else "res"
         return try {
             val r = client.newCall(builder.build()).execute()
             val setNames = r.headers("Set-Cookie").map { it.substringBefore('=').trim() }
-            r.headers("Set-Cookie").forEach { cookies.setCookie(url.toString(), it) }
             val location = r.header("Location")
+            if (request.isForMainFrame && !r.isRedirect) lastPage = url.toString()
+            if (request.isForMainFrame) {
+                PortalLog.add("GET PAGE headers: UA=iPhone Safari, Accept=html, Sec-Fetch=same-origin/navigate/document, " +
+                    "Referer=${referer?.let { PortalLog.where(it) } ?: "NONE"}, cookies=${sentNames.size}")
+            }
             if (request.isForMainFrame || r.code >= 400 || setNames.isNotEmpty()) {
                 PortalLog.add("GET $kind ${PortalLog.where(url.toString())} -> ${r.code} " +
                     "${System.currentTimeMillis() - t0}ms" +
                     (if (location != null) " redirect ${PortalLog.where(location)}" else "") +
                     (if (setNames.isNotEmpty()) " set-cookie ${setNames.joinToString()}" else "") +
-                    " cookies-sent ${cookies.getCookie(url.toString())?.split(';')?.size ?: 0}")
+                    " cookies-sent ${sentNames.size}${if (sentNames.isEmpty()) " (NONE)" else ""}")
             }
             if (r.isRedirect && location != null) {
                 r.close()
@@ -156,16 +172,15 @@ class IosFormSubmitter(
     }
 
     private fun send(rawAction: String, fieldsJson: String, referer: String) {
-        val cookies = CookieManager.getInstance()
+        lastPage = referer
         // An http action on an https page would leave out the Secure session cookie, so the
         // portal would start a new session and refuse the login. Browsers upgrade it; so do we.
         val action = Uri.parse(rawAction).let { a ->
             if (a.scheme == "http" && Uri.parse(referer).scheme == "https" && a.host == Uri.parse(referer).host)
                 a.buildUpon().scheme("https").build().toString() else rawAction
         }
-        val sentCookie = cookies.getCookie(action).orEmpty()
-        val sent = sentCookie.split(';').map { it.trim() }.filter { '=' in it }
-            .associate { it.substringBefore('=') to it.substringAfter('=') }
+        val actionUrl = action.toHttpUrlOrNull()
+        val sent = actionUrl?.let { u -> jar.loadForRequest(u).associate { it.name to it.value } }.orEmpty()
         val form = FormBody.Builder()
         val fields = mutableListOf<Pair<String, Boolean>>()  // name to "has a value"
         runCatching { Json.parseToJsonElement(fieldsJson) as JsonArray }.getOrNull()?.forEach { pair ->
@@ -192,7 +207,6 @@ class IosFormSubmitter(
             .header("Sec-Fetch-Site", if (sameOriginStr(referer, origin)) "same-origin" else "same-site")
             .header("Sec-Fetch-Mode", "navigate")
             .header("Sec-Fetch-Dest", "document")
-            .apply { if (sentCookie.isNotEmpty()) header("Cookie", sentCookie) }
             .build()
         try {
             client.newCall(request).execute().use { r ->
@@ -226,18 +240,12 @@ class IosFormSubmitter(
                 PortalLog.add("POST answer ${r.code} ${summary.millis}ms" +
                     (summary.redirect?.let { " redirect $it" } ?: " page ${html.length} chars") +
                     " | set-cookie: ${set.joinToString { "${it.first} ${it.second}" }.ifEmpty { "none" }}")
+                // The jar already holds the new cookies (OkHttp saved them before we got here), so
+                // the next page can load at once and the intercepted GET will carry them.
                 main.post {
                     report(summary)
-                    val load = {
-                        cookies.flush()
-                        if (next != null) web.loadUrl(next)
-                        else web.loadDataWithBaseURL(action, html, "text/html", charset, action)
-                    }
-                    if (setCookies.isEmpty()) { load(); return@post }
-                    var left = setCookies.size
-                    setCookies.forEach { c ->
-                        cookies.setCookie(action, c) { left -= 1; if (left == 0) load() }
-                    }
+                    if (next != null) web.loadUrl(next)
+                    else web.loadDataWithBaseURL(action, html, "text/html", charset, action)
                 }
             }
         } catch (e: Exception) {
