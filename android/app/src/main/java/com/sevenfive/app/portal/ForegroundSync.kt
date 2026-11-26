@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import com.sevenfive.app.data.ApiException
@@ -75,7 +76,15 @@ class ForegroundSync(
 
     private fun createWebView(): WebView = WebView(context).apply {
         configureForPortal(bridge)
+        // The same iPhone path as the login: if the sync's page loads went out with the WebView's
+        // Android headers on the session the student logged in as an iPhone, the portal would see
+        // two devices on one session and log it out.
+        val ios = sendPortalFormsAsIphone(Uri.parse(servers.config.value.portalUrl).host.orEmpty())
+        PortalLog.add("--- background sync WebView: ${if (ios != null) "iPhone path" else "plain WebView"}")
         webViewClient = object : WebViewClient() {
+            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
+                ios?.interceptGet(request)
+
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val portal = Uri.parse(servers.config.value.portalUrl)
                 return !sameOrigin(request.url, portal)

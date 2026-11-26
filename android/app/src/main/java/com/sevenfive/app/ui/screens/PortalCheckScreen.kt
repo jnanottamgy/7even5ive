@@ -105,6 +105,7 @@ fun PortalCheckScreen(vm: AppViewModel, portalUrl: String, onBack: () -> Unit) {
     var pageChecks by remember { mutableStateOf<List<Check>>(emptyList()) }
     var iosRef by remember { mutableStateOf<IosFormSubmitter?>(null) }
     var pagesFetched by remember { mutableIntStateOf(0) }
+    var dataResults by remember { mutableStateOf<List<JsonObject>>(emptyList()) }
 
     // What the probe found on the page: is it a login form, the portal's notice, and the checks.
     val applyProbe: (String?) -> Unit = { v ->
@@ -114,6 +115,7 @@ fun PortalCheckScreen(vm: AppViewModel, portalUrl: String, onBack: () -> Unit) {
             onLoginPage = login
             if (login == true) everOnLogin = true
             recaptchaState = o["rc"]?.jsonPrimitive?.contentOrNull?.ifBlank { null }
+            dataResults = (o["data"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
             portalMessage = o["msg"]?.jsonPrimitive?.contentOrNull
                 ?.replace(Regex("\\s+"), " ")?.trim()?.ifBlank { null }
             val checks = (o["checks"] as? JsonArray).orEmpty().mapNotNull { c ->
@@ -199,6 +201,18 @@ fun PortalCheckScreen(vm: AppViewModel, portalUrl: String, onBack: () -> Unit) {
                     all.forEach { CheckRow(it) }
                     Spacer(Modifier.height(4.dp))
                 }
+                if (onLoginPage == false) {
+                    Text(
+                        "Test data pages (attendance, marks, results…)",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.pressable {
+                            PortalLog.add("--- data test started")
+                            webView?.evaluateJavascript(DATA_TEST_JS, null)
+                        },
+                    )
+                }
+                dataResults.forEach { DataRow(it) }
                 LogButtons(appContext)
                 StatusRow("Browser", "${identity.label} · tap to switch", MaterialTheme.colorScheme.primary) {
                     val next = if (identity == PortalIdentity.IPHONE) PortalIdentity.ANDROID_CHROME
@@ -494,7 +508,7 @@ if(at){var fl=at.value.split('.').slice(1).join('.');add('anti-tamper clean',fl?
 add('reCAPTCHA script loaded',typeof grecaptcha!=='undefined'?2:(login?0:1));
 add('reCAPTCHA token ready',tok?2:(login?0:1),tok?'yes':'none yet');
 add('iPhone form hook in page',window.__sfIos?2:0);
-return {login:login,rc:rc,checks:k,msg:e?e.innerText.trim().slice(0,200):''};
+return {login:login,rc:rc,checks:k,data:window.__sfData||[],msg:e?e.innerText.trim().slice(0,200):''};
 })()
 """.trimIndent()
 
@@ -522,3 +536,63 @@ private fun LogButtons(context: android.content.Context) {
         note?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = LocalAppColors.current.secondaryLabel) }
     }
 }
+
+/** One data page's result: green when it came back logged in with the data's markers on it. */
+@Composable
+private fun DataRow(o: JsonObject) {
+    fun str(k: String) = o[k]?.jsonPrimitive?.contentOrNull
+    fun num(k: String) = o[k]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull()?.toInt() ?: 0
+    val page = str("page") ?: "?"
+    val error = str("error")
+    val status = num("status")
+    val login = str("login") == "true"
+    val markers = num("attendBadges") + num("attendRows") + num("chartArrays") + num("sgpa") + num("tables")
+    val state = when {
+        error != null || login || status >= 400 -> 0
+        markers > 0 -> 2
+        else -> 1
+    }
+    val detail = when {
+        error != null -> "failed: $error"
+        login -> "HTTP $status, but it's the LOGIN page (session lost)"
+        else -> "HTTP $status, ${num("size") / 1024} KB, badges ${num("attendBadges")}, rows ${num("attendRows")}, " +
+            "charts ${num("chartArrays")}, tables ${num("tables")}" +
+            (if (num("sgpa") > 0) ", SGPA x${num("sgpa")}" else "") + (if (str("cgpa") == "true") ", CGPA" else "")
+    }
+    CheckRow(Check("Data: $page", state, detail))
+}
+
+/**
+ * Fetches Contineo's data pages in this session, one at a time, from the logged-in page (so the
+ * requests go through the iPhone path like the background sync's would). Reports structure only:
+ * status, size, whether the login form came back, and counts of the elements the connector will
+ * parse. No marks, attendance figures or names are read out.
+ */
+private val DATA_TEST_JS = """
+(function(){
+if(window.__sfDataRunning)return 'busy';
+window.__sfDataRunning=1;window.__sfData=[];
+var base=location.pathname.replace(/[^\/]*$/,'')+'index.php?';
+var sd='option=com_studentdashboard&controller=studentdashboard&task=';
+var pages=[['Dashboard',sd+'dashboard'],['Attendance',sd+'attendencelist'],['CIE marks',sd+'ciedetails'],
+['Timetable',sd+'timetable'],['Results','option=com_history&controller=history&task=getResult']];
+var B=window.SevenFiveIosSubmit;function L(m){try{B&&B.log(m)}catch(e){}}
+var i=0;
+function next(){
+if(i>=pages.length){window.__sfDataRunning=0;L('data test done');return;}
+var p=pages[i++],t0=Date.now();
+fetch(base+p[1],{credentials:'include'}).then(function(r){return r.text().then(function(h){return [r.status,h]})}).then(function(a){
+var h=a[1],d=new DOMParser().parseFromString(h,'text/html'),txt=(d.body&&d.body.textContent)||'';
+var login=!!d.querySelector('#login-form,input[type=password]')||/log\s*in to your account/i.test(txt);
+var m={page:p[0],status:a[0],ms:Date.now()-t0,size:h.length,login:login,
+attendBadges:d.querySelectorAll('.cn-attend').length,
+attendRows:d.querySelectorAll('.cn-attend-list1 tr,.cn-attend-list2 tr').length,
+chartArrays:(h.match(/columns\s*:/g)||[]).length,
+sgpa:(txt.match(/SGPA/g)||[]).length,cgpa:/CGPA/.test(txt),
+tables:d.querySelectorAll('table').length};
+window.__sfData.push(m);L('data '+JSON.stringify(m));setTimeout(next,600);
+}).catch(function(e){var m={page:p[0],error:String(e)};window.__sfData.push(m);L('data '+JSON.stringify(m));setTimeout(next,600);});
+}
+next();return 'started';
+})()
+""".trimIndent()
