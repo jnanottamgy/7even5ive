@@ -166,7 +166,7 @@ fun FilesScreen(vm: AppViewModel, onSettings: () -> Unit) {
         )
     }
 
-    TabScaffold("Files", vm, onSettings, subtitle = "Your library from the WhatsApp bot, by subject") {
+    TabScaffold("Files", vm, onSettings) {
         val current = tree
         if (current == null) {
             if (loading) {
