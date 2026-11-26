@@ -71,7 +71,14 @@ class App:
             Job("reminders", lambda: notify.fire_due(self.db, self.sender, self.caller),
                 every=timedelta(seconds=30)),
             Job("mail", self.check_mail, at=parse_times(settings.mail_check_times)),
+            # Only does anything when a check was cut short (Lambda's budget, the mail cap).
+            Job("mail-continue", self.continue_mail, every=timedelta(minutes=2)),
         ]
+
+    def continue_mail(self) -> int:
+        from . import mail
+
+        return mail.continue_unfinished(self.db, self.job_budget)
 
     def check_mail(self) -> int:
         """College mail for every student, then Classroom for those who connected it."""

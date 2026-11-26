@@ -356,3 +356,18 @@ def test_without_the_classroom_scope_nothing_is_read(make_app, fake):
     fake.scopes = google.GMAIL_SCOPE
     _connect(TestClient(create(a)))
     assert google.classroom_sync(a, sid) == 0 and not fake.sent(google.CLASSROOM)
+
+
+def test_a_check_cut_short_goes_on_at_the_next_turn(make_app, monkeypatch):
+    from dataclasses import replace as swap
+
+    a, sid = make_app()
+    real = mail.mail_settings
+    monkeypatch.setattr(mail, "mail_settings", lambda: swap(real(), max_mails_per_run=2))
+    clock.freeze(NOW)
+    mail.startup(a.db, sid)  # 5 mails, 2 per run: stopped early
+    assert len(mail_items(a, sid)) < 3 and mail.unfinished(mail.mailbox_key(sid, "demo"))
+    for _ in range(3):
+        a.continue_mail()
+    assert len(mail_items(a, sid)) == 3
+    assert not mail.unfinished(mail.mailbox_key(sid, "demo")) and a.continue_mail() == 0

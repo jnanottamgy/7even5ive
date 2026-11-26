@@ -215,6 +215,34 @@ def check_all(db: Database, budget_seconds: float | None = None) -> int:
     return done
 
 
+def unfinished(sid_key: str) -> bool:
+    """True when this mailbox's last check stopped early (its time budget, or the 200-mail cap)."""
+    from sqlalchemy import select
+
+    from mailfilter.store import runs
+
+    with store().engine.connect() as c:
+        last = c.execute(select(runs.c.more).where(runs.c.student_id == sid_key)
+                         .order_by(runs.c.id.desc()).limit(1)).first()
+    return bool(last is not None and last.more)
+
+
+def continue_unfinished(db: Database, budget_seconds: float | None = None) -> int:
+    """A check cut short goes on at the next turn of the loop, not at the next 1 PM or 9 PM.
+    On Lambda each turn has 20 seconds, so a big first Gmail check finishes over a few minutes."""
+    done = 0
+    for row in db.conn.execute("SELECT id FROM students ORDER BY id").fetchall():
+        sid = int(row["id"])
+        if not unfinished(mailbox_key(sid, mode(db, sid))):
+            continue
+        try:
+            check(db, sid, "continue", budget_seconds=budget_seconds)
+            done += 1
+        except MailUnavailable as err:
+            log.info("mail continue skipped", extra={"student": sid, "status": err.status})
+    return done
+
+
 # --- cards into items -----------------------------------------------------------------------------
 def _iso(at: datetime | None, has_time: bool = True) -> str | None:
     if at is None:
