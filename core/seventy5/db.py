@@ -51,7 +51,12 @@ CREATE TABLE IF NOT EXISTS items (
   relevance REAL, created_at TEXT NOT NULL,
   -- Where a linked library's row came from ("bot:deadline:12") and the version last
   -- applied, so a change lands on the same card and an older one never wins.
-  external_id TEXT, external_version BIGINT
+  external_id TEXT, external_version BIGINT,
+  -- College mail cards (mail.py): placement, internship or exam_notice; who and what; the
+  -- form and the mail itself; one plain sentence; and the event's own date when the card's
+  -- due_at is the deadline to register.
+  category TEXT, organisation TEXT, role TEXT, link TEXT, mail_link TEXT, summary TEXT,
+  event_at TEXT
 );
 -- Why a table of used nonces: an approval token works once, even inside its expiry.
 CREATE TABLE IF NOT EXISTS used_approvals (nonce TEXT PRIMARY KEY, used_at TEXT NOT NULL);
@@ -103,12 +108,26 @@ CREATE TABLE IF NOT EXISTS calls (
 CREATE TABLE IF NOT EXISTS jobs (
   name TEXT PRIMARY KEY, last_run_at TEXT NOT NULL, last_ok_at TEXT, last_error TEXT
 );
+-- One Google account per student (google.py): the refresh token encrypted at rest, the
+-- scopes Google actually granted, and the address it belongs to. The phone never holds it.
+CREATE TABLE IF NOT EXISTS google_accounts (
+  student_id BIGINT PRIMARY KEY, email TEXT, scopes TEXT NOT NULL,
+  refresh_token TEXT NOT NULL, connected_at TEXT NOT NULL
+);
+-- A sign-in in progress: the one-time `state` Google hands back, the PKCE verifier and where
+-- Google must return to. Spent on first use; worthless after expires_at.
+CREATE TABLE IF NOT EXISTS connect_codes (
+  code TEXT PRIMARY KEY, student_id BIGINT NOT NULL, verifier TEXT NOT NULL,
+  redirect_uri TEXT NOT NULL, expires_at TEXT NOT NULL
+);
 """
 
 # Columns added after the first release. A fresh database gets them from SCHEMA above only if
 # they are listed there too; an older database gets them here, once.
 COLUMNS: dict[str, dict[str, str]] = {
-    "items": {"external_id": "TEXT", "external_version": "BIGINT"},
+    "items": {"external_id": "TEXT", "external_version": "BIGINT", "category": "TEXT",
+              "organisation": "TEXT", "role": "TEXT", "link": "TEXT", "mail_link": "TEXT",
+              "summary": "TEXT", "event_at": "TEXT"},
     "reminders": {"channel": "TEXT NOT NULL DEFAULT 'push'"},
     "students": {"call_consent_at": "TEXT", "quiet_start": "TEXT", "quiet_end": "TEXT"},
 }
@@ -118,6 +137,7 @@ CREATE INDEX IF NOT EXISTS notifications_student ON notifications(student_id, id
 CREATE INDEX IF NOT EXISTS reminders_due ON reminders(status, fire_at);
 CREATE INDEX IF NOT EXISTS calls_provider ON calls(provider_id);
 CREATE INDEX IF NOT EXISTS calls_student ON calls(student_id, created_at);
+CREATE INDEX IF NOT EXISTS items_external ON items(student_id, external_id);
 """
 
 try:  # psycopg is only needed against Postgres
@@ -548,6 +568,49 @@ class Database:
         rows = self.conn.execute("SELECT token FROM devices WHERE student_id=? ORDER BY"
                                  " created_at", (student_id,)).fetchall()
         return [r["token"] for r in rows]
+
+    # --- Google accounts and sign-ins in progress ------------------------------------------
+    def save_google(self, student_id: int, email: str | None, scopes: str, refresh_token: str,
+                    now: str) -> None:
+        """refresh_token arrives encrypted (google.py); this table never sees it in the clear."""
+        with self.tx() as c:
+            c.execute("INSERT INTO google_accounts(student_id, email, scopes, refresh_token,"
+                      " connected_at) VALUES (?,?,?,?,?) ON CONFLICT(student_id) DO UPDATE SET"
+                      " email=excluded.email, scopes=excluded.scopes,"
+                      " refresh_token=excluded.refresh_token, connected_at=excluded.connected_at",
+                      (student_id, email, scopes, refresh_token, now))
+
+    def google_account(self, student_id: int) -> Any | None:
+        return self.conn.execute("SELECT * FROM google_accounts WHERE student_id=?",
+                                 (student_id,)).fetchone()
+
+    def google_students(self) -> list[int]:
+        rows = self.conn.execute("SELECT student_id FROM google_accounts ORDER BY student_id"
+                                 ).fetchall()
+        return [int(r["student_id"]) for r in rows]
+
+    def delete_google(self, student_id: int) -> bool:
+        with self.tx() as c:
+            cur = c.execute("DELETE FROM google_accounts WHERE student_id=?", (student_id,))
+            return cur.rowcount == 1
+
+    def add_connect_code(self, code: str, student_id: int, verifier: str, redirect_uri: str,
+                         expires_at: str) -> None:
+        with self.tx() as c:
+            # One sign-in at a time per student: an older, unfinished one stops working.
+            c.execute("DELETE FROM connect_codes WHERE student_id=?", (student_id,))
+            c.execute("INSERT INTO connect_codes VALUES (?,?,?,?,?)",
+                      (code, student_id, verifier, redirect_uri, expires_at))
+
+    def take_connect_code(self, code: str, now: str) -> Any | None:
+        """The sign-in for this code, once: the row is deleted as it is read. None when it is
+        unknown, already used or expired."""
+        with self.tx() as c:
+            row = c.execute("SELECT * FROM connect_codes WHERE code=?", (code,)).fetchone()
+            if row is None:
+                return None
+            c.execute("DELETE FROM connect_codes WHERE code=?", (code,))
+        return row if row["expires_at"] > now else None
 
     # --- background jobs ---------------------------------------------------------------
     def job(self, name: str) -> Any | None:

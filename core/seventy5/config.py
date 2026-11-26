@@ -58,6 +58,12 @@ class Settings:
     # console (credentials come from the normal AWS chain, never from this file).
     bedrock_model_id: str = os.environ.get("BEDROCK_MODEL_ID", "")
     aws_region: str = os.environ.get("AWS_REGION", "ap-south-1")
+    # Where Bedrock is called. Defaults to the region the code runs in; set it when the model
+    # is enabled in another region (the serverless demo runs in Sydney, Haiku may be in Mumbai).
+    bedrock_region: str = (os.environ.get("BEDROCK_REGION") or os.environ.get("AWS_REGION")
+                           or "ap-south-1")
+    # Generated files kept for a while (the briefing's audio). Lambda can only write /tmp.
+    cache_dir: str = os.environ.get("CACHE_DIR", str(ROOT / "data" / "cache"))
 
     # PortMax's saved portal answers (attendance, timetable). Same database in production.
     portmax_database_url: str = os.environ.get(
@@ -79,17 +85,30 @@ class Settings:
     fcm_service_account_json: str = os.environ.get("FCM_SERVICE_ACCOUNT_JSON", "")
     fcm_service_account_file: str = os.environ.get("FCM_SERVICE_ACCOUNT_FILE", "")
 
-    # ElevenLabs: the urgent call (calls.py) and the briefing's voice (briefing.py).
+    # ElevenLabs: the urgent call (calls.py), the briefing's voice (briefing.py) and the in-app
+    # voice assistant (voice.py).
     elevenlabs_api_key: str = os.environ.get("ELEVENLABS_API_KEY", "")
+    # The API's address. The default serves everywhere; ElevenLabs' India data residency is
+    # https://api.in.residency.elevenlabs.io (only for a workspace created there).
+    elevenlabs_api: str = os.environ.get("ELEVENLABS_API", "https://api.elevenlabs.io").rstrip("/")
     elevenlabs_agent_id: str = os.environ.get("ELEVENLABS_AGENT_ID", "")
+    # The in-app voice assistant: a second agent, with tools the phone runs through the gateway.
+    elevenlabs_assistant_agent_id: str = os.environ.get("ELEVENLABS_ASSISTANT_AGENT_ID", "")
+    # The model both agents think with (ElevenLabs runs it; no key of ours involved).
+    elevenlabs_agent_llm: str = os.environ.get("ELEVENLABS_AGENT_LLM", "claude-haiku-5-5")
+    # How long one conversation with the assistant may last.
+    voice_max_seconds: int = int(os.environ.get("VOICE_MAX_SECONDS", "300"))
     # The phone number imported into ElevenLabs (its id there, not the number itself).
     elevenlabs_phone_number_id: str = os.environ.get("ELEVENLABS_PHONE_NUMBER_ID", "")
-    # twilio (the demo) | sip (an Indian trunk, e.g. Exotel or Plivo) -- see docs/call.md.
+    # twilio (the demo) | exotel (an Indian number, imported natively) | sip (any SIP trunk,
+    # e.g. Plivo) -- see docs/call.md.
     call_provider: str = os.environ.get("CALL_PROVIDER", "twilio")
     # Signs ElevenLabs' post-call webhook; empty refuses every webhook (never trusted unsigned).
     elevenlabs_webhook_secret: str = os.environ.get("ELEVENLABS_WEBHOOK_SECRET", "")
     elevenlabs_voice_id: str = os.environ.get("ELEVENLABS_VOICE_ID", "")
     elevenlabs_tts_model: str = os.environ.get("ELEVENLABS_TTS_MODEL", "eleven_flash_v2_5")
+    # 64 kbps mp3: a minute of briefing is about half a megabyte, well inside Lambda's limits.
+    elevenlabs_tts_format: str = os.environ.get("ELEVENLABS_TTS_FORMAT", "mp3_44100_64")
     # [TUNE] The call rules (decision P4 in plan.md). Quiet hours are India time.
     call_default_lead_minutes: int = int(os.environ.get("CALL_LEAD_MINUTES", "120"))
     call_quiet_start: str = os.environ.get("CALL_QUIET_START", "22:00")
@@ -105,6 +124,8 @@ class Settings:
     # Encrypts the stored Google refresh tokens. Empty in development: a fixed dev key is
     # used and the startup report says so.
     token_encryption_key: str = os.environ.get("TOKEN_ENCRYPTION_KEY", "")
+    # Classroom with each mail check (and once on connecting): on unless switched off.
+    classroom_enabled: bool = os.environ.get("CLASSROOM_ENABLED", "1") not in ("0", "false", "")
 
     # College mail (mail.py, the mail filter): check times, India time.
     mail_check_times: str = os.environ.get("MAIL_CHECK_TIMES", "13:00,21:00")

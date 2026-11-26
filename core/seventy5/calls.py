@@ -40,7 +40,6 @@ from .db import Database
 
 log = logging.getLogger(__name__)
 
-API = "https://api.elevenlabs.io"
 # The demo student's invented number (demo.PHONE): never dialled. DEMO_STUDENT_PHONE replaces it.
 DEMO_PHONE = "919900000001"
 # Statuses that mean the phone rang, or was being rung.
@@ -91,19 +90,22 @@ class ElevenLabsCaller:
     """ElevenLabs' agent rings through the phone number imported into it.
 
     twilio: a Twilio number imported natively (the demo; foreign caller id).
-    sip:    a SIP trunk number, e.g. an Indian provider (Exotel, Plivo) -- for real students.
+    exotel: an Exotel number imported natively -- an Indian caller id, for real students.
+    sip:    any SIP trunk number (e.g. Plivo).
     """
 
     name = "elevenlabs"
     PATHS = {"twilio": "/v1/convai/twilio/outbound-call",
+             "exotel": "/v1/convai/exotel/outbound-call",
              "sip": "/v1/convai/sip-trunk/outbound-call"}
 
     def __init__(self, api_key: str, agent_id: str, phone_number_id: str, provider: str,
-                 http: httpx.Client | None = None) -> None:
+                 http: httpx.Client | None = None, api: str | None = None) -> None:
         if provider not in self.PATHS:
             raise ValueError(f"CALL_PROVIDER must be one of {sorted(self.PATHS)}")
         self.key, self.agent, self.number, self.provider = api_key, agent_id, phone_number_id, provider
         self.http = http or httpx.Client(timeout=20.0)
+        self.api = (api or settings.elevenlabs_api).rstrip("/")
 
     def place(self, request: CallRequest) -> str:
         body = {
@@ -113,7 +115,7 @@ class ElevenLabsCaller:
             "conversation_initiation_client_data": {"dynamic_variables": request.variables},
         }
         try:
-            resp = self.http.post(API + self.PATHS[self.provider], json=body,
+            resp = self.http.post(self.api + self.PATHS[self.provider], json=body,
                                   headers={"xi-api-key": self.key})
         except httpx.HTTPError as err:
             raise CallFailed(f"network_{type(err).__name__}") from err
@@ -336,12 +338,19 @@ def place_for_reminder(db: Database, caller: Caller, sender: Any, reminder: Any,
 
 
 def test_call(db: Database, caller: Caller, sender: Any, student_id: int) -> dict[str, Any]:
-    """Settings' "Test call": rings now about the soonest open dated item, under every rule."""
+    """Settings' "Test call": rings now about the soonest open dated item, under every rule.
+    The student is looking at Settings, so a missing consent or number is said there, not
+    turned into a push."""
     now = clock.now()
+    student = db.student(student_id)
+    if not student["call_consent_at"]:
+        raise ValueError("calls are off: turn them on first")
+    if phone_for(student) is None:
+        raise ValueError("there's no phone number to call")
     upcoming = db.items(student_id, kinds=("deadline", "exam", "event"), due_from=clock.iso(now))
     if not upcoming:
         raise ValueError("nothing due to call about yet")
-    return place(db, caller, sender, db.student(student_id), upcoming[0], None)
+    return place(db, caller, sender, student, upcoming[0], None)
 
 
 # --- settings, history ------------------------------------------------------------------------
@@ -482,15 +491,29 @@ Rules:
 """
 
 
+def system_tool(kind: str) -> dict[str, Any]:
+    """One of ElevenLabs' built-in tools (it runs inside ElevenLabs, never touches our data)."""
+    return {"name": kind, "type": "system", "params": {"system_tool_type": kind}}
+
+
 def agent_config() -> dict[str, Any]:
-    """The agent's settings as one reviewed object (pushed by `setup-agent`)."""
+    """The agent's settings as one reviewed object (pushed by `setup-agent`).
+
+    Its only tools are ElevenLabs' own: hang up, and hang up on a voicemail without leaving a
+    message. None of them can read or change anything of the student's."""
     return {
         "name": "7even5ive urgent call",
+        "tags": ["7even5ive"],
         "conversation_config": {
             "agent": {
                 "first_message": FIRST_MESSAGE,
                 "language": "en",
-                "prompt": {"prompt": AGENT_PROMPT, "tools": []},
+                "prompt": {
+                    "prompt": AGENT_PROMPT,
+                    "llm": settings.elevenlabs_agent_llm,
+                    "built_in_tools": {"end_call": system_tool("end_call"),
+                                       "voicemail_detection": system_tool("voicemail_detection")},
+                },
             },
             "conversation": {"max_duration_seconds": settings.call_max_seconds},
             **({"tts": {"voice_id": settings.elevenlabs_voice_id}}
@@ -499,20 +522,25 @@ def agent_config() -> dict[str, Any]:
     }
 
 
-def setup_agent(http: httpx.Client | None = None) -> str:
-    """Creates the agent, or updates it when ELEVENLABS_AGENT_ID is set. Returns its id."""
+def push_agent(config: dict[str, Any], agent_id: str, http: httpx.Client | None = None) -> str:
+    """Creates the agent, or updates the one with this id. Returns its id."""
     if not settings.elevenlabs_api_key:
         raise SystemExit("ELEVENLABS_API_KEY is not set")
     client = http or httpx.Client(timeout=30.0)
     headers = {"xi-api-key": settings.elevenlabs_api_key}
-    if settings.elevenlabs_agent_id:
-        resp = client.patch(f"{API}/v1/convai/agents/{settings.elevenlabs_agent_id}",
-                            json=agent_config(), headers=headers)
+    api = settings.elevenlabs_api
+    if agent_id:
+        resp = client.patch(f"{api}/v1/convai/agents/{agent_id}", json=config, headers=headers)
         resp.raise_for_status()
-        return settings.elevenlabs_agent_id
-    resp = client.post(f"{API}/v1/convai/agents/create", json=agent_config(), headers=headers)
+        return agent_id
+    resp = client.post(f"{api}/v1/convai/agents/create", json=config, headers=headers)
     resp.raise_for_status()
     return str(resp.json()["agent_id"])
+
+
+def setup_agent(http: httpx.Client | None = None) -> str:
+    """Creates the call agent, or updates it when ELEVENLABS_AGENT_ID is set. Returns its id."""
+    return push_agent(agent_config(), settings.elevenlabs_agent_id, http)
 
 
 def main(argv: list[str] | None = None) -> None:
