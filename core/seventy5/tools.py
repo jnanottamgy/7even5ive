@@ -11,6 +11,8 @@ import hashlib
 from datetime import timedelta
 from typing import Any
 
+import httpx
+
 from portmax.errors import NotConnected
 from portmax.store import Store
 from portmax.tools import answer, attendance_plan_answer
@@ -31,10 +33,16 @@ def portal_store() -> Store:
     return _portal
 
 
+MAIL_FIELDS = ("category", "organisation", "role", "link", "mail_link", "summary", "event_at")
+
+
 def _card(row: Any) -> dict[str, Any]:
-    return {"id": row["id"], "kind": row["kind"], "subject": row["subject"],
+    card = {"id": row["id"], "kind": row["kind"], "subject": row["subject"],
             "title": row["title"], "due_at": row["due_at"], "status": row["status"],
             "source": row["source"], "route": row["route"]}
+    if row["route"] == "mail":  # a college-mail card carries who, what, the form and the mail
+        card |= {k: row[k] for k in MAIL_FIELDS}
+    return card
 
 
 def due_this_week(db: Database, student_id: int) -> list[dict[str, Any]]:
@@ -50,10 +58,13 @@ def materials(db: Database, student_id: int, subject: str | None = None) -> list
 
 
 def opportunities(db: Database, student_id: int) -> list[dict[str, Any]]:
-    """Events and notices from email that passed the spam filter, most relevant first."""
-    rows = db.items(student_id, kinds=("event", "notice"))
-    rows = [r for r in rows if r["source"] == "gmail"]
-    rows.sort(key=lambda r: -(r["relevance"] or 0))
+    """College mail worth a look: placements, internships, exam notices and events that passed
+    the filters, still open, most relevant first, then soonest first."""
+    cutoff = clock.iso(clock.now() - timedelta(days=1))
+    rows = [r for r in db.items(student_id, kinds=("deadline", "exam", "event", "notice"))
+            if r["source"] == "gmail"
+            and not (r["due_at"] and max(r["due_at"], r["event_at"] or "") < cutoff)]
+    rows.sort(key=lambda r: (-(r["relevance"] or 0), r["due_at"] or "9999"))
     return [_card(r) | {"relevance": r["relevance"]} for r in rows]
 
 
@@ -95,6 +106,13 @@ def timetable_today(db: Database, student_id: int, now: Any = None) -> dict[str,
          "room": s.room} for s in slots]}
 
 
+def check_mail_now(db: Database, student_id: int) -> dict[str, Any]:
+    """Check college mail now (5-minute cooldown): new cards land in the Inbox."""
+    from . import mail
+
+    return mail.check_mail_now(db, student_id)
+
+
 def briefing(db: Database, student_id: int) -> dict[str, Any]:
     """Today's briefing: the sections and the text the app (or its voice) reads out."""
     from . import briefing as morning
@@ -128,8 +146,22 @@ def add_to_calendar(db: Database, student_id: int, item_id: int) -> dict[str, An
     if item is None or not item["due_at"]:
         raise ValueError("no dated item with that id")
     key = calendar_key(student_id, item_id)
-    db.upsert_calendar(key, student_id, f"{item['subject']}: {item['title']}", item["due_at"])
-    return {"calendar_event": key, "title": item["title"], "starts_at": item["due_at"]}
+    title = f"{item['subject']}: {item['title']}"
+    db.upsert_calendar(key, student_id, title, item["due_at"])
+    out: dict[str, Any] = {"calendar_event": key, "title": item["title"],
+                           "starts_at": item["due_at"]}
+    from . import google
+
+    if google.has_calendar(db, student_id):
+        # The student's real calendar, with the same fixed id: a retry rewrites, never doubles.
+        from mailfilter.errors import MailFilterError
+
+        try:
+            out["google"] = {"ok": True, **google.calendar_upsert(
+                db, student_id, key, title, item["due_at"])}
+        except (google.GoogleUnavailable, MailFilterError, httpx.HTTPError) as err:
+            out["google"] = {"ok": False, "reason": str(err) or type(err).__name__}
+    return out
 
 
 # --- the bot's library (read through, never copied: see library.py) ---------------------------

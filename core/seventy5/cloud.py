@@ -235,14 +235,35 @@ def demo_api(router: Router, base_db: str) -> Any:
 
     @api.post("/demo/reset")
     def reset(authorization: str | None = Header(None)) -> dict[str, Any]:
-        """A clean demo: a fresh database with the demo morning, and a fresh mock portal."""
-        student(authorization)
+        """A clean demo: a fresh database with the demo morning, and a fresh mock portal.
+
+        What the student set up stays: a connected Google account, the phones registered for
+        wake-ups, and the call consent and quiet hours. Only the demo's data starts over."""
+        from . import mail
+
+        sid = student(authorization)
+        old = router.app.db
+        kept_google = old.google_account(sid)
+        kept_devices = old.conn.execute("SELECT token, platform, created_at FROM devices"
+                                        " WHERE student_id=?", (sid,)).fetchall()
+        kept_student = old.student(sid)
         resets["n"] += 1
         fresh = base_db
         if "://" not in base_db:  # a SQLite file: a new one beside it
             path = Path(base_db)
             fresh = str(path.with_name(f"{path.stem}-reset{resets['n']}{path.suffix}"))
-        app, core, _, _, lines = demo.prepare(fresh)
+        mail.reset_demo(sid)
+        app, core, new_sid, _, lines = demo.prepare(fresh)
+        if kept_google is not None:
+            app.db.save_google(new_sid, kept_google["email"], kept_google["scopes"],
+                               kept_google["refresh_token"], kept_google["connected_at"])
+            mail.sync_cards(app.db, new_sid)  # the real mailbox's cards, not the demo's
+        for row in kept_devices:
+            app.db.add_device(row["token"], new_sid, row["platform"], row["created_at"])
+        with app.db.tx() as c:
+            c.execute("UPDATE students SET call_consent_at=?, quiet_start=?, quiet_end=?"
+                      " WHERE id=?", (kept_student["call_consent_at"], kept_student["quiet_start"],
+                                      kept_student["quiet_end"], new_sid))
         router.app, router.core = app, core
         router.portal = create_app(config=PortalConfig(captcha="fixed"))
         print(f"demo reset {resets['n']}: replayed {len(lines)} demo messages", flush=True)

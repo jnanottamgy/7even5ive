@@ -14,9 +14,9 @@ from pathlib import Path
 from typing import Any, AsyncIterator
 
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, Response
 
-from . import briefing, calls, clock, notify, tools, voice
+from . import briefing, calls, clock, google, mail, notify, tools, voice
 from .app import App, build
 from .config import settings
 from .gateway import Denied, read_token
@@ -106,6 +106,7 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
             "calendar": [dict(r) for r in db.calendar(sid)],
             "reminders": notify.list_reminders(db, sid),
             "classes_today": tools.timetable_today(db, sid)["classes"],
+            "mail": mail.status(db, sid),
             "audit": [dict(r) for r in db.audit_log(sid)][:12],
         }
 
@@ -170,7 +171,10 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
         sid = student_from(authorization)
         return {"calls": calls.call_settings(state.db, sid),
                 # True when Firebase is configured: the phone is woken at once, not on its pull.
-                "push": {"wakeups": getattr(state.sender, "wake", None) is not None}}
+                "push": {"wakeups": getattr(state.sender, "wake", None) is not None},
+                "google": google.status(state.db, sid),
+                "voice": {"assistant": voice.configured(),
+                          "briefing_audio": briefing.voice_configured()}}
 
     @api.post("/api/settings/calls")
     def set_call_settings(body: dict[str, Any],
@@ -231,6 +235,59 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
         return Response(sound, media_type="audio/mpeg",
                         headers={"Cache-Control": "private, max-age=600"})
 
+    # --- Google: one sign-in on the server (Gmail read-only, Calendar, Classroom) --------------
+    @api.post("/api/google/start")
+    def google_start(request: Request, authorization: str | None = Header(None)) -> dict[str, Any]:
+        """Google's consent page for this student. The app opens it in the browser; nothing
+        about the student is in the address (the state is a one-time code)."""
+        from .cloud import origin_of
+
+        sid = student_from(authorization)
+        try:
+            return google.start(state.db, sid, origin_of(request.scope))
+        except google.GoogleUnavailable as err:
+            raise HTTPException(503, str(err)) from err
+
+    @api.get("/api/google/callback")
+    def google_callback(request: Request) -> HTMLResponse:
+        # No token here: Google sends the browser back; the one-time state names the student.
+        query = request.query_params
+        try:
+            if query.get("error"):
+                raise google.GoogleUnavailable("You didn't allow access at Google. Nothing was "
+                                               "connected.")
+            sid = google.finish(state.db, query.get("code"), query.get("state"))
+        except google.GoogleUnavailable as err:
+            return HTMLResponse(_page("Not connected", str(err)), status_code=400)
+        mail.sync_cards(state.db, sid)  # invented demo mail leaves the Inbox at once
+        state.db.audit(sid, "google_connect", "allow", "student", clock.iso(clock.now()))
+        return HTMLResponse(_page("Connected", "Google is connected to 7even5ive. Go back to "
+                                  "the app: your college mail is checked at 1 PM and 9 PM, or "
+                                  "tap Check now."))
+
+    @api.post("/api/google/disconnect")
+    def google_disconnect(authorization: str | None = Header(None)) -> dict[str, Any]:
+        sid = student_from(authorization)
+        removed = google.disconnect(state.db, sid)
+        state.db.audit(sid, "google_disconnect", "allow", "student", clock.iso(clock.now()))
+        return {"disconnected": removed, "google": google.status(state.db, sid)}
+
+    # --- college mail ---------------------------------------------------------------------------
+    @api.get("/api/mail")
+    def mail_status(authorization: str | None = Header(None)) -> dict[str, Any]:
+        return mail.status(state.db, student_from(authorization))
+
+    @api.post("/api/mail/check")
+    def mail_check(authorization: str | None = Header(None)) -> dict[str, Any]:
+        """The Inbox's "Check now": refused within 5 minutes of the last check."""
+        sid = student_from(authorization)
+        try:
+            out = mail.check(state.db, sid, "check_now", budget_seconds=20)
+        except mail.MailUnavailable as err:
+            raise HTTPException(err.status, str(err)) from err
+        state.db.audit(sid, "check_mail_now", "allow", "student", clock.iso(clock.now()))
+        return out | {"mail": mail.status(state.db, sid)}
+
     # --- the voice assistant ----------------------------------------------------------------
     @api.get("/api/voice/session")
     def voice_session(authorization: str | None = Header(None)) -> dict[str, Any]:
@@ -256,3 +313,15 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
         return FileResponse(WEB / "index.html")
 
     return api
+
+
+def _page(title: str, message: str) -> str:
+    """The small page the browser shows after Google's sign-in. Text only, escaped."""
+    from html import escape
+
+    return ("<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' "
+            "content='width=device-width, initial-scale=1'><title>7even5ive</title><style>"
+            "body{font:17px/1.5 system-ui,sans-serif;background:#F4F1EA;color:#0B0C10;"
+            "display:grid;place-items:center;min-height:90vh;margin:0;padding:16px}"
+            "main{max-width:420px}h1{color:#FF8A1F;font-size:28px;margin:0 0 8px}</style></head>"
+            f"<body><main><h1>{escape(title)}</h1><p>{escape(message)}</p></main></body></html>")

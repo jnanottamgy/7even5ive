@@ -34,6 +34,8 @@ class App:
     # Where messages for the student go (the outbox), and who rings for an urgent call.
     sender: notify.Sender = field(default_factory=notify.LogSender)
     caller: Any = None
+    # Seconds one background job may take (Lambda answers within 30 s); None: no limit.
+    job_budget: float | None = None
 
     def process(self, event_id: int) -> Outcome | None:
         """One event through the cascade. Shared by the local drain and the cascade Lambda.
@@ -63,10 +65,26 @@ class App:
 
     def jobs(self) -> list[Job]:
         """What the background loop runs (scheduler.py). Each is safe to run twice."""
+        from mailfilter.config import parse_times
+
         return [
             Job("reminders", lambda: notify.fire_due(self.db, self.sender, self.caller),
                 every=timedelta(seconds=30)),
+            Job("mail", self.check_mail, at=parse_times(settings.mail_check_times)),
         ]
+
+    def check_mail(self) -> int:
+        """College mail for every student, then Classroom for those who connected it."""
+        from . import google, mail
+
+        checked = mail.check_all(self.db, self.job_budget)
+        for sid in self.db.google_students():
+            try:
+                google.classroom_sync(self, sid)
+            except Exception as err:  # noqa: BLE001 - one student's Classroom never stops another
+                log.warning("classroom sync failed", extra={"student": sid,
+                                                            "error": type(err).__name__})
+        return checked
 
 
 def build(db_url: str | None = None, jev: Decider | None = None, llm: LLM | None = None,

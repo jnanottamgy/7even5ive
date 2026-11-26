@@ -106,7 +106,7 @@ def seed(app: Any) -> int:
     with db.tx() as c:
         for table in ("audit", "calendar", "pending_approvals", "used_approvals", "notifications",
                       "devices", "calls", "jobs", "reminders", "items", "events", "subjects",
-                      "students"):
+                      "google_accounts", "connect_codes", "students"):
             c.execute(f"DELETE FROM {table}")
         cur = c.execute("INSERT INTO students(name, wa_phone, mcp_token, branch, year, interests,"
                         " portal_id) VALUES (?,?,?,?,?,?,?) RETURNING id",
@@ -186,9 +186,10 @@ def prepare(db_url: str | None = None,
     sid = seed(app)
     api = create(app, run_jobs=run_jobs)
     lines = play(app, TestClient(api), sid)
-    from . import sync
+    from . import mail, sync
 
     lines += sync.backfill(app.db, sid)
+    lines += mail.startup(app.db, sid)
     return app, api, sid, live, lines
 
 

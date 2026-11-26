@@ -9,8 +9,9 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app/core
 # Dependencies first, so code changes don't reinstall them. requirements.txt installs
-# PortMax from ../portmax, so PortMax's source comes in this layer too.
+# PortMax and the mail filter from this repository, so their source comes in this layer too.
 COPY portmax /app/portmax
+COPY mailfilter /app/mailfilter
 COPY core/requirements.txt /app/core/requirements.txt
 RUN pip install -r requirements.txt
 

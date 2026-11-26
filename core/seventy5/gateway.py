@@ -47,6 +47,8 @@ POLICY: dict[str, str] = {
     # Today's picture, from what 7even5ive already holds.
     "briefing": "allow",
     "timetable_today": "allow",
+    # Reads the student's own mailbox into their own cards (5-minute cooldown).
+    "check_mail_now": "allow",
     "add_to_calendar": "ask",
     "send_email": "deny",  # Gmail is read-only for 75
     "submit_on_portal": "deny",
@@ -68,6 +70,7 @@ OWN: dict[str, Callable[..., Any]] = {
     "open_file": tools.open_file,
     "briefing": tools.briefing,
     "timetable_today": lambda db, sid: tools.timetable_today(db, sid),
+    "check_mail_now": tools.check_mail_now,
 }
 WRITES: dict[str, Callable[..., Any]] = {"add_to_calendar": tools.add_to_calendar}
 

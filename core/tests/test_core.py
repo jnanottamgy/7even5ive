@@ -25,8 +25,13 @@ from seventy5 import tools
 
 @pytest.fixture
 def app(tmp_path, monkeypatch):
+    from mailfilter.store import Store as MailStore
     from portmax.store import Store
+
+    from seventy5 import mail
     monkeypatch.setattr(tools, "_portal", Store(f"sqlite:///{tmp_path.as_posix()}/pm.db"))
+    monkeypatch.setattr(mail, "_store", MailStore(f"sqlite:///{tmp_path.as_posix()}/mail.db"))
+    monkeypatch.setattr(mail, "_demo", {})
 
     # PG_TEST_URL=postgresql://... runs every test against Postgres (Supabase's engine).
     url = os.environ.get("PG_TEST_URL") or str(tmp_path / "t.db")
@@ -381,7 +386,13 @@ def test_the_demo_tour_goes_through_the_real_webhook_and_resets(tmp_path, monkey
     from portmax.store import Store
     from seventy5 import cloud, config
 
+    from mailfilter.store import Store as MailStore
+
+    from seventy5 import mail
+
     monkeypatch.setattr(tools, "_portal", Store(f"sqlite:///{tmp_path.as_posix()}/pm.db"))
+    monkeypatch.setattr(mail, "_store", MailStore(f"sqlite:///{tmp_path.as_posix()}/mail.db"))
+    monkeypatch.setattr(mail, "_demo", {})
     monkeypatch.setattr(config, "settings", dataclasses.replace(
         config.settings, portmax_database_url=f"sqlite:///{tmp_path.as_posix()}/pm-api.db"))
     client = TestClient(cloud.build_router(str(tmp_path / "75.db")))
@@ -403,7 +414,8 @@ def test_the_demo_tour_goes_through_the_real_webhook_and_resets(tmp_path, monkey
 
     assert client.post("/demo/reset", headers=auth).json()["ok"]
     due = client.get("/api/cards", headers=auth).json()["due_this_week"]
-    assert len(due) == 4 and not any(c["title"] == cloud.QUIZ_TITLE for c in due)
+    morning = [c for c in due if c["route"] != "mail"]  # college mail's deadlines are here too
+    assert len(morning) == 4 and not any(c["title"] == cloud.QUIZ_TITLE for c in due)
 # --- the bot's library and deadlines (library.py, sync.py) --------------------------------------
 def _bot_event(a, kind: str, deadline: dict, version: int, event_id: str):
     client = TestClient(create(a))

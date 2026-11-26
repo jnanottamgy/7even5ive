@@ -22,9 +22,15 @@ TABLES = ("audit, reminders, calendar, pending_approvals, used_approvals, notifi
 def make_app(tmp_path, monkeypatch):
     """make_app(jev=..., llm=...) -> (app, student_id). Messages go to a LogSender and calls
     to a LogCaller unless the test passes its own."""
+    from mailfilter.store import Store as MailStore
     from portmax.store import Store
 
+    from seventy5 import google, mail
+
     monkeypatch.setattr(tools, "_portal", Store(f"sqlite:///{tmp_path.as_posix()}/pm.db"))
+    monkeypatch.setattr(mail, "_store", MailStore(f"sqlite:///{tmp_path.as_posix()}/mail.db"))
+    monkeypatch.setattr(mail, "_demo", {})
+    monkeypatch.setattr(google, "_tokens", google._Tokens())
     url = os.environ.get("PG_TEST_URL") or str(tmp_path / "t.db")
     if url.startswith("postgres"):
         import psycopg
