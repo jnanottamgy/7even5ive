@@ -7,15 +7,19 @@ objects, and tests swap in scripted Jev / LLM here without touching anything els
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import timedelta
+from typing import Any
 
+from . import notify
 from .cascade import Cascade, Outcome
+from .config import settings
 from .db import Database
 from .gateway import Gateway
 from .jev import Decider, get_decider
-from .config import settings
 from .jobqueue import Queue, SqsQueue
 from .llm import LLM, get_llm
+from .scheduler import Job
 
 log = logging.getLogger(__name__)
 
@@ -27,6 +31,9 @@ class App:
     cascade: Cascade
     gateway: Gateway
     last: list[Outcome]
+    # Where messages for the student go (the outbox), and who rings for an urgent call.
+    sender: notify.Sender = field(default_factory=notify.LogSender)
+    caller: Any = None
 
     def process(self, event_id: int) -> Outcome | None:
         """One event through the cascade. Shared by the local drain and the cascade Lambda.
@@ -54,8 +61,21 @@ class App:
         return outcomes
 
 
-def build(db_url: str | None = None, jev: Decider | None = None, llm: LLM | None = None) -> App:
+    def jobs(self) -> list[Job]:
+        """What the background loop runs (scheduler.py). Each is safe to run twice."""
+        return [
+            Job("reminders", lambda: notify.fire_due(self.db, self.sender, self.caller),
+                every=timedelta(seconds=30)),
+        ]
+
+
+def build(db_url: str | None = None, jev: Decider | None = None, llm: LLM | None = None,
+          caller: Any = None) -> App:
+    from . import calls, fcm
+
     db = Database(db_url)
     queue: Queue | SqsQueue = SqsQueue(settings.queue_url) if settings.queue_url else Queue()
+    sender = notify.OutboxSender(db, wake=fcm.get_waker(db))
     return App(db=db, queue=queue, cascade=Cascade(db, jev or get_decider(), llm or get_llm()),
-               gateway=Gateway(db), last=[])
+               gateway=Gateway(db), last=[], sender=sender,
+               caller=caller if caller is not None else calls.get_caller())

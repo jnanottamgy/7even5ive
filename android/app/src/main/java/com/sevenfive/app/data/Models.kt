@@ -125,6 +125,15 @@ data class SetReminderResult(
     val title: String? = null,
 )
 
+/** The demo server's answer to a tour action (`POST /demo/forward/{kind}`). */
+@Serializable
+data class DemoForward(
+    val kind: String = "",
+    @SerialName("webhook_status") val webhookStatus: Int = 0,
+    /** The card the event became, if it was filed. */
+    val filed: Item? = null,
+)
+
 /** `POST /v1/pages` answer. */
 @Serializable
 data class PagesResult(

@@ -42,7 +42,20 @@ android {
             // APK still installs if someone builds it.
             signingConfig = signingConfigs.getByName("debug")
         }
+        // The build to install on a phone. Debug builds run Compose without ART's optimisations
+        // and without R8, which shows as lag and dropped frames in the blur and the springs; this
+        // is a release build (optimised, Compose's baseline profiles installed) that keeps the
+        // debug build's network rules, so the laptop fallback still works. Same key as debug, so
+        // it installs as an update over a debug build.
+        create("demo") {
+            initWith(getByName("release"))
+            isMinifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
+        }
     }
+    sourceSets.getByName("demo").res.srcDirs("src/debug/res")
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -74,6 +87,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.1")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.1")
     implementation("androidx.navigation:navigation-compose:2.9.0")
+    // Frosted glass: real backdrop blur on Android 12+, a translucent tint before. 1.6.10 is the
+    // release built on Compose 1.8 and activity 1.10.1, the versions above.
+    implementation("dev.chrisbanes.haze:haze:1.6.10")
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")

@@ -39,7 +39,7 @@ const script = (settings, keepAlive, nonce) =>
     page.__result = null;
     await page.evaluate(runner + '\n;true;');  // as PortalEngine.inject() does
     const started = await page.evaluate(script(settings, keepAlive, nonce));
-    for (let i = 0; i < 100 && !page.__result; i++) await page.waitForTimeout(100);
+    for (let i = 0; i < 600 && !page.__result; i++) await page.waitForTimeout(100);  // 60 s: a remote server is slower than a laptop
     return { started, ...page.__result };
   };
   const upload = async (pagesJson) => {

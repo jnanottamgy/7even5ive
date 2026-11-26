@@ -3,6 +3,9 @@
 Why: callers only ever see these functions, and the same SQL runs on both engines; the only
 differences (placeholders, id columns, transactions) live in _Conn and _schema below.
 Every query takes student_id, so one student can never read another's rows.
+Why one lock around every statement: the background loop (reminders, calls, mail) and the
+request threads share one connection, and two threads' transactions on one connection would
+interleave. Results are fetched while the lock is held, so no cursor outlives it.
 Not: an ORM -- a dozen small queries are clearer as SQL. Not: Postgres in the default test
 run -- SQLite needs no server; set PG_TEST_URL to run the same tests on Postgres.
 """
@@ -11,17 +14,22 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
+from . import clock
 from .config import settings
 
 SCHEMA = """
+-- call_consent_at: when the student turned the urgent call on (NULL = off).
+-- quiet_start/quiet_end: their own quiet hours for calls, HH:MM India time (NULL = defaults).
 CREATE TABLE IF NOT EXISTS students (
   id {pk}, name TEXT NOT NULL, wa_phone TEXT UNIQUE, mcp_token TEXT UNIQUE,
   branch TEXT, year INTEGER, interests TEXT,
-  portal_id TEXT  -- the student's id in PortMax
+  portal_id TEXT,  -- the student's id in PortMax
+  call_consent_at TEXT, quiet_start TEXT, quiet_end TEXT
 );
 CREATE TABLE IF NOT EXISTS subjects (
   id {pk}, student_id BIGINT NOT NULL REFERENCES students(id),
@@ -56,9 +64,12 @@ CREATE TABLE IF NOT EXISTS calendar (
 );
 -- Opt-in reminders 7even5ive noted and will fire. UNIQUE(item_id, fire_at): asking twice
 -- for the same reminder stores it once.
+-- channel: push (a notification) or call (the opt-in urgent call). status: pending, sent,
+-- cancelled, or skipped (the item was done, gone or past when it came due).
 CREATE TABLE IF NOT EXISTS reminders (
   id {pk}, student_id BIGINT NOT NULL, item_id BIGINT NOT NULL REFERENCES items(id),
   fire_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', sent_at TEXT,
+  channel TEXT NOT NULL DEFAULT 'push',
   UNIQUE(item_id, fire_at)
 );
 -- Every gateway decision, allowed or not. Ids and names only, never the student's words.
@@ -66,6 +77,43 @@ CREATE TABLE IF NOT EXISTS audit (
   id {pk}, student_id BIGINT, tool TEXT NOT NULL, decision TEXT NOT NULL,
   reason TEXT, at TEXT NOT NULL
 );
+-- The outbox: every message 7even5ive sends the student (a reminder, a missed call). The
+-- phone pulls it; a push only wakes the phone up and carries nothing.
+CREATE TABLE IF NOT EXISTS notifications (
+  id {pk}, student_id BIGINT NOT NULL, kind TEXT NOT NULL, title TEXT NOT NULL,
+  body TEXT NOT NULL, item_id BIGINT, created_at TEXT NOT NULL
+);
+-- Phones that asked to be woken by Firebase when the outbox gets something.
+CREATE TABLE IF NOT EXISTS devices (
+  token TEXT PRIMARY KEY, student_id BIGINT NOT NULL, platform TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+-- Every urgent call: placed, answered, missed, voicemail, failed, or refused (with the rule
+-- that refused it). Ids and codes only: no number, no words spoken.
+CREATE TABLE IF NOT EXISTS calls (
+  id {pk}, student_id BIGINT NOT NULL, item_id BIGINT, reminder_id BIGINT,
+  status TEXT NOT NULL, reason TEXT, provider TEXT NOT NULL, provider_id TEXT,
+  created_at TEXT NOT NULL, ended_at TEXT, duration_seconds INTEGER,
+  fallback_sent INTEGER NOT NULL DEFAULT 0
+);
+-- When each background job last ran, so a restart does not run the 1 PM check twice.
+CREATE TABLE IF NOT EXISTS jobs (
+  name TEXT PRIMARY KEY, last_run_at TEXT NOT NULL, last_ok_at TEXT, last_error TEXT
+);
+"""
+
+# Columns added after the first release. A fresh database gets them from SCHEMA above only if
+# they are listed there too; an older database gets them here, once.
+COLUMNS: dict[str, dict[str, str]] = {
+    "reminders": {"channel": "TEXT NOT NULL DEFAULT 'push'"},
+    "students": {"call_consent_at": "TEXT", "quiet_start": "TEXT", "quiet_end": "TEXT"},
+}
+
+INDEXES = """
+CREATE INDEX IF NOT EXISTS notifications_student ON notifications(student_id, id);
+CREATE INDEX IF NOT EXISTS reminders_due ON reminders(status, fire_at);
+CREATE INDEX IF NOT EXISTS calls_provider ON calls(provider_id);
+CREATE INDEX IF NOT EXISTS calls_student ON calls(student_id, created_at);
 """
 
 try:  # psycopg is only needed against Postgres
@@ -78,8 +126,35 @@ except ImportError:  # pragma: no cover
     INTEGRITY = (sqlite3.IntegrityError,)
 
 
+def _ist(value: str | None) -> str | None:
+    """Any ISO time as the IST minutes string every column holds (naive means IST)."""
+    from datetime import datetime
+
+    if value is None:
+        return None
+    at = datetime.fromisoformat(value)
+    return clock.iso(at if at.tzinfo else at.replace(tzinfo=clock.IST))
+
+
 def _is_pg(url: str) -> bool:
     return url.startswith(("postgres://", "postgresql://"))
+
+
+class _Result:
+    """A statement's rows, fetched while the lock was held. Same surface as a cursor's
+    fetchone/fetchall/rowcount, so callers do not change."""
+
+    __slots__ = ("_rows", "rowcount")
+
+    def __init__(self, rows: list[Any], rowcount: int) -> None:
+        self._rows = rows
+        self.rowcount = rowcount
+
+    def fetchone(self) -> Any | None:
+        return self._rows[0] if self._rows else None
+
+    def fetchall(self) -> list[Any]:
+        return list(self._rows)
 
 
 class _Conn:
@@ -87,9 +162,12 @@ class _Conn:
 
     Why autocommit plus explicit transactions: a single statement commits on its own, and
     tx() groups several, on both engines, with the same rollback-on-error behaviour.
+    Why an RLock: a transaction holds it from BEGIN to COMMIT, so another thread's statement
+    waits instead of landing inside it; re-entrant, so statements inside the transaction pass.
     """
 
     def __init__(self, url: str) -> None:
+        self.lock = threading.RLock()
         self.pg = _is_pg(url)
         if self.pg:
             if psycopg is None:
@@ -107,36 +185,50 @@ class _Conn:
     def _sql(self, sql: str) -> str:
         return sql.replace("?", "%s") if self.pg else sql
 
-    def execute(self, sql: str, args: Any = ()) -> Any:
-        return self.raw.execute(self._sql(sql), args)
+    def execute(self, sql: str, args: Any = ()) -> _Result:
+        with self.lock:
+            cur = self.raw.execute(self._sql(sql), args)
+            # Only statements that return rows have a description (SELECT, ... RETURNING).
+            rows = cur.fetchall() if cur.description is not None else []
+            return _Result(rows, cur.rowcount)
 
     def executemany(self, sql: str, rows: list[Any]) -> None:
-        if self.pg:
-            with self.raw.cursor() as cur:
-                cur.executemany(self._sql(sql), rows)
-        else:
-            self.raw.executemany(sql, rows)
+        with self.lock:
+            if self.pg:
+                with self.raw.cursor() as cur:
+                    cur.executemany(self._sql(sql), rows)
+            else:
+                self.raw.executemany(sql, rows)
 
     @contextmanager
     def transaction(self) -> Iterator[_Conn]:
-        if self.pg:
-            with self.raw.transaction():
+        with self.lock:
+            if self.pg:
+                with self.raw.transaction():
+                    yield self
+                return
+            self.raw.execute("BEGIN")
+            try:
                 yield self
-            return
-        self.raw.execute("BEGIN")
-        try:
-            yield self
-        except BaseException:
-            self.raw.execute("ROLLBACK")
-            raise
-        self.raw.execute("COMMIT")
+            except BaseException:
+                self.raw.execute("ROLLBACK")
+                raise
+            self.raw.execute("COMMIT")
 
     def script(self, sql: str) -> None:
         # Postgres runs a multi-statement string in one call when it has no parameters.
+        with self.lock:
+            if self.pg:
+                self.raw.execute(sql)
+            else:
+                self.raw.executescript(sql)
+
+    def columns(self, table: str) -> set[str]:
         if self.pg:
-            self.raw.execute(sql)
-        else:
-            self.raw.executescript(sql)
+            rows = self.execute("SELECT column_name FROM information_schema.columns"
+                                " WHERE table_name=?", (table,)).fetchall()
+            return {r["column_name"] for r in rows}
+        return {r["name"] for r in self.execute(f"PRAGMA table_info({table})").fetchall()}
 
 
 def _schema(pg: bool) -> str:
@@ -148,6 +240,16 @@ class Database:
     def __init__(self, url: str | None = None) -> None:
         self.conn = _Conn(url or settings.database_url)
         self.conn.script(_schema(self.conn.pg))
+        self._migrate()
+        self.conn.script(INDEXES)
+
+    def _migrate(self) -> None:
+        """Adds columns a database made by an older version lacks. Idempotent."""
+        for table, wanted in COLUMNS.items():
+            have = self.conn.columns(table)
+            for name, decl in wanted.items():
+                if name not in have:
+                    self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
 
     @contextmanager
     def tx(self) -> Iterator[_Conn]:
@@ -274,10 +376,17 @@ class Database:
         ).fetchall()
 
     # --- reminders -------------------------------------------------------------------
-    def add_reminder(self, student_id: int, item_id: int, fire_at: str) -> int:
+    def add_reminder(self, student_id: int, item_id: int, fire_at: str,
+                     channel: str = "push") -> int:
+        # Asking again for the same moment keeps one row: the latest channel wins, and one that
+        # was cancelled or skipped comes back. One already sent stays sent.
         with self.tx() as c:
-            c.execute("INSERT INTO reminders(student_id, item_id, fire_at) VALUES (?,?,?)"
-                      " ON CONFLICT(item_id, fire_at) DO NOTHING", (student_id, item_id, fire_at))
+            c.execute("INSERT INTO reminders(student_id, item_id, fire_at, channel)"
+                      " VALUES (?,?,?,?) ON CONFLICT(item_id, fire_at) DO UPDATE SET"
+                      " channel=excluded.channel,"
+                      " status=CASE WHEN reminders.status='sent' THEN 'sent' ELSE 'pending' END,"
+                      " sent_at=CASE WHEN reminders.status='sent' THEN reminders.sent_at"
+                      " ELSE NULL END", (student_id, item_id, fire_at, channel))
             row = c.execute("SELECT id FROM reminders WHERE item_id=? AND fire_at=?",
                             (item_id, fire_at)).fetchone()
             return int(row["id"])
@@ -306,6 +415,120 @@ class Database:
             cur = c.execute("UPDATE reminders SET status='sent', sent_at=? WHERE id=?"
                             " AND status='pending'", (now, reminder_id))
             return cur.rowcount == 1
+
+    def skip_reminder(self, reminder_id: int, now: str) -> bool:
+        """A reminder whose item is done, gone or already past: never sent, kept as skipped."""
+        with self.tx() as c:
+            cur = c.execute("UPDATE reminders SET status='skipped', sent_at=? WHERE id=?"
+                            " AND status='pending'", (now, reminder_id))
+            return cur.rowcount == 1
+
+    # --- item status and dates ------------------------------------------------------------
+    def set_item_status(self, student_id: int, item_id: int, was: str, now_status: str) -> bool:
+        """Moves one of this student's items from one status to another; False if it was not
+        in `was` (so a double tap or a stale screen changes nothing)."""
+        with self.tx() as c:
+            cur = c.execute("UPDATE items SET status=? WHERE id=? AND student_id=? AND status=?",
+                            (now_status, item_id, student_id, was))
+            return cur.rowcount == 1
+
+    def move_item_due(self, student_id: int, item_id: int, new_due: str | None,
+                      now: str, title: str | None = None) -> bool:
+        """A card's date changed (an extension, a corrected mail, Classroom): pending reminders
+        move by the same amount. One that would now be in the past fires at once; when the
+        new date itself has passed, or the card lost its date, they are skipped.
+        Returns False when the item is not this student's."""
+        from datetime import datetime
+
+        new_due = _ist(new_due)
+        now = _ist(now) or now
+        with self.tx() as c:
+            row = c.execute("SELECT due_at FROM items WHERE id=? AND student_id=?",
+                            (item_id, student_id)).fetchone()
+            if row is None:
+                return False
+            old_due = row["due_at"]
+            if title is None:
+                c.execute("UPDATE items SET due_at=? WHERE id=?", (new_due, item_id))
+            else:
+                c.execute("UPDATE items SET due_at=?, title=? WHERE id=?",
+                          (new_due, title, item_id))
+            if old_due == new_due:
+                return True
+            pending = c.execute("SELECT id, fire_at FROM reminders WHERE item_id=? AND"
+                                " status='pending' ORDER BY fire_at", (item_id,)).fetchall()
+            if not pending:
+                return True
+            if new_due is None or old_due is None or new_due <= now:
+                for r in pending:
+                    c.execute("UPDATE reminders SET status='skipped', sent_at=? WHERE id=?",
+                              (now, r["id"]))
+                return True
+            shift = datetime.fromisoformat(new_due) - datetime.fromisoformat(old_due)
+            taken: set[str] = set()
+            for r in pending:
+                fire_at = clock.iso(datetime.fromisoformat(r["fire_at"]) + shift)
+                fire_at = max(fire_at, now)  # same zone and format, so text order is time order
+                if fire_at in taken:  # two reminders landed on the same minute: keep one
+                    c.execute("UPDATE reminders SET status='skipped', sent_at=? WHERE id=?",
+                              (now, r["id"]))
+                    continue
+                taken.add(fire_at)
+                c.execute("UPDATE reminders SET fire_at=? WHERE id=?", (fire_at, r["id"]))
+            return True
+
+    # --- the outbox and the phones it wakes ---------------------------------------------
+    def add_notification(self, student_id: int, kind: str, title: str, body: str,
+                         item_id: int | None, now: str) -> int:
+        with self.tx() as c:
+            row = c.execute("INSERT INTO notifications(student_id, kind, title, body, item_id,"
+                            " created_at) VALUES (?,?,?,?,?,?) RETURNING id",
+                            (student_id, kind, title, body, item_id, now)).fetchone()
+            return int(row["id"])
+
+    def notifications(self, student_id: int, after: int, limit: int = 50) -> list[Any]:
+        return self.conn.execute(
+            "SELECT * FROM notifications WHERE student_id=? AND id>? ORDER BY id LIMIT ?",
+            (student_id, after, limit)).fetchall()
+
+    def latest_notification_id(self, student_id: int) -> int:
+        row = self.conn.execute("SELECT MAX(id) AS m FROM notifications WHERE student_id=?",
+                                (student_id,)).fetchone()
+        return int(row["m"] or 0)
+
+    def add_device(self, token: str, student_id: int, platform: str, now: str) -> None:
+        # A token belongs to one phone; if it moved to another student, it moves with it.
+        with self.tx() as c:
+            c.execute("INSERT INTO devices(token, student_id, platform, created_at)"
+                      " VALUES (?,?,?,?) ON CONFLICT(token) DO UPDATE SET"
+                      " student_id=excluded.student_id, platform=excluded.platform",
+                      (token, student_id, platform, now))
+
+    def remove_device(self, token: str, student_id: int | None = None) -> bool:
+        with self.tx() as c:
+            if student_id is None:
+                cur = c.execute("DELETE FROM devices WHERE token=?", (token,))
+            else:
+                cur = c.execute("DELETE FROM devices WHERE token=? AND student_id=?",
+                                (token, student_id))
+            return cur.rowcount == 1
+
+    def device_tokens(self, student_id: int) -> list[str]:
+        rows = self.conn.execute("SELECT token FROM devices WHERE student_id=? ORDER BY"
+                                 " created_at", (student_id,)).fetchall()
+        return [r["token"] for r in rows]
+
+    # --- background jobs ---------------------------------------------------------------
+    def job(self, name: str) -> Any | None:
+        return self.conn.execute("SELECT * FROM jobs WHERE name=?", (name,)).fetchone()
+
+    def job_ran(self, name: str, started: str, error: str | None) -> None:
+        with self.tx() as c:
+            c.execute("INSERT INTO jobs(name, last_run_at, last_ok_at, last_error) VALUES"
+                      " (?,?,?,?) ON CONFLICT(name) DO UPDATE SET last_run_at=excluded.last_run_at,"
+                      " last_ok_at=COALESCE(excluded.last_ok_at, jobs.last_ok_at),"
+                      " last_error=excluded.last_error",
+                      (name, started, None if error else started, error))
 
     def audit(self, student_id: int | None, tool: str, decision: str, reason: str,
               now: str) -> None:
