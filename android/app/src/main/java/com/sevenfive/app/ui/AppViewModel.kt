@@ -9,6 +9,7 @@ import com.sevenfive.app.data.CardsState
 import com.sevenfive.app.data.Item
 import com.sevenfive.app.data.Reminder
 import com.sevenfive.app.data.ServerConfig
+import com.sevenfive.app.portal.PortalCheck
 import com.sevenfive.app.portal.PortalStatus
 import com.sevenfive.app.util.Diagnostics
 import com.sevenfive.app.util.Time
@@ -31,6 +32,14 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     private val _busy = MutableStateFlow<Set<String>>(emptySet())
     /** Keys of actions in flight (approval tokens, "rem:<id>"), so buttons can't double-fire. */
     val busy: StateFlow<Set<String>> = _busy.asStateFlow()
+
+    private val _portalCheckUrl = MutableStateFlow(PortalCheck.DEFAULT_URL)
+    /** The address the portal test opens (Settings → Test a college portal). */
+    val portalCheckUrl: StateFlow<String> = _portalCheckUrl.asStateFlow()
+
+    fun setPortalCheckUrl(url: String) {
+        _portalCheckUrl.value = url
+    }
 
     private val _approved = MutableStateFlow<List<DoneApproval>>(emptyList())
     val approved: StateFlow<List<DoneApproval>> = _approved.asStateFlow()
