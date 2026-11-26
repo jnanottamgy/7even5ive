@@ -41,21 +41,34 @@ All under `index.php?option=com_studentdashboard&controller=studentdashboard&tas
 Observed subtasks also present: `getSubjects`, `calenderdisplay`, `seating`, `examfee`,
 `studFee`, `placementeligibility`, `feedback`.
 
-## Why this needs a HAR capture, not curl guessing
+## Where the data actually lives (from a real logged-in capture)
 
-The dashboard renders per-subject attendance/marks into **UIKit modals via XHR**. Plain curl of
-the task endpoints returns the page shell and some tables, but the per-subject figures and their
-parameters (subject id, semester) are populated by JavaScript. The PortMax forge is built for
-exactly this: `portmax forge capture` records the real XHRs while a student clicks through, then
-`sanitize → engineer → verify` builds the connector from that recording.
+The dashboard embeds its charts' data as inline **billboard.js** arrays, so most of it is
+parseable from the fetched HTML without replaying XHRs:
+
+- **Attendance** (`task=dashboard`): two `columns` arrays of `["<code>", <n>]` pairs, keyed by
+  year-prefixed subject codes like `24CS51`, `24CSL56`, `24CSAEC510`. One array is the
+  attendance **percentage** per subject; the other is a per-subject count (attended or
+  absent — needs confirming against the detail page). Subject *names* and exact attended/held
+  counts are not in this array.
+- **Results** (`com_history&task=getResult`): SGPA per semester and CGPA parse directly from
+  text (`SGPA 8.2`, `CGPA 8.5`, …).
+- **Attendance detail** (`task=attendencelist`): per-class log tables `.cn-attend-list1/2`
+  (Sl/Date/Time/Status) — counting Present/Absent rows gives exact attended/held per subject.
+- **Marks** (`task=ciedetails`): `var chartData = []` is **empty** in the page; the CIE marks
+  load per-subject via a further XHR. This is the one piece that still needs an XHR capture
+  (the request + params the page fires when a subject's internal marks are opened).
 
 ## Next steps
 
-1. Run `portmax forge capture` against `parents.msrit.edu` (student logs in, opens attendance
-   and internal marks for a couple of courses, timetable, results), producing a sanitized HAR.
-2. Build `connectors/msrit/` (manifest, fetch_plan, parsers) from the capture; model on
-   `connectors/mockcollege/` (it was patterned on Contineo).
-3. The connector's home is the **PortMax source repo** (`../portmax/src/portmax/connectors/`),
+1. Attendance (%) and results can be built now from the captured pages. Confirm the attended/
+   held counts from `attendencelist`, and the meaning of the dashboard's second count array.
+2. Capture the **marks XHR**: in the browser, open a subject's internal assessment with DevTools
+   Network open and "Copy as cURL" the request that returns the marks (or run a forge HAR
+   capture). That gives the endpoint + params for `get_marks`.
+3. Build `connectors/msrit/` (manifest, fetch_plan, parsers) modelled on `connectors/mockcollege/`
+   (it was patterned on Contineo); add fixtures + golden and run `portmax forge verify`.
+4. The connector's home is the **PortMax source repo** (`../portmax/src/portmax/connectors/`),
    not this repo — `core/.build/portmax` is a gitignored build copy.
-4. App wiring: set `college = msrit` and decouple the portal URL from the core/PortMax host so
+5. App wiring: set `college = msrit` and decouple the portal URL from the core/PortMax host so
    the WebView opens `parents.msrit.edu` while uploads still go to the cloud.
