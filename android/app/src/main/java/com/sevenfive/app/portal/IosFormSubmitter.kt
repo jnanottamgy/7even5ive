@@ -52,8 +52,17 @@ class IosFormSubmitter(
         io.execute { send(action, fieldsJson, referer) }
     }
 
-    private fun send(action: String, fieldsJson: String, referer: String) {
+    private fun send(rawAction: String, fieldsJson: String, referer: String) {
         val cookies = CookieManager.getInstance()
+        // An http action on an https page would leave out the Secure session cookie, so the
+        // portal would start a new session and refuse the login. Browsers upgrade it; so do we.
+        val action = Uri.parse(rawAction).let { a ->
+            if (a.scheme == "http" && Uri.parse(referer).scheme == "https" && a.host == Uri.parse(referer).host)
+                a.buildUpon().scheme("https").build().toString() else rawAction
+        }
+        val sentCookie = cookies.getCookie(action).orEmpty()
+        val sent = sentCookie.split(';').map { it.trim() }.filter { '=' in it }
+            .associate { it.substringBefore('=') to it.substringAfter('=') }
         val form = FormBody.Builder()
         runCatching { Json.parseToJsonElement(fieldsJson) as JsonArray }.getOrNull()?.forEach { pair ->
             val p = pair as? JsonArray ?: return@forEach
@@ -69,7 +78,7 @@ class IosFormSubmitter(
             .header("Sec-Fetch-Site", if (sameOriginStr(referer, origin)) "same-origin" else "same-site")
             .header("Sec-Fetch-Mode", "navigate")
             .header("Sec-Fetch-Dest", "document")
-            .apply { cookies.getCookie(action)?.let { header("Cookie", it) } }
+            .apply { if (sentCookie.isNotEmpty()) header("Cookie", sentCookie) }
             .build()
         try {
             client.newCall(request).execute().use { r ->
@@ -80,9 +89,17 @@ class IosFormSubmitter(
                 val html = if (next == null) r.body?.string().orEmpty() else ""
                 val charset = type?.charset()?.name() ?: "utf-8"
                 // Host and path only (a query can carry personal details); cookie names, never values.
-                val names = setCookies.map { it.substringBefore('=').trim() }.distinct()
+                // Each cookie the portal set, marked "kept" if it's the value we sent and "new"
+                // if it replaced it (a new session). Names only, never values.
+                val names = setCookies.map { c ->
+                    val name = c.substringBefore('=').trim()
+                    val value = c.substringAfter('=').substringBefore(';').trim()
+                    when (sent[name]) { null -> "$name (new)"; value -> "$name (kept)"; else -> "$name (replaced)" }
+                }.distinct()
                 val where = next?.let { Uri.parse(it) }?.let { " -> ${it.host}${it.path.orEmpty()}" } ?: ""
-                val summary = "Sent as iPhone: HTTP ${r.code}$where" +
+                val summary = "Sent as iPhone with cookies: " +
+                    (if (sent.isEmpty()) "none" else sent.keys.joinToString()) +
+                    ". Answer: HTTP ${r.code}$where" +
                     (if (names.isEmpty()) ", no cookies set" else ", cookies set: ${names.joinToString()}")
                 // setCookie is asynchronous: load the next page only once every cookie has landed,
                 // or the portal sees a request without its new session and shows the login again.

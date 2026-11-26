@@ -218,6 +218,16 @@ fun PortalCheckScreen(vm: AppViewModel, portalUrl: String, onBack: () -> Unit) {
 
                                     override fun onPageFinished(view: WebView, url: String?) {
                                         loading = false
+                                        // The portal's own notice (Joomla's message box), e.g. "invalid
+                                        // security code", shown here so a refused login says why.
+                                        view.evaluateJavascript(
+                                            "(function(){var e=document.querySelector('#system-message-container .alert," +
+                                                "#system-message-container,.alert-error,.alert-danger,.alert-warning,.alert-message');" +
+                                                "return e?e.innerText.trim().slice(0,160):'';})()",
+                                        ) { v ->
+                                            val msg = v?.trim('"')?.replace("\n", " ")?.trim().orEmpty()
+                                            if (msg.isNotEmpty() && msg != "null") problem = "Portal says: $msg"
+                                        }
                                         // Host and path only: a query string can carry personal details.
                                         val u = url?.let(Uri::parse)
                                         if (u?.host != null) where = u.host + u.path.orEmpty()
