@@ -16,7 +16,7 @@ from typing import Any, AsyncIterator
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 
-from . import briefing, calls, clock, notify, tools
+from . import briefing, calls, clock, notify, tools, voice
 from .app import App, build
 from .config import settings
 from .gateway import Denied, read_token
@@ -230,6 +230,20 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
             raise HTTPException(503, str(err)) from err
         return Response(sound, media_type="audio/mpeg",
                         headers={"Cache-Control": "private, max-age=600"})
+
+    # --- the voice assistant ----------------------------------------------------------------
+    @api.get("/api/voice/session")
+    def voice_session(authorization: str | None = Header(None)) -> dict[str, Any]:
+        """A signed address for one conversation with the assistant. Its tools run on the phone,
+        through /api/tools like any tap, so the gateway decides what each may do."""
+        sid = student_from(authorization)
+        try:
+            out = voice.session(state.db, sid)
+        except voice.VoiceUnavailable as err:
+            raise HTTPException(503, str(err)) from err
+        if out.get("available"):
+            state.db.audit(sid, "voice_session", "allow", "student", clock.iso(clock.now()))
+        return out
 
     @api.get("/api/health")
     def health() -> dict[str, Any]:
