@@ -3,6 +3,7 @@ package com.sevenfive.app.ui.screens
 import android.graphics.Bitmap
 import android.net.Uri
 import android.webkit.RenderProcessGoneDetail
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -48,6 +49,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sevenfive.app.data.ApiException
 import com.sevenfive.app.data.Connector
 import com.sevenfive.app.portal.PortalBridge
+import com.sevenfive.app.portal.PortalCheck
 import com.sevenfive.app.portal.SyncOutcome
 import com.sevenfive.app.portal.configureForPortal
 import com.sevenfive.app.portal.sameOrigin
@@ -189,9 +191,18 @@ fun PortalScreen(vm: AppViewModel, onDone: () -> Unit) {
                                 trail("WebView created; configuring")
                                 configureForPortal(bridge)
                                 trail("WebView configured")
+                                // Without a chrome client the page's alert()/confirm() are silently
+                                // dropped, and a "Continue?" confirm on a later step never proceeds.
+                                webChromeClient = WebChromeClient()
                                 webViewClient = object : WebViewClient() {
                                     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                                         if (sameOrigin(request.url, portalOrigin)) return false
+                                        // The step after login can move to another host of the same
+                                        // site (or http to https), and reCAPTCHA can navigate its frame.
+                                        val host = request.url.host ?: ""
+                                        val recaptcha = host == "google.com" || host.endsWith(".google.com") ||
+                                            host.endsWith(".gstatic.com") || host.endsWith(".recaptcha.net")
+                                        if (recaptcha || PortalCheck.sameSite(portalOrigin.host ?: "", host, request.url.scheme)) return false
                                         vm.say("This screen only opens your college portal.")
                                         return true
                                     }

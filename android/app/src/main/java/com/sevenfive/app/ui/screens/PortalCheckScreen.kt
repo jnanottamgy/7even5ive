@@ -46,6 +46,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.sevenfive.app.portal.PortalCheck
+import com.sevenfive.app.portal.PortalIdentity
+import com.sevenfive.app.portal.PortalSettings
 import com.sevenfive.app.portal.hardenPortalWebView
 import com.sevenfive.app.ui.AppViewModel
 import com.sevenfive.app.ui.components.GlassPill
@@ -75,6 +77,7 @@ fun PortalCheckScreen(vm: AppViewModel, portalUrl: String, onBack: () -> Unit) {
     var title by remember { mutableStateOf("") }
     var where by remember { mutableStateOf(portalHost) }
     var problem by remember { mutableStateOf<String?>(null) }
+    var identity by remember { mutableStateOf(PortalSettings.identity) }
 
     BackHandler {
         val web = webView
@@ -129,6 +132,21 @@ fun PortalCheckScreen(vm: AppViewModel, portalUrl: String, onBack: () -> Unit) {
                     style = MaterialTheme.typography.labelMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                )
+                // Which browser the portal sees. Switching rebuilds the WebView from the start page.
+                Text(
+                    "Looks like: ${identity.label} · tap to switch",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.pressable {
+                        val next = if (identity == PortalIdentity.IPHONE) PortalIdentity.ANDROID_CHROME
+                        else PortalIdentity.IPHONE
+                        PortalSettings.identity = next
+                        identity = next
+                        problem = null
+                        webView = null
+                        webKey++
+                    },
                 )
                 if (title.isNotBlank()) {
                     Text(

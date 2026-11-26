@@ -84,6 +84,33 @@ const val PORTAL_USER_AGENT =
     "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) " +
         "Chrome/158.0.0.0 Mobile Safari/537.36"
 
+/** Safari on an iPhone (iOS 26 Safari freezes the OS at 18_6 in its UA, so this is current). */
+const val IOS_USER_AGENT =
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 " +
+        "(KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1"
+
+/**
+ * What the portal sees the WebView as. IPHONE copies an iOS WebView, which the portal accepts:
+ * Safari's UA plus the navigator fields a script checks next (platform, vendor, touch points), so
+ * the UA and the page's JavaScript tell the same story on every page, not just the login.
+ */
+enum class PortalIdentity(val label: String) { IPHONE("iPhone"), ANDROID_CHROME("Android Chrome") }
+
+/** Process-wide, so the login screen uses whatever passed on the test screen. */
+object PortalSettings {
+    @Volatile var identity: PortalIdentity = PortalIdentity.IPHONE
+}
+
+/**
+ * The iPhone extras, at document start in every frame. Getters go on Navigator.prototype (not the
+ * instance) for the same anti-tamper reason as HIDE_WEBVIEW_JS. Safari has no window.chrome.
+ */
+private const val IOS_NAVIGATOR_JS =
+    "(function(){try{var P=Navigator.prototype;" +
+        "function d(k,v){Object.defineProperty(P,k,{get:function(){return v;},configurable:true});}" +
+        "d('platform','iPhone');d('vendor','Apple Computer, Inc.');d('maxTouchPoints',5);" +
+        "try{delete window.chrome;}catch(e){}}catch(e){}})();"
+
 /**
  * Everything that gets an Android WebView past a Contineo-style "no third-party apps" wall, shared
  * by the portal login and the portal test:
@@ -93,8 +120,12 @@ const val PORTAL_USER_AGENT =
  *  - the `userAgentData` removal injected before the page's own scripts run (see HIDE_WEBVIEW_JS).
  * Adds no JavaScript bridge, so it is safe for the test screen, which must touch nothing on the page.
  */
-fun WebView.hardenPortalWebView() {
-    settings.userAgentString = PORTAL_USER_AGENT
+fun WebView.hardenPortalWebView(identity: PortalIdentity = PortalSettings.identity) {
+    val iphone = identity == PortalIdentity.IPHONE
+    settings.userAgentString = if (iphone) IOS_USER_AGENT else PORTAL_USER_AGENT
+    // Pages that pop a second window (a "next step" opened with target=_blank) stay in this view.
+    settings.javaScriptCanOpenWindowsAutomatically = true
+    settings.setSupportMultipleWindows(false)
     CookieManager.getInstance().setAcceptCookie(true)
     CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
     if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
@@ -103,6 +134,7 @@ fun WebView.hardenPortalWebView() {
     // Needs a recent System WebView; where unavailable the UA fix alone still clears the UA check.
     if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
         WebViewCompat.addDocumentStartJavaScript(this, HIDE_WEBVIEW_JS, setOf("*"))
+        if (iphone) WebViewCompat.addDocumentStartJavaScript(this, IOS_NAVIGATOR_JS, setOf("*"))
     }
 }
 
