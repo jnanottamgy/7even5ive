@@ -284,7 +284,11 @@ class Accounts(
             }
         } catch (e: ApiException) {
             synchronized(lock) {
-                if (configFrom != from) {
+                if (e.status == 404) {
+                    // A server from before accounts: it answers, it just has only the demo.
+                    _config.value = AuthConfig(enabled = false, demo = true)
+                    configFrom = from
+                } else if (configFrom != from) {
                     _config.value = null
                     configFrom = null
                 }

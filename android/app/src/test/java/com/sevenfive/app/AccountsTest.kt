@@ -353,6 +353,16 @@ class AccountsTest {
     }
 
     @Test
+    fun `a server from before accounts still offers the demo`() = runTest {
+        accounts.start()
+        coreBase = "$base/older" // answers 404 to /api/auth/config, as servers before accounts do
+        val config = accounts.loadConfig()
+        assertTrue(config != null && !config.usable && config.demo)
+        accounts.useDemo()
+        assertEquals("demo-student-token", accounts.token())
+    }
+
+    @Test
     fun `profile_required from the server sends the student to set it up`() = runTest {
         store.saved = Saved.Account(session(), me = null)
         meAnswer = {
