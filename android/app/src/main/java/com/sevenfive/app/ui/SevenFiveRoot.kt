@@ -364,21 +364,13 @@ private fun GlassTabBar(haze: HazeState, selected: Int, badge: (Tab) -> Int, onS
             .height(64.dp)
             .frosted(haze, CircleShape),
     ) {
+        // Neo-minimal: words only. The current tab is ink with one orange dot above it.
         val itemWidth = maxWidth / tabs.size
-        val pillX by animateDpAsState(itemWidth * selected, Motion.glide, label = "tab pill")
-        Box(
-            Modifier
-                .offset { IntOffset(pillX.roundToPx(), 0) }
-                .width(itemWidth)
-                .fillMaxHeight()
-                .padding(5.dp)
-                .background(primary.copy(alpha = if (app.dark) 0.20f else 0.13f), CircleShape),
-        )
         Row(Modifier.fillMaxSize()) {
             tabs.forEachIndexed { index, tab ->
                 val on = index == selected
-                val tint = if (on) primary else app.secondaryLabel
-                val lift by animateFloatAsState(if (on) 1f else 0f, Motion.fade, label = "tab lift")
+                val tint = if (on) MaterialTheme.colorScheme.onSurface else app.secondaryLabel
+                val lift by animateFloatAsState(if (on) 1f else 0f, Motion.fade, label = "tab dot")
                 Column(
                     Modifier
                         .width(itemWidth)
@@ -387,56 +379,45 @@ private fun GlassTabBar(haze: HazeState, selected: Int, badge: (Tab) -> Int, onS
                             this.selected = on
                             contentDescription = tab.label
                         }
-                        .pressable(scaleTo = 0.9f, role = Role.Tab) {
+                        .pressable(scaleTo = 0.94f, role = Role.Tab) {
                             if (!on) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             onSelect(tab)
                         },
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    Box {
-                        Icon(
-                            if (on) tab.on else tab.off,
-                            contentDescription = null,
-                            tint = tint,
-                            modifier = Modifier
-                                .size(24.dp)
-                                .graphicsLayer {
-                                    val s = 1f + 0.06f * lift
-                                    scaleX = s
-                                    scaleY = s
-                                },
+                    Box(
+                        Modifier
+                            .size(5.dp)
+                            .graphicsLayer { alpha = lift; scaleX = lift; scaleY = lift }
+                            .background(com.sevenfive.app.ui.theme.Orange, CircleShape),
+                    )
+                    Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.Top) {
+                        Text(
+                            tab.label,
+                            color = tint,
+                            fontSize = 12.5.sp,
+                            lineHeight = 15.sp,
+                            fontFamily = com.sevenfive.app.ui.theme.Neo,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
                         )
                         val count = badge(tab)
                         if (count > 0) {
-                            Box(
-                                Modifier
-                                    .align(Alignment.TopEnd)
-                                    .offset(x = 9.dp, y = (-5).dp)
-                                    .defaultMinSize(minWidth = 17.dp, minHeight = 17.dp)
-                                    .background(MaterialTheme.colorScheme.error, CircleShape)
-                                    .padding(horizontal = 4.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    if (count > 9) "9+" else "$count",
-                                    color = Color.White,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    lineHeight = 12.sp,
-                                )
-                            }
+                            Text(
+                                if (count > 9) "9+" else "$count",
+                                color = com.sevenfive.app.ui.theme.NeoInk,
+                                fontSize = 9.sp,
+                                lineHeight = 10.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier
+                                    .padding(start = 3.dp)
+                                    .defaultMinSize(minWidth = 14.dp)
+                                    .background(com.sevenfive.app.ui.theme.Orange, CircleShape)
+                                    .padding(horizontal = 3.dp, vertical = 1.dp),
+                            )
                         }
                     }
-                    Text(
-                        tab.label,
-                        color = tint,
-                        fontSize = 10.sp,
-                        lineHeight = 12.sp,
-                        fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium,
-                        maxLines = 1,
-                        modifier = Modifier.padding(top = 3.dp),
-                    )
                 }
             }
         }

@@ -48,9 +48,10 @@ fun AuroraBackground(modifier: Modifier = Modifier) {
                     center = center,
                 )
             }
-            pool(app.auroraWarm, 0.05f, 0.0f, 0.62f)
-            pool(app.auroraPeach, 1.0f, 0.22f, 0.55f)
-            pool(app.auroraCool, 0.15f, 1.0f, 0.65f)
+            // Neo-minimal: a flat ground. The pools only draw if a theme gives them colour.
+            if (app.auroraWarm.alpha > 0f) pool(app.auroraWarm, 0.05f, 0.0f, 0.62f)
+            if (app.auroraPeach.alpha > 0f) pool(app.auroraPeach, 1.0f, 0.22f, 0.55f)
+            if (app.auroraCool.alpha > 0f) pool(app.auroraCool, 0.15f, 1.0f, 0.65f)
         },
     )
 }
@@ -80,13 +81,14 @@ fun Modifier.glassSurface(
     edgeWidth: Dp = 0.8.dp,
 ): Modifier {
     val app = LocalAppColors.current
-    val fill = if (strong) app.glassFill.copy(alpha = (app.glassFill.alpha + 0.18f).coerceAtMost(1f)) else app.glassFill
-    val edge = Brush.verticalGradient(listOf(app.glassEdge, app.hairline))
+    // Neo-minimal: a flat, quiet fill and no rim. [strong] is a touch darker for controls.
+    val fill = if (strong) MaterialTheme.colorScheme.surfaceContainerHigh else app.glassFill
+    val edge = app.glassEdge
     return this
         .clip(shape)
         .background(fill)
         .then(if (tint != Color.Unspecified) Modifier.background(tint) else Modifier)
-        .border(BorderStroke(edgeWidth, edge), shape)
+        .then(if (edge.alpha > 0f) Modifier.border(BorderStroke(edgeWidth, edge), shape) else Modifier)
 }
 
 /**
@@ -97,11 +99,10 @@ fun Modifier.glassSurface(
 @Composable
 fun Modifier.frosted(state: HazeState, shape: Shape, edgeWidth: Dp = 0.8.dp): Modifier {
     val app = LocalAppColors.current
-    val edge = Brush.verticalGradient(listOf(app.glassEdge, app.hairline))
     return this
         .clip(shape)
         .hazeEffect(state = state, style = frostedStyle()) { inputScale = HazeInputScale.Auto }
-        .border(BorderStroke(edgeWidth, edge), shape)
+        .then(if (app.glassEdge.alpha > 0f) Modifier.border(BorderStroke(edgeWidth, app.glassEdge), shape) else Modifier)
 }
 
 /** How much room the floating tab bar takes at the bottom, so lists can scroll under it. */

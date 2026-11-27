@@ -79,21 +79,10 @@ fun InboxScreen(vm: AppViewModel, onSettings: () -> Unit) {
         val others = cards.opportunities.filterNot { it.fromMail }.sortedByDescending { it.relevance ?: 0.0 }
         val app = LocalAppColors.current
         LazyColumn(contentPadding = padding, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            item(key = "intro") { ScreenIntro("Placements, internships, exam notices and events from college mail.") }
-            item(key = "mailbox") { MailboxCard(cards.mail, checking, Modifier.animateItem(placementSpec = Motion.item)) { vm.checkMail() } }
-            item(key = "shield") {
-                AppCard {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconTile(Icons.Outlined.Shield, LocalStatusColors.current.safe, size = 36.dp)
-                        Spacer(Modifier.width(12.dp))
-                        Column {
-                            Text(filteredLine(cards.filtered), style = MaterialTheme.typography.titleSmall)
-                            Text("Paid \"placement\" offers and fake placement-cell mail never reach this list.",
-                                style = MaterialTheme.typography.bodySmall, color = app.secondaryLabel)
-                        }
-                    }
-                }
+            item(key = "hero") {
+                InboxHero(mailCards.size + others.size, cards.filtered, Modifier.animateItem(placementSpec = Motion.item))
             }
+            item(key = "mailbox") { MailboxCard(cards.mail, checking, Modifier.animateItem(placementSpec = Motion.item)) { vm.checkMail() } }
             if (mailCards.isEmpty() && others.isEmpty()) {
                 item(key = "empty") {
                     EmptyState(Icons.Outlined.MarkEmailRead, "Nothing worth your time yet",

@@ -81,7 +81,9 @@ fun AttendanceScreen(vm: AppViewModel, onSettings: () -> Unit, onPortal: () -> U
         }
         val subjects = worstFirst(attendance.subjects)
         LazyColumn(contentPadding = padding, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            item(key = "intro") { ScreenIntro("Worst subject first, with exactly what to do.") }
+            subjects.firstOrNull()?.let { worst ->
+                item(key = "hero") { AttendanceHero(worst, Modifier.animateItem(placementSpec = Motion.item)) }
+            }
             item(key = "tiles") { CollegeTiles(nav, Modifier.animateItem(placementSpec = Motion.item)) }
             item(key = "portal") { PortalCard(attendance, portal, onPortal, Modifier.animateItem(placementSpec = Motion.item)) }
             if (subjects.isNotEmpty()) {

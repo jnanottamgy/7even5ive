@@ -113,9 +113,10 @@ fun HomeScreen(vm: AppViewModel, onSettings: () -> Unit) {
             return@TabScaffold
         }
         LazyColumn(contentPadding = padding, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // Neo-minimal: the next thing due, huge, before anything else.
+            item(key = "hero") { HomeHero(cards, Modifier.animateItem(placementSpec = Motion.item)) }
             item(key = "intro") { ScreenIntro(subtitle) }
             item(key = "ask") { AskBar(Modifier.animateItem(placementSpec = Motion.item)) }
-            item(key = "glance") { Glance(cards, Modifier.animateItem(placementSpec = Motion.item)) }
             item(key = "briefing") { BriefingCard(vm, Modifier.animateItem(placementSpec = Motion.item)) }
             item(key = "today") { Today(cards, Modifier.animateItem(placementSpec = Motion.item)) }
 

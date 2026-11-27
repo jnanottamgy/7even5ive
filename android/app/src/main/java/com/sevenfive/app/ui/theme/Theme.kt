@@ -12,6 +12,9 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import com.sevenfive.app.R
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -21,6 +24,21 @@ val Ink = Color(0xFF0B0C10)
 val Paper = Color(0xFFF4F1EA)
 val Orange = Color(0xFFFF8A1F)
 val Amber = Color(0xFFFFB547)
+
+/** Neo-minimal: one typeface at very different sizes. Inter Tight, bundled (res/font). */
+val Neo = FontFamily(
+    Font(R.font.inter_tight_regular, FontWeight.Normal),
+    Font(R.font.inter_tight_medium, FontWeight.Medium),
+    Font(R.font.inter_tight_semibold, FontWeight.SemiBold),
+    Font(R.font.inter_tight_semibold, FontWeight.Bold),
+)
+
+/** The neo palette: soft off-white, near-black ink, one grey, and orange only where it matters. */
+val NeoGround = Color(0xFFF3F3F0)
+val NeoInk = Color(0xFF111111)
+val NeoGrey = Color(0xFF66665F)
+val NeoLine = Color(0xFFDADAD5)
+val NeoFill = Color(0xFFE8E8E3)
 
 /** Attendance status colours, iOS system colours, the same on every screen. */
 @Immutable
@@ -63,21 +81,22 @@ data class AppColors(
 
 private val LightApp = AppColors(
     dark = false,
-    glassTint = Color(0xFFFFFFFF).copy(alpha = 0.62f),
-    glassFill = Color(0xFFFFFFFF).copy(alpha = 0.66f),
-    glassFallback = Color(0xFFFBFAF8),
-    glassEdge = Color(0xFFFFFFFF).copy(alpha = 0.9f),
-    hairline = Color(0xFF3C3C43).copy(alpha = 0.14f),
-    secondaryLabel = Color(0xFF3C3C43).copy(alpha = 0.64f),
-    tertiaryLabel = Color(0xFF3C3C43).copy(alpha = 0.36f),
-    auroraWarm = Color(0xFFFFA45C).copy(alpha = 0.42f),
-    auroraPeach = Color(0xFFFFD9A8).copy(alpha = 0.55f),
-    auroraCool = Color(0xFF8FD8E6).copy(alpha = 0.30f),
-    deadline = Color(0xFFFF9500),
-    exam = Color(0xFFFF2D55),
-    material = Color(0xFF007AFF),
-    event = Color(0xFFAF52DE),
-    notice = Color(0xFF30B0C7),
+    glassTint = NeoGround,
+    glassFill = NeoFill,
+    glassFallback = NeoGround,
+    glassEdge = Color.Transparent,
+    hairline = NeoLine,
+    secondaryLabel = NeoGrey,
+    tertiaryLabel = Color(0xFF8C8C85),
+    auroraWarm = Color.Transparent,
+    auroraPeach = Color.Transparent,
+    auroraCool = Color.Transparent,
+    // Kinds stay quiet: ink and grey, with orange kept for exams (the thing that can't move).
+    deadline = NeoInk,
+    exam = Color(0xFFE0670A),
+    material = NeoGrey,
+    event = NeoInk,
+    notice = NeoGrey,
 )
 
 private val DarkApp = AppColors(
@@ -99,40 +118,40 @@ private val DarkApp = AppColors(
     notice = Color(0xFF40C8E0),
 )
 
-private val LightStatus = StatusColors(Color(0xFF34C759), Color(0xFFFF9500), Color(0xFFFF3B30), Color(0xFFD70015))
+private val LightStatus = StatusColors(NeoInk, Color(0xFFE0670A), Color(0xFFC2410C), Color(0xFF9A3412))
 private val DarkStatus = StatusColors(Color(0xFF30D158), Color(0xFFFF9F0A), Color(0xFFFF453A), Color(0xFFFF6961))
 
 val LocalStatusColors = staticCompositionLocalOf { LightStatus }
 val LocalAppColors = staticCompositionLocalOf { LightApp }
 
 private val Light = lightColorScheme(
-    primary = Color(0xFFF27A0C),
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFFFE3C7),
-    onPrimaryContainer = Color(0xFF3D1E00),
-    secondary = Color(0xFF6E6E73),
+    primary = NeoInk,
+    onPrimary = NeoGround,
+    primaryContainer = NeoFill,
+    onPrimaryContainer = NeoInk,
+    secondary = NeoGrey,
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFEDE7DD),
-    onSecondaryContainer = Ink,
-    tertiary = Color(0xFF248A3D),
-    onTertiary = Color.White,
-    background = Color(0xFFF6F3EE),
-    onBackground = Color(0xFF111114),
-    surface = Color(0xFFF6F3EE),
-    onSurface = Color(0xFF111114),
-    surfaceVariant = Color(0xFFE9E5DE),
-    onSurfaceVariant = Color(0xFF3C3C43).copy(alpha = 0.64f),
+    secondaryContainer = NeoFill,
+    onSecondaryContainer = NeoInk,
+    tertiary = Orange,
+    onTertiary = NeoInk,
+    background = NeoGround,
+    onBackground = NeoInk,
+    surface = NeoGround,
+    onSurface = NeoInk,
+    surfaceVariant = NeoFill,
+    onSurfaceVariant = NeoGrey,
     surfaceContainerLowest = Color.White,
-    surfaceContainerLow = Color(0xFFFBFAF8),
-    surfaceContainer = Color(0xFFF2EFEA),
-    surfaceContainerHigh = Color(0xFFECE8E1),
-    surfaceContainerHighest = Color(0xFFE6E1D9),
-    outline = Color(0xFF8E8E93),
-    outlineVariant = Color(0xFF3C3C43).copy(alpha = 0.16f),
-    error = Color(0xFFFF3B30),
+    surfaceContainerLow = Color(0xFFF7F7F4),
+    surfaceContainer = NeoFill,
+    surfaceContainerHigh = Color(0xFFE2E2DC),
+    surfaceContainerHighest = Color(0xFFDCDCD6),
+    outline = Color(0xFF8C8C85),
+    outlineVariant = NeoLine,
+    error = Color(0xFFC2410C),
     onError = Color.White,
-    errorContainer = Color(0xFFFFE5E3),
-    onErrorContainer = Color(0xFF5C0A05),
+    errorContainer = Color(0xFFFBE7DA),
+    onErrorContainer = Color(0xFF5A1D04),
 )
 
 private val Dark = darkColorScheme(
@@ -165,28 +184,31 @@ private val Dark = darkColorScheme(
     onErrorContainer = Color(0xFFFFDAD6),
 )
 
-/** iOS's type scale, on the system font: large bold titles, 17 pt body, tight tracking up top. */
+/** Neo-minimal type: huge, tight headlines; calm body; small quiet labels. One family. */
 private val AppTypography = Typography(
-    headlineLarge = TextStyle(fontSize = 34.sp, lineHeight = 41.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.6).sp),
-    headlineMedium = TextStyle(fontSize = 34.sp, lineHeight = 41.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.6).sp),
-    headlineSmall = TextStyle(fontSize = 28.sp, lineHeight = 34.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.5).sp),
-    titleLarge = TextStyle(fontSize = 17.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.2).sp),
-    titleMedium = TextStyle(fontSize = 17.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.2).sp),
-    titleSmall = TextStyle(fontSize = 15.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.1).sp),
-    bodyLarge = TextStyle(fontSize = 17.sp, lineHeight = 22.sp, fontWeight = FontWeight.Normal, letterSpacing = (-0.2).sp),
-    bodyMedium = TextStyle(fontSize = 15.sp, lineHeight = 20.sp, fontWeight = FontWeight.Normal, letterSpacing = (-0.1).sp),
-    bodySmall = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.Normal),
-    labelLarge = TextStyle(fontSize = 15.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.1).sp),
-    labelMedium = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium),
-    labelSmall = TextStyle(fontSize = 11.sp, lineHeight = 13.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.1.sp),
+    displayLarge = TextStyle(fontFamily = Neo, fontSize = 96.sp, lineHeight = 88.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-4.5).sp),
+    displayMedium = TextStyle(fontFamily = Neo, fontSize = 60.sp, lineHeight = 59.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-2.5).sp),
+    displaySmall = TextStyle(fontFamily = Neo, fontSize = 44.sp, lineHeight = 46.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-1.5).sp),
+    headlineLarge = TextStyle(fontFamily = Neo, fontSize = 36.sp, lineHeight = 40.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-1.2).sp),
+    headlineMedium = TextStyle(fontFamily = Neo, fontSize = 36.sp, lineHeight = 40.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-1.2).sp),
+    headlineSmall = TextStyle(fontFamily = Neo, fontSize = 28.sp, lineHeight = 32.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.8).sp),
+    titleLarge = TextStyle(fontFamily = Neo, fontSize = 20.sp, lineHeight = 25.sp, fontWeight = FontWeight.Medium, letterSpacing = (-0.4).sp),
+    titleMedium = TextStyle(fontFamily = Neo, fontSize = 17.sp, lineHeight = 22.sp, fontWeight = FontWeight.Medium, letterSpacing = (-0.2).sp),
+    titleSmall = TextStyle(fontFamily = Neo, fontSize = 15.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium, letterSpacing = (-0.1).sp),
+    bodyLarge = TextStyle(fontFamily = Neo, fontSize = 16.sp, lineHeight = 22.sp, fontWeight = FontWeight.Normal, letterSpacing = (-0.1).sp),
+    bodyMedium = TextStyle(fontFamily = Neo, fontSize = 15.sp, lineHeight = 20.sp, fontWeight = FontWeight.Normal),
+    bodySmall = TextStyle(fontFamily = Neo, fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.Normal),
+    labelLarge = TextStyle(fontFamily = Neo, fontSize = 15.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold),
+    labelMedium = TextStyle(fontFamily = Neo, fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium),
+    labelSmall = TextStyle(fontFamily = Neo, fontSize = 11.sp, lineHeight = 14.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.6.sp),
 )
 
 private val AppShapes = Shapes(
-    extraSmall = RoundedCornerShape(8.dp),
-    small = RoundedCornerShape(12.dp),
-    medium = RoundedCornerShape(16.dp),
-    large = RoundedCornerShape(22.dp),
-    extraLarge = RoundedCornerShape(28.dp),
+    extraSmall = RoundedCornerShape(10.dp),
+    small = RoundedCornerShape(14.dp),
+    medium = RoundedCornerShape(20.dp),
+    large = RoundedCornerShape(24.dp),
+    extraLarge = RoundedCornerShape(32.dp),
 )
 
 /** Light only, by design: the app always looks the way it was designed, whatever the phone's setting. */
