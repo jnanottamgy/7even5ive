@@ -30,10 +30,9 @@ import dev.chrisbanes.haze.hazeEffect
 import kotlin.math.max
 
 /**
- * The room under everything: the flat neo ground, and the brand's open ring drawn very large and
- * faint, turning slowly. One thin orange arc off the top-right corner, one fainter ink arc off the
- * bottom-left; a turn takes a minute and a half to two and a half, so it reads as a clock face
- * breathing, not as motion. Still when the phone's animations are off. Seen only between cards.
+ * The room under everything: the flat neo ground, a warm glow drifting slowly across, and small
+ * particles rising with a gentle sway, like dust in light. Quiet: seen only between cards, and
+ * still when the phone's animations are off.
  */
 @Composable
 fun AuroraBackground(modifier: Modifier = Modifier) {
@@ -45,21 +44,14 @@ fun AuroraBackground(modifier: Modifier = Modifier) {
         ) == 0f
     }
     val turn = androidx.compose.animation.core.rememberInfiniteTransition(label = "rings")
-    val slow by turn.animateFloat(
+    // The particles' clock: one long loop; every particle's motion fits it exactly.
+    val float by turn.animateFloat(
         initialValue = 0f,
-        targetValue = if (still) 0f else 360f,
-        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-            androidx.compose.animation.core.tween(90_000, easing = androidx.compose.animation.core.LinearEasing),
-        ),
-        label = "ring one",
-    )
-    val slower by turn.animateFloat(
-        initialValue = 0f,
-        targetValue = if (still) 0f else -360f,
+        targetValue = if (still) 0f else 1f,
         animationSpec = androidx.compose.animation.core.infiniteRepeatable(
             androidx.compose.animation.core.tween(150_000, easing = androidx.compose.animation.core.LinearEasing),
         ),
-        label = "ring two",
+        label = "particles",
     )
     // The glow's wander: once round a slow figure-of-eight a minute.
     val drift by turn.animateFloat(
@@ -82,35 +74,27 @@ fun AuroraBackground(modifier: Modifier = Modifier) {
             val reach = size.width * 0.95f
             drawCircle(
                 Brush.radialGradient(
-                    listOf(Orange.copy(alpha = 0.07f), Orange.copy(alpha = 0.025f), Color.Transparent),
+                    listOf(Orange.copy(alpha = 0.16f), Orange.copy(alpha = 0.06f), Color.Transparent),
                     center = glow,
                     radius = reach,
                 ),
                 radius = reach,
                 center = glow,
             )
-            fun ring(center: Offset, radius: Float, angle: Float, sweep: Float, color: Color, width: Float) {
-                rotate(angle, pivot = center) {
-                    drawArc(
-                        color = color,
-                        startAngle = -90f,
-                        sweepAngle = sweep,
-                        useCenter = false,
-                        topLeft = Offset(center.x - radius, center.y - radius),
-                        size = androidx.compose.ui.geometry.Size(radius * 2, radius * 2),
-                        style = androidx.compose.ui.graphics.drawscope.Stroke(
-                            width = width, cap = androidx.compose.ui.graphics.StrokeCap.Round,
-                        ),
-                    )
-                }
+            // Particles: small dots drifting slowly up with a gentle sway, mostly soft ink, a few
+            // orange. Each one's speed and sway are whole turns of the loop, so it never jumps.
+            val t = float
+            particles.forEach { p ->
+                val y = ((p.y - t * p.rise) % 1f + 1f) % 1f
+                val x = p.x + p.sway * kotlin.math.sin((t * p.waves + p.phase) * 2f * Math.PI.toFloat())
+                // Fade in near the bottom, out near the top.
+                val edge = (kotlin.math.min(y, 1f - y) / 0.12f).coerceIn(0f, 1f)
+                drawCircle(
+                    (if (p.warm) Orange else NeoInk).copy(alpha = p.alpha * edge),
+                    radius = p.size.dp.toPx(),
+                    center = Offset(x * size.width, y * size.height),
+                )
             }
-            val w = size.width
-            // The brand ring, huge and faint, off the top-right corner.
-            ring(Offset(w * 0.98f, size.height * 0.10f), w * 0.62f, slow, 270f, Orange.copy(alpha = 0.10f), w * 0.028f)
-            // A fine ink echo around it.
-            ring(Offset(w * 0.98f, size.height * 0.10f), w * 0.80f, slower, 200f, NeoInk.copy(alpha = 0.05f), 1.2.dp.toPx())
-            // And one off the bottom-left, fainter still.
-            ring(Offset(w * 0.04f, size.height * 0.94f), w * 0.55f, slower * 0.8f, 240f, NeoInk.copy(alpha = 0.04f), w * 0.02f)
         },
     )
 }
@@ -168,3 +152,27 @@ fun Modifier.frosted(state: HazeState, shape: Shape, edgeWidth: Dp = 0.8.dp): Mo
 
 /** How much room the floating tab bar takes at the bottom, so lists can scroll under it. */
 val LocalBottomInset = compositionLocalOf { 0.dp }
+
+
+/** One background particle: where it starts, how it moves, how it looks. */
+private data class Particle(
+    val x: Float, val y: Float, val rise: Float, val sway: Float, val waves: Float,
+    val phase: Float, val size: Float, val alpha: Float, val warm: Boolean,
+)
+
+/** The same 34 particles every time (a fixed seed), so the background never reshuffles. */
+private val particles: List<Particle> = kotlin.random.Random(75).let { r ->
+    List(34) { i ->
+        Particle(
+            x = r.nextFloat(),
+            y = r.nextFloat(),
+            rise = (1 + r.nextInt(3)).toFloat(), // 1 to 3 screen heights per loop: slow
+            sway = 0.01f + r.nextFloat() * 0.03f,
+            waves = (2 + r.nextInt(4)).toFloat(),
+            phase = r.nextFloat(),
+            size = 1.5f + r.nextFloat() * 2.5f,
+            alpha = 0.10f + r.nextFloat() * 0.22f,
+            warm = i % 4 == 0,
+        )
+    }
+}
