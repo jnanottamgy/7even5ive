@@ -317,12 +317,11 @@ fun GradesScreen(vm: AppViewModel, onBack: () -> Unit) {
         }
         LazyColumn(contentPadding = padding, verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item(key = "tabs") {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Choice("Internal marks", tab == 0) { tab = 0 }
-                    Choice("Results", tab == 1) { tab = 1 }
-                }
+                NeoSegments(listOf(Segment("Internal marks"), Segment("Results"), Segment("What-if")), tab) { tab = it }
             }
-            if (tab == 0) {
+            if (tab == 2) {
+                item(key = "what-if") { WhatIfCalculator(cards) }
+            } else if (tab == 0) {
                 val bySubject = cards.marks.data.groupBy { it.code }
                 if (bySubject.isEmpty()) item { EmptyState(Icons.Outlined.Grade, "No marks yet") }
                 bySubject.forEach { (code, rows) ->

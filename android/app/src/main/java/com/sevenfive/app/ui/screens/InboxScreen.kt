@@ -120,7 +120,18 @@ fun InboxScreen(vm: AppViewModel, onSettings: () -> Unit) {
                         }
                         item(key = "mailbox") { MailboxCard(cards.mail, checking, Modifier.animateItem(placementSpec = Motion.item)) { vm.checkMail() } }
                     }
-                    1 -> mailSegment(placements, "No placement offers yet", "Job offers and placement drives from college mail show up here.")
+                    1 -> {
+                    // The placement tracker: eligibility, time left to register, your steps.
+                    if (placements.isEmpty()) {
+                        item(key = "empty-placements") {
+                            EmptyState(Icons.Outlined.MarkEmailRead, "No placement drives yet",
+                                "Job offers and placement drives from college mail show up here, with whether you clear the cut-off.")
+                        }
+                    } else {
+                        item(key = "placement-summary") { PlacementSummary(placements, cards) }
+                    }
+                    items(placements, key = { "p-${it.id}" }) { PlacementCard(it, cards, Modifier.animateItem(placementSpec = Motion.item)) }
+                }
                     2 -> mailSegment(internships, "No internships yet", "Internship openings from college mail show up here.")
                     3 -> mailSegment(exams, "No exam notices", "Exam timetables, hall tickets and results notices show up here.")
                     else -> {

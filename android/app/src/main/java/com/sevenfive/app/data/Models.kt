@@ -83,6 +83,8 @@ data class Item(
     val summary: String? = null,
     /** The drive, test or exam itself, when [dueAt] is the deadline to register. */
     @SerialName("event_at") val eventAt: String? = null,
+    /** Conditions copied from the mail: eligibility (CGPA, backlogs), stipend, duration. */
+    val details: String? = null,
     /** A material whose file the server kept: the phone can open it. */
     @SerialName("has_file") val hasFile: Boolean = false,
 ) {

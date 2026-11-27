@@ -77,11 +77,19 @@ class AppContainer(context: Context) {
         // they show changed, not on every 7-second poll.
         var lastReminders: Any? = null
         var lastWidget: Any? = null
+        var lastCountdown: Any? = "unset"
         repo.onCards = { c ->
             val reminders = c.reminders.map { Triple(it.id, it.firesAt, it.channel) }
             if (reminders != lastReminders) {
                 Alerts.syncReminders(appContext, c.reminders)
                 lastReminders = reminders
+            }
+            // The lock-screen countdown: only when what it would show changes (another item,
+            // another due time, or one crossing into its last 24 hours).
+            val countdown = com.sevenfive.app.notify.LiveCountdown.next(c)?.let { it.first.id to it.second }
+            if (countdown != lastCountdown) {
+                com.sevenfive.app.notify.LiveCountdown.update(appContext, c)
+                lastCountdown = countdown
             }
             val widget = c.dueThisWeek.map { it.id to it.dueAt } to c.attendance.subjects.map { it.percent }
             if (widget != lastWidget) {
@@ -93,7 +101,9 @@ class AppContainer(context: Context) {
         repo.onReset = {
             lastReminders = null
             lastWidget = null
+            lastCountdown = "unset"
             Alerts.cancelReminders(appContext)
+            com.sevenfive.app.notify.LiveCountdown.cancel(appContext)
             WeekWidget.refresh(appContext)
         }
     }

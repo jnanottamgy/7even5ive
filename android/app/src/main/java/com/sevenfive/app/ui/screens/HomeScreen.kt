@@ -112,6 +112,11 @@ fun HomeScreen(vm: AppViewModel, onSettings: () -> Unit) {
     }
 
     var segment by rememberSaveable { mutableIntStateOf(0) }
+    // The on-time record: every deadline this phone sees is noted, done or not.
+    val context = LocalContext.current
+    val sid = cards?.student?.id ?: 0
+    LaunchedEffect(sid, due) { if (cards != null) com.sevenfive.app.data.LocalLog.noteSeen(context, sid, due) }
+    val month = remember(sid, due, cards?.reminders) { com.sevenfive.app.data.LocalLog.thisMonth(context, sid) }
     TabScaffold(if (name != null) "Hi, $name" else "This week", vm, onSettings) { padding ->
         if (cards == null) {
             LoadingOrError(state.loading, padding)
@@ -136,12 +141,18 @@ fun HomeScreen(vm: AppViewModel, onSettings: () -> Unit) {
                     0 -> {
                         // The next thing due, huge, then the day.
                         item(key = "hero") { HomeHero(cards, Modifier.animateItem(placementSpec = Motion.item)) }
+                    findClash(cards.dueThisWeek)?.let { clash ->
+                        item(key = "clash") { ClashCard(clash, Modifier.animateItem(placementSpec = Motion.item)) }
+                    }
                         item(key = "ask") { AskBar(Modifier.animateItem(placementSpec = Motion.item)) }
                         item(key = "reminders") {
                             val nav = LocalNav.current
                             RemindersEntry(cards.reminders, Modifier.animateItem(placementSpec = Motion.item)) { nav(Routes.REMINDERS) }
                         }
-                        item(key = "briefing") { BriefingCard(vm, Modifier.animateItem(placementSpec = Motion.item)) }
+                        if (month.total > 0) {
+                        item(key = "done-history") { DoneHistory(month, Modifier.animateItem(placementSpec = Motion.item)) }
+                    }
+                    item(key = "briefing") { BriefingCard(vm, Modifier.animateItem(placementSpec = Motion.item)) }
                         item(key = "today") { Today(cards, Modifier.animateItem(placementSpec = Motion.item)) }
                     }
                     1 -> {

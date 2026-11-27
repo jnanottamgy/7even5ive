@@ -382,3 +382,102 @@ internal fun RemindersEntry(reminders: List<com.sevenfive.app.data.Reminder>, mo
         )
     }
 }
+
+/** Two or more deadlines or exams close together: which ones, and what to do first. */
+internal data class Clash(val items: List<Pair<com.sevenfive.app.data.Item, java.time.ZonedDateTime>>, val advice: String, val title: String)
+
+private val dayName = DateTimeFormatter.ofPattern("EEE d", Locale.ENGLISH)
+
+/** The first stretch where deadlines and exams fall within 48 hours of each other. */
+internal fun findClash(items: List<com.sevenfive.app.data.Item>, now: java.time.Instant = java.time.Instant.now()): Clash? {
+    val zone = ZoneId.systemDefault()
+    val dated = items
+        .filter { it.kind == "deadline" || it.kind == "exam" }
+        .mapNotNull { item -> Time.parse(item.dueAt)?.atZoneSameInstant(zone)?.let { item to it } }
+        .filter { it.second.toInstant().isAfter(now) }
+        .sortedBy { it.second }
+    var i = 0
+    while (i < dated.size) {
+        var j = i
+        while (j + 1 < dated.size && java.time.Duration.between(dated[j].second, dated[j + 1].second).toHours() < 48) j++
+        if (j > i) {
+            val group = dated.subList(i, j + 1).take(4)
+            val firstDay = group.first().second.toLocalDate()
+            val lastDay = group.last().second.toLocalDate()
+            val title = if (firstDay == lastDay) "${dayName.format(firstDay)} has ${group.size} things"
+            else "${dayName.format(firstDay)} – ${dayName.format(lastDay)}: ${group.size} things"
+            val exam = group.firstOrNull { it.first.kind == "exam" }
+            val deadlines = group.filter { it.first.kind == "deadline" }
+            val advice = when {
+                exam != null && deadlines.isNotEmpty() ->
+                    "Finish ${deadlines.first().first.title ?: "the submission"} early, so the day before " +
+                        "${exam.first.title ?: "the exam"} is free to revise."
+                exam != null -> "Two exams close together: split your revision across both from today."
+                else -> "Start ${group.first().first.title ?: "the first one"} now, then ${group[1].first.title ?: "the next"}."
+            }
+            return Clash(group, advice, title)
+        }
+        i = j + 1
+    }
+    return null
+}
+
+@Composable
+internal fun ClashCard(clash: Clash, modifier: Modifier = Modifier) {
+    val app = LocalAppColors.current
+    Column(
+        modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.large)
+            .background(app.glassFill)
+            .padding(18.dp),
+    ) {
+        NeoLabel("Busy stretch", dot = Orange)
+        Text(clash.title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 8.dp))
+        clash.items.forEach { (item, at) ->
+            Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "${dayName.format(at)} ${at.format(hourMinute)}",
+                    style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),
+                    color = app.secondaryLabel,
+                    modifier = Modifier.width(86.dp),
+                )
+                Text(
+                    item.title ?: kindStyle(item.kind).label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(kindStyle(item.kind).label, style = MaterialTheme.typography.labelSmall, color = app.secondaryLabel)
+            }
+        }
+        Text(clash.advice, style = MaterialTheme.typography.bodyMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+            modifier = Modifier.padding(top = 12.dp))
+    }
+}
+
+/** "12 of 14 done on time this month": quiet, from what this phone has seen. */
+@Composable
+internal fun DoneHistory(month: com.sevenfive.app.data.LocalLog.Month, modifier: Modifier = Modifier) {
+    val app = LocalAppColors.current
+    Row(modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("${month.onTime} of ${month.total}", style = MaterialTheme.typography.titleMedium)
+        Text(
+            " deadlines done on time this month",
+            style = MaterialTheme.typography.bodyMedium,
+            color = app.secondaryLabel,
+            modifier = Modifier.weight(1f),
+        )
+        // A small ring of how much was on time.
+        val share = if (month.total > 0) month.onTime.toFloat() / month.total else 0f
+        androidx.compose.foundation.Canvas(Modifier.size(22.dp)) {
+            val stroke = 3.dp.toPx()
+            val box = androidx.compose.ui.geometry.Size(size.width - stroke, size.height - stroke)
+            val tl = Offset(stroke / 2, stroke / 2)
+            drawArc(app.hairline, 0f, 360f, false, tl, box, style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
+            drawArc(NeoInk, -90f, 360f * share, false, tl, box,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round))
+        }
+    }
+}

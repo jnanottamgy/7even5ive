@@ -224,7 +224,7 @@ CARD_FIELDS = {"kind": "deadline", "subject": "Miscellaneous",
                "title": "Nimbus Systems Campus Drive", "due_at": "2030-01-10T17:00+05:30",
                "category": "placement",
                "organisation": "Nimbus Systems", "role": None, "link": None, "mail_link": None,
-               "summary": None, "event_at": None}
+               "summary": None, "event_at": None, "details": None}
 
 
 def test_two_instances_copying_the_same_mail_card_make_one_card(make_app, monkeypatch):

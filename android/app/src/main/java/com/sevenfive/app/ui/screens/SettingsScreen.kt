@@ -41,6 +41,7 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.WbSunny
+import androidx.compose.material.icons.outlined.Timer
 import com.sevenfive.app.notify.Alerts
 import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.ContentCopy
@@ -442,6 +443,20 @@ private fun NotificationsSection(vm: AppViewModel) {
             icon = Icons.Outlined.WbSunny,
             iconColor = app.deadline,
             detail = "At 8 am, what's due this week. Off unless you turn it on.",
+        )
+        GroupDivider()
+        var countdown by remember { mutableStateOf(com.sevenfive.app.notify.LiveCountdown.enabled(context)) }
+        GroupSwitchRow(
+            "Lock-screen countdown",
+            checked = countdown,
+            onChange = { on ->
+                countdown = on
+                com.sevenfive.app.notify.LiveCountdown.setEnabled(context, on, vm.container.cards.cached())
+                if (on && !permitted) turnOn()
+            },
+            icon = Icons.Outlined.Timer,
+            iconColor = app.exam,
+            detail = "In the last 24 hours before a deadline or exam, a silent live countdown on the lock screen.",
         )
         GroupDivider()
         GroupRow("Send today's digest now", icon = Icons.Outlined.NotificationsActive, iconColor = app.notice) {

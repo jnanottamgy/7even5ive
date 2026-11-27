@@ -395,6 +395,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun markDone(item: Item) = action("done:${item.id}") {
         try {
             container.core.markDone(item.id)
+            com.sevenfive.app.data.LocalLog.noteDone(container.appContext, cards.value.cards?.student?.id ?: 0, item)
             container.cards.refresh(wait = true)
             say("Marked done: ${item.title ?: "item"}", "Undo") { reopen(item) }
         } catch (e: ApiException) {
@@ -405,6 +406,7 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun reopen(item: Item) = action("done:${item.id}") {
         try {
             container.core.reopen(item.id)
+            com.sevenfive.app.data.LocalLog.forgetDone(container.appContext, cards.value.cards?.student?.id ?: 0, item.id)
             say("Back on your list")
         } catch (e: ApiException) {
             say(e.detail)

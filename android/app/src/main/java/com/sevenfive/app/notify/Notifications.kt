@@ -33,6 +33,7 @@ object Notifications {
     const val TAG_TEST = "test"
 
     fun createChannels(context: Context) {
+        LiveCountdown.createChannel(context)
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         manager.createNotificationChannel(
             NotificationChannel(CHANNEL_REMINDERS, "Reminders you set", NotificationManager.IMPORTANCE_HIGH).apply {
