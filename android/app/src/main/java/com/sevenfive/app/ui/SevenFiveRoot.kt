@@ -275,9 +275,11 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
                         onAi = { nav.navigate(Routes.VOICE) { launchSingleTop = true } },
                         onSelect = { tab ->
                             if (tab.route == Routes.HOME) {
-                                nav.goHome()
+                                // Already on Home: no navigation at all (that replayed the
+                                // screen's entry animation), just back to Today, at the top.
+                                if (route != Routes.HOME) nav.goHome()
                                 vm.homeTapped()
-                            } else {
+                            } else if (tab.route != route) {
                                 nav.goToTab(tab.route)
                             }
                         },
@@ -504,6 +506,7 @@ private val ICON_AREA = 34.dp
 
 /** Home, its root, from anywhere: everything above it closes, nothing saved is brought back. */
 private fun NavHostController.goHome() {
+    if (currentDestination?.route == Routes.HOME) return
     if (!popBackStack(Routes.HOME, inclusive = false)) {
         navigate(Routes.HOME) {
             popUpTo(graph.findStartDestination().id) { inclusive = false }

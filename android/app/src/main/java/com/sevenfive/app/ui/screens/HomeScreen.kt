@@ -115,7 +115,13 @@ fun HomeScreen(vm: AppViewModel, onSettings: () -> Unit) {
     var segment by rememberSaveable { mutableIntStateOf(0) }
     // Tapping Home brings Today back, wherever the student was.
     val homeTaps by vm.homeTaps.collectAsStateWithLifecycle()
-    LaunchedEffect(homeTaps) { if (homeTaps > 0) segment = 0 }
+    val homeList = androidx.compose.foundation.lazy.rememberLazyListState()
+    LaunchedEffect(homeTaps) {
+        if (homeTaps > 0) {
+            segment = 0
+            if (homeList.firstVisibleItemIndex > 0 || homeList.firstVisibleItemScrollOffset > 0) homeList.animateScrollToItem(0)
+        }
+    }
     // A tile's details, pulled up over Today: "clash", "briefing" or "ontime".
     var sheet by rememberSaveable { mutableStateOf<String?>(null) }
     // The on-time record: every deadline this phone sees is noted, done or not.
@@ -143,6 +149,7 @@ fun HomeScreen(vm: AppViewModel, onSettings: () -> Unit) {
         Column(Modifier.fillMaxSize().padding(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding())) {
             NeoSegments(segments, segment) { segment = it }
             LazyColumn(
+                state = homeList,
                 contentPadding = PaddingValues(top = 6.dp, bottom = padding.calculateBottomPadding()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxSize().segmentSlide(segment),
