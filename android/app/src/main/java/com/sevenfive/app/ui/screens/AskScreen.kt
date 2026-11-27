@@ -45,6 +45,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -222,13 +223,14 @@ private fun Thinking() {
     val t = rememberInfiniteTransition(label = "thinking")
     Row(horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.padding(vertical = 6.dp)) {
         repeat(3) { i ->
-            val a by t.animateFloat(
+            val a = t.animateFloat(
                 initialValue = 0.25f,
                 targetValue = 1f,
                 animationSpec = infiniteRepeatable(tween(520, delayMillis = i * 160), RepeatMode.Reverse),
                 label = "dot$i",
             )
-            Box(Modifier.size(8.dp).alpha(a).background(com.sevenfive.app.ui.theme.Orange, CircleShape))
+            // Read while drawing: the dots fade without the row being rebuilt every frame.
+            Box(Modifier.size(8.dp).graphicsLayer { alpha = a.value }.background(com.sevenfive.app.ui.theme.Orange, CircleShape))
         }
     }
 }

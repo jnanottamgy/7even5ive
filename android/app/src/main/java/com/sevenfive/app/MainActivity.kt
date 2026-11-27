@@ -140,8 +140,9 @@ class MainActivity : ComponentActivity() {
     private enum class Gate { START, CHECK, OUT, PROFILE, APP }
 
     private companion object {
-        /** The portal refresh (its upload goes to the server) waits a moment after the outbox pull. */
-        const val PORTAL_AFTER_MILLIS = 2_000L
+        /** The portal refresh builds a WebView on the main thread (a few hundred ms the first time):
+         * it waits until the opening sequence (3 to 5 s) is over and the first screen has settled. */
+        const val PORTAL_AFTER_MILLIS = 6_500L
         /** After the 3 s opening sequence, how much longer it may wait for the account check. */
         const val OPENING_EXTRA_MILLIS = 2_000L
     }

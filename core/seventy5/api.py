@@ -8,6 +8,8 @@ connection-minutes cost money and the demo does not need them.
 
 from __future__ import annotations
 
+import gzip
+import hashlib
 import json
 import time
 from contextlib import asynccontextmanager
@@ -15,6 +17,7 @@ from pathlib import Path
 from typing import Any, AsyncIterator
 
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 
 from . import (accounts, ask, auth, briefing, calls, clock, files, google, mail, notify, tools,
@@ -57,6 +60,23 @@ DEMO_ASK_PER_DAY = 60
 DEMO_SHARE_PER_DAY = 60
 
 WEB = Path(__file__).parent / "web"
+
+
+def conditional_json(request: Request, payload: Any) -> Response:
+    """JSON the phone polls every few seconds, made cheap to poll. It carries an ETag (a hash of
+    the body); when the phone sends it back unchanged (If-None-Match) the answer is a bodiless 304:
+    nothing to download, nothing for the phone to read. Otherwise the body goes gzipped when the
+    phone accepts it (OkHttp does, by itself). The body is the same JSON FastAPI would send."""
+    body = json.dumps(jsonable_encoder(payload), ensure_ascii=False, allow_nan=False,
+                      separators=(",", ":")).encode()
+    tag = '"' + hashlib.sha256(body).hexdigest()[:24] + '"'
+    headers = {"ETag": tag, "Cache-Control": "private, no-cache", "Vary": "Accept-Encoding, Authorization"}
+    if tag in (request.headers.get("if-none-match") or ""):
+        return Response(status_code=304, headers=headers)
+    if len(body) >= 1024 and "gzip" in (request.headers.get("accept-encoding") or ""):
+        return Response(gzip.compress(body, compresslevel=5), media_type="application/json",
+                        headers=headers | {"Content-Encoding": "gzip"})
+    return Response(body, media_type="application/json", headers=headers)
 
 
 def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
@@ -180,10 +200,11 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
         return {"ok": True, "duplicate": event_id is None}
 
     @api.get("/api/cards")
-    def cards(authorization: str | None = Header(None)) -> dict[str, Any]:
+    def cards(request: Request, authorization: str | None = Header(None)) -> Response:
         sid = student_from(authorization)
         db = state.db
-        return {
+        every = db.all_cards(sid)  # once, for both counts below
+        return conditional_json(request, {
             # Tokens, the sign-in's id and the phone number stay on the server.
             "student": {k: v for k, v in dict(db.student(sid)).items()
                         if k not in ("token_hash", "auth_user_id", "token_created_at")}
@@ -192,8 +213,8 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
             "attendance": tools.attendance(db, sid),
             "materials": tools.materials(db, sid),
             "opportunities": tools.opportunities(db, sid),
-            "filtered": sum(1 for r in db.all_cards(sid) if r["status"] == "filtered"),
-            "needs_review": [dict(r) for r in db.all_cards(sid) if r["status"] == "needs_review"],
+            "filtered": sum(1 for r in every if r["status"] == "filtered"),
+            "needs_review": [dict(r) for r in every if r["status"] == "needs_review"],
             "approvals": [{"action": r["action"], "args": json.loads(r["args"]),
                            "token": r["token"]} for r in db.pending(sid) if live(r["token"])],
             "calendar": [dict(r) for r in db.calendar(sid)],
@@ -207,7 +228,7 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
             "timetable": tools.timetable(db, sid),
             "marks": tools.marks(db, sid),
             "results": tools.results(db, sid),
-        }
+        })
 
     @api.get("/api/files/{item_id}")
     def file(item_id: int, authorization: str | None = Header(None)) -> Response:

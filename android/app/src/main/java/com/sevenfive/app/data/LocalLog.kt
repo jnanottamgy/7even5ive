@@ -15,6 +15,11 @@ object LocalLog {
     private const val PREFS = "local_log"
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
+    /** Android reads the file on a background thread from this first call; later reads don't wait. */
+    fun warm(context: Context) {
+        prefs(context)
+    }
+
     // --- placement pipeline ------------------------------------------------------------------------
 
     /** The steps of a placement drive, in order; 0 is "not started". */

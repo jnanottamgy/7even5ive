@@ -1,0 +1,5 @@
+# The app's own code, compiled ahead of time when Android installs (or first optimises) the app,
+# so the first launches, scrolls and screens don't wait for the JIT to warm up. Compose and the
+# other libraries bring their own profiles; this adds ours. R8 rewrites these names on build.
+HSPLcom/sevenfive/app/**->**(**)**
+Lcom/sevenfive/app/**;

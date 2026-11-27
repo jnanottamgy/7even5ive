@@ -47,14 +47,8 @@ import com.sevenfive.app.ui.Routes
 import com.sevenfive.app.ui.theme.AuroraBackground
 import com.sevenfive.app.ui.theme.LocalAppColors
 import com.sevenfive.app.ui.theme.LocalBottomInset
-import com.sevenfive.app.ui.theme.frostedStyle
 import com.sevenfive.app.ui.theme.glassSurface
 import com.sevenfive.app.ui.theme.pressable
-import dev.chrisbanes.haze.ExperimentalHazeApi
-import dev.chrisbanes.haze.HazeInputScale
-import dev.chrisbanes.haze.hazeEffect
-import dev.chrisbanes.haze.hazeSource
-import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -66,7 +60,7 @@ import kotlinx.coroutines.launch
  * [content] gets the padding that keeps its first and last items clear of the bars: pass it as
  * the list's contentPadding, not as a modifier, so the content can scroll underneath.
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalHazeApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TabScaffold(
     title: String,
@@ -77,7 +71,6 @@ fun TabScaffold(
     val state by vm.cards.collectAsStateWithLifecycle()
     val searching by vm.searching.collectAsStateWithLifecycle()
     val scroll = TopAppBarDefaults.pinnedScrollBehavior()
-    val haze = rememberHazeState()
     val bottomInset = LocalBottomInset.current
     val app = LocalAppColors.current
 

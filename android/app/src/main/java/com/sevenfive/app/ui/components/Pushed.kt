@@ -51,14 +51,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.sevenfive.app.ui.theme.AuroraBackground
 import com.sevenfive.app.ui.theme.LocalAppColors
-import com.sevenfive.app.ui.theme.frostedStyle
 import com.sevenfive.app.ui.theme.glassSurface
 import com.sevenfive.app.ui.theme.pressable
-import dev.chrisbanes.haze.ExperimentalHazeApi
-import dev.chrisbanes.haze.HazeInputScale
-import dev.chrisbanes.haze.hazeEffect
-import dev.chrisbanes.haze.hazeSource
-import dev.chrisbanes.haze.rememberHazeState
 
 /** The round glass back button pushed screens share. */
 @Composable
@@ -114,11 +108,10 @@ fun PushTopBar(
  * A pushed screen with a large title that collapses into a frosted bar, over the same backdrop as
  * the tabs. [content] gets padding for its scrolling column (top bar above, gesture bar below).
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalHazeApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PushScaffold(title: String, onBack: () -> Unit, content: @Composable (PaddingValues) -> Unit) {
     val scroll = TopAppBarDefaults.pinnedScrollBehavior()
-    val haze = rememberHazeState()
     val app = LocalAppColors.current
     // Above the tab bar where it shows, else above the system's navigation bar.
     val bottom = maxOf(

@@ -22,12 +22,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import dev.chrisbanes.haze.ExperimentalHazeApi
-import dev.chrisbanes.haze.HazeInputScale
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.HazeTint
-import dev.chrisbanes.haze.hazeEffect
 import kotlin.math.max
 
 /**
@@ -44,15 +38,16 @@ fun AuroraBackground(modifier: Modifier = Modifier) {
             context.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f,
         ) == 0f
     }
-    // One slow clock for the whole background, ticking 15 times a second instead of every frame:
-    // the motion is so slow it looks the same, and the phone draws it 4 to 8 times less often.
+    // One slow clock for the whole background, ticking 10 times a second instead of every frame:
+    // the motion is so slow (at most a pixel or two per tick) it looks the same, and the phone
+    // draws it 6 to 12 times less often than at full frame rate.
     // It pauses by itself whenever the app isn't on screen (no frames are drawn then).
     val clock = androidx.compose.runtime.remember { androidx.compose.runtime.mutableLongStateOf(0L) }
     androidx.compose.runtime.LaunchedEffect(still) {
         if (still) return@LaunchedEffect
         val start = androidx.compose.runtime.withFrameMillis { it }
         while (true) {
-            kotlinx.coroutines.delay(66)
+            kotlinx.coroutines.delay(100)
             clock.longValue = androidx.compose.runtime.withFrameMillis { it } - start
         }
     }
@@ -113,21 +108,6 @@ fun AuroraBackground(modifier: Modifier = Modifier) {
     )
 }
 
-/** Frosted glass for bars: blur what scrolls underneath, tinted; a plain tint before Android 12. */
-@Composable
-fun frostedStyle(): HazeStyle {
-    val app = LocalAppColors.current
-    return HazeStyle(
-        backgroundColor = MaterialTheme.colorScheme.background,
-        tint = HazeTint(app.glassTint),
-        // A solid bar (the neo theme) needs no blur: and none means the slowly turning rings
-        // behind it never make the bar re-blur on every frame.
-        blurRadius = if (app.glassTint.alpha >= 1f) 0.dp else 22.dp,
-        noiseFactor = 0f,
-        fallbackTint = HazeTint(app.glassFallback.copy(alpha = 0.97f)),
-    )
-}
-
 /**
  * A glass card: a translucent fill over the backdrop and a hairline edge that is brighter on
  * top, like light catching the rim. [strong] is for things that need more presence.
@@ -176,8 +156,7 @@ fun Modifier.glassSurface(
  * nothing behind it has to be recorded and re-processed on every frame.
  */
 @Composable
-@Suppress("UNUSED_PARAMETER")
-fun Modifier.frosted(state: HazeState, shape: Shape, edgeWidth: Dp = 0.8.dp): Modifier {
+fun Modifier.frosted(shape: Shape, edgeWidth: Dp = 0.8.dp): Modifier {
     val app = LocalAppColors.current
     return this
         .clip(shape)

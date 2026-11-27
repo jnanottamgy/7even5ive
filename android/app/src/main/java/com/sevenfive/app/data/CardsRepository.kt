@@ -1,6 +1,9 @@
 package com.sevenfive.app.data
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -31,11 +34,31 @@ data class CardsState(
  * answer of the last person's can still be applied.
  */
 class CardsRepository(private val core: CoreApi, private val cacheFile: File? = null) {
-    private val _state = MutableStateFlow(CardsState(cards = loadCache(), loading = true))
+    private val _state = MutableStateFlow(CardsState(cards = null, loading = true))
     val state: StateFlow<CardsState> = _state.asStateFlow()
     private val lock = Mutex()
     private val applying = Mutex()
     @Volatile private var generation = 0L
+
+    /** What the server tagged the cards on screen: sent back so an unchanged poll is a 304. */
+    @Volatile private var etag: String? = null
+
+    /** When the server last answered well: what the offline banner says ("data from 2 min ago"). */
+    @Volatile private var lastGood: Instant? = null
+
+    init {
+        // The last good cards from disk, read and decoded off the main thread: the app's first
+        // frame never waits for them (the opening screen covers the moment they take).
+        if (cacheFile != null) {
+            val born = generation
+            CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+                val saved = loadCache() ?: return@launch
+                applying.withLock {
+                    if (generation == born && _state.value.cards == null) _state.update { it.copy(cards = saved) }
+                }
+            }
+        }
+    }
 
     /** Approvals already run or refused here: never shown again, whatever the next poll says. */
     private val hiddenApprovals = mutableSetOf<String>()
@@ -50,18 +73,41 @@ class CardsRepository(private val core: CoreApi, private val cacheFile: File? = 
         lock.withLock {
             val asked = generation
             try {
-                val json = core.cardsJson()
-                val cards = decodeAnswer<Cards>(json).let { c ->
-                    c.copy(approvals = c.approvals.filterNot { it.token in hiddenApprovals })
+                // "Only if changed": the server answers 304 when the cards are as tagged, and then
+                // nothing is downloaded, read or redrawn. Most polls are this.
+                val known = etag.takeIf { _state.value.cards != null }
+                val answer = core.cardsIfChanged(known)
+                val json = answer.body
+                if (json == null) {
+                    applying.withLock {
+                        if (generation != asked) return@withLock
+                        val current = _state.value.cards ?: return@withLock
+                        lastGood = Instant.now()
+                        // Only a state that showed a problem changes; otherwise nothing is emitted
+                        // and no screen recomposes.
+                        if (_state.value.let { it.error != null || it.loading || it.unreachable }) {
+                            _state.update { it.copy(loading = false, error = null, unreachable = false, updatedAt = lastGood) }
+                        }
+                        onCards(current)
+                    }
+                    return@withLock
+                }
+                // Reading the answer is real work: off the main thread, so a poll never costs a frame.
+                val hidden = hiddenApprovals.toSet()
+                val cards = withContext(Dispatchers.Default) {
+                    decodeAnswer<Cards>(json).let { c -> c.copy(approvals = c.approvals.filterNot { it.token in hidden }) }
                 }
                 applying.withLock {
                     if (generation != asked) return@withLock
-                    // Nothing changed since the last poll (most polls): keep the very same object, so
-                    // every screen sees identical data and skips its work instead of redrawing.
+                    // Nothing changed (a server without tags): keep the very same object, so every
+                    // screen sees identical data and skips its work.
                     val previous = _state.value.cards
-                    val same = previous != null && previous == cards
+                    val same = previous != null && withContext(Dispatchers.Default) { previous == cards }
                     val kept = if (same) previous!! else cards
-                    _state.value = CardsState(kept, loading = false, error = null, updatedAt = Instant.now())
+                    lastGood = Instant.now()
+                    etag = answer.etag
+                    val quiet = same && _state.value.let { it.error == null && !it.loading && !it.unreachable }
+                    if (!quiet) _state.value = CardsState(kept, loading = false, error = null, updatedAt = lastGood)
                     if (!same) saveCache(json)
                     // Always: it notices time passing too (the lock-screen countdown's last 24 h),
                     // and only acts when what it would show changes.
@@ -72,7 +118,9 @@ class CardsRepository(private val core: CoreApi, private val cacheFile: File? = 
                 val said = if (e.busy) BUSY_RETRYING else e.detail
                 applying.withLock {
                     if (generation == asked) {
-                        _state.update { it.copy(loading = false, error = said, unreachable = e.status == 0) }
+                        _state.update {
+                            it.copy(loading = false, error = said, unreachable = e.status == 0, updatedAt = lastGood ?: it.updatedAt)
+                        }
                     }
                 }
             }
@@ -106,6 +154,8 @@ class CardsRepository(private val core: CoreApi, private val cacheFile: File? = 
     /** Someone else now (or another server): nothing of the last cards stays, here or on disk. */
     suspend fun reset() = applying.withLock {
         generation++
+        etag = null
+        lastGood = null
         hiddenApprovals.clear()
         _state.value = CardsState()
         runCatching { cacheFile?.delete() }

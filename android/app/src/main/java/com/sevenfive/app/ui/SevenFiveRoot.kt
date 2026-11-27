@@ -123,9 +123,6 @@ import com.sevenfive.app.ui.theme.LocalBottomInset
 import com.sevenfive.app.ui.theme.Motion
 import com.sevenfive.app.ui.theme.frosted
 import com.sevenfive.app.ui.theme.pressable
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeSource
-import dev.chrisbanes.haze.rememberHazeState
 
 object Routes {
     const val HOME = "home"
@@ -175,7 +172,6 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
     val backStack by nav.currentBackStackEntryAsState()
     val route = backStack?.destination?.route
     // Everything on screen is the source the floating glass blurs.
-    val haze = rememberHazeState()
 
     LaunchedEffect(Unit) {
         vm.messages.collect { m ->
@@ -254,7 +250,6 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
                         tour?.let { t ->
                             DemoBar(
                                 t,
-                                haze = haze,
                                 onBack = { vm.tourBack() },
                                 onNext = { vm.tourNext() },
                                 onAct = { vm.tourAct() },
@@ -264,7 +259,6 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
                         }
                     }
                     GlassTabBar(
-                        haze = haze,
                         selected = tabs.indexOfFirst { it.route == (if (tabs.any { t -> t.route == route }) route else lastTab) }.coerceAtLeast(0),
                         badge = { tab ->
                             when (tab.route) {
@@ -376,7 +370,7 @@ private fun Nav.popExit(): ExitTransition =
  * pill that glides between tabs on a spring.
  */
 @Composable
-private fun GlassTabBar(haze: HazeState, selected: Int, badge: (Tab) -> Int, onAi: () -> Unit, onSelect: (Tab) -> Unit) {
+private fun GlassTabBar(selected: Int, badge: (Tab) -> Int, onAi: () -> Unit, onSelect: (Tab) -> Unit) {
     val haptics = LocalHapticFeedback.current
     val app = LocalAppColors.current
     val primary = MaterialTheme.colorScheme.primary

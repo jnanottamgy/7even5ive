@@ -44,7 +44,6 @@ import com.sevenfive.app.ui.theme.Motion
 import com.sevenfive.app.ui.theme.frosted
 import com.sevenfive.app.ui.theme.glassSurface
 import com.sevenfive.app.ui.theme.pressable
-import dev.chrisbanes.haze.HazeState
 
 /** What a step's button makes happen on the demo server. */
 enum class DemoAction(val label: String) {
@@ -177,7 +176,6 @@ data class TourState(val index: Int = 0, val result: String? = null, val busy: B
 @Composable
 fun DemoBar(
     state: TourState,
-    haze: HazeState,
     onBack: () -> Unit,
     onNext: () -> Unit,
     onAct: () -> Unit,
@@ -196,7 +194,7 @@ fun DemoBar(
     Column(
         modifier
             .fillMaxWidth()
-            .frosted(haze, shape)
+            .frosted(shape)
             .padding(start = 16.dp, end = 10.dp, top = 12.dp, bottom = 12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
