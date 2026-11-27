@@ -61,9 +61,34 @@ fun AuroraBackground(modifier: Modifier = Modifier) {
         ),
         label = "ring two",
     )
+    // The glow's wander: once round a slow figure-of-eight a minute.
+    val drift by turn.animateFloat(
+        initialValue = 0f,
+        targetValue = if (still) 0f else 1f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            androidx.compose.animation.core.tween(60_000, easing = androidx.compose.animation.core.LinearEasing),
+        ),
+        label = "glow",
+    )
     Box(
         modifier.fillMaxSize().drawBehind {
             drawRect(base)
+            // A soft warm glow drifting across, like light moving over paper. Barely there.
+            val phase = drift * 2f * Math.PI.toFloat()
+            val glow = Offset(
+                size.width * (0.45f + 0.30f * kotlin.math.sin(phase)),
+                size.height * (0.40f + 0.18f * kotlin.math.sin(2f * phase + 1f)),
+            )
+            val reach = size.width * 0.95f
+            drawCircle(
+                Brush.radialGradient(
+                    listOf(Orange.copy(alpha = 0.07f), Orange.copy(alpha = 0.025f), Color.Transparent),
+                    center = glow,
+                    radius = reach,
+                ),
+                radius = reach,
+                center = glow,
+            )
             fun ring(center: Offset, radius: Float, angle: Float, sweep: Float, color: Color, width: Float) {
                 rotate(angle, pivot = center) {
                     drawArc(
