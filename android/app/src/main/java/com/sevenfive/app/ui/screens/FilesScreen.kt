@@ -172,7 +172,7 @@ fun FilesScreen(vm: AppViewModel, onSettings: () -> Unit) {
         val current = tree
         if (current == null) {
             if (loading) {
-                Box(Modifier.padding(padding)) { Centered { CircularProgressIndicator() } }
+                com.sevenfive.app.ui.components.SkeletonScreen(padding)
             } else {
                 Column(Modifier.fillMaxWidth().padding(padding), horizontalAlignment = Alignment.CenterHorizontally) {
                     EmptyState(Icons.Outlined.CloudOff, "Library unavailable", problem ?: "Couldn't load your files.")
@@ -190,7 +190,11 @@ fun FilesScreen(vm: AppViewModel, onSettings: () -> Unit) {
             else -> {
                 val subject = current.subjects.firstOrNull { it.id == subjectId }
                 Column(Modifier.padding(top = padding.calculateTopPadding())) {
-                    Row(Modifier.padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (unsorted) {
+                        Box(Modifier.padding(horizontal = 16.dp)) {
+                            NeoSegments(topSegments(current), 1) { if (it == 0) unsorted = false }
+                        }
+                    } else Row(Modifier.padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { subjectId = null; unsorted = false }) {
                             Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "All subjects")
                         }
@@ -199,18 +203,13 @@ fun FilesScreen(vm: AppViewModel, onSettings: () -> Unit) {
                             style = MaterialTheme.typography.titleMedium,
                         )
                     }
-                    if (!unsorted && subject != null) {
-                        Row(
-                            Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            subject.shelves.forEach { s ->
-                                FilterChip(
-                                    selected = shelf == s.shelf,
-                                    onClick = { shelf = s.shelf },
-                                    label = { Text("${s.label}  ${s.files}", maxLines = 1) },
-                                )
-                            }
+                    if (!unsorted && subject != null && subject.shelves.isNotEmpty()) {
+                        // The subject's shelves as segments: notes, past papers, info.
+                        Box(Modifier.padding(horizontal = 16.dp)) {
+                            NeoSegments(
+                                subject.shelves.map { Segment(it.label, it.files) },
+                                subject.shelves.indexOfFirst { it.shelf == shelf }.coerceAtLeast(0),
+                            ) { shelf = subject.shelves[it].shelf }
                         }
                     }
                     LazyColumn(
@@ -222,7 +221,7 @@ fun FilesScreen(vm: AppViewModel, onSettings: () -> Unit) {
                         }
                         items(files, key = { it.id }) { file -> FileRow(file) { open(file) } }
                         if (filesLoading) {
-                            item { Centered { CircularProgressIndicator() } }
+                            item { Centered { com.sevenfive.app.ui.components.BrandRing(size = 28.dp, spinning = true) } }
                         } else if (nextOffset != null) {
                             item {
                                 TextButton(onClick = { loadFiles(nextOffset ?: 0) }, modifier = Modifier.fillMaxWidth()) {
@@ -240,6 +239,7 @@ fun FilesScreen(vm: AppViewModel, onSettings: () -> Unit) {
 @Composable
 private fun SubjectList(tree: LibraryTree, padding: PaddingValues, onSubject: (Int) -> Unit, onUnsorted: () -> Unit) {
     LazyColumn(contentPadding = padding, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        item(key = "segments") { NeoSegments(topSegments(tree), 0) { if (it == 1) onUnsorted() } }
         if (tree.subjects.isEmpty() && tree.unsorted == 0) {
             item {
                 EmptyState(Icons.Outlined.FolderOpen, "No files yet",
@@ -249,20 +249,20 @@ private fun SubjectList(tree: LibraryTree, padding: PaddingValues, onSubject: (I
         items(tree.subjects, key = { it.id }) { subject ->
             FolderRow(subject.name, "${subject.total} files") { onSubject(subject.id) }
         }
-        if (tree.unsorted > 0) {
-            item { FolderRow("Waiting for a subject", "${tree.unsorted} files") { onUnsorted() } }
-        }
     }
 }
+
+/** Files' top segments: the subjects, and what is still waiting for one. */
+private fun topSegments(tree: LibraryTree) = listOf(Segment("Subjects", tree.subjects.size), Segment("Unsorted", tree.unsorted))
 
 @Composable
 private fun FolderRow(name: String, detail: String, onClick: () -> Unit) {
     AppCard(Modifier.clickable(onClick = onClick)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.Folder, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.width(12.dp))
+            com.sevenfive.app.ui.components.IconTile(Icons.Outlined.Folder, MaterialTheme.colorScheme.onSurface, size = 40.dp)
+            Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text(name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
@@ -273,7 +273,7 @@ private fun FolderRow(name: String, detail: String, onClick: () -> Unit) {
 private fun FileRow(file: LibraryFile, onOpen: () -> Unit) {
     AppCard(Modifier.clickable(onClick = onOpen)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(iconFor(file), contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            com.sevenfive.app.ui.components.IconTile(iconFor(file), MaterialTheme.colorScheme.onSurface, size = 40.dp)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(file.title, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)

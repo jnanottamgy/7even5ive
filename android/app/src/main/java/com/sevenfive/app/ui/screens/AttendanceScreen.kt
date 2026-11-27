@@ -24,6 +24,9 @@ import androidx.compose.material.icons.outlined.School
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import com.sevenfive.app.ui.components.segmentSlide
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -85,35 +88,41 @@ fun AttendanceScreen(vm: AppViewModel, onSettings: () -> Unit, onPortal: () -> U
         }
         val subjects = worstFirst(attendance.subjects)
         val segments = listOf(Segment("Overview"), Segment("Subjects", subjects.size), Segment("Portal"))
-        LazyColumn(contentPadding = padding, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            item(key = "segments") { NeoSegments(segments, segment) { segment = it } }
-            when (segment) {
-                0 -> {
-                    subjects.firstOrNull()?.let { worst ->
-                        item(key = "hero") { AttendanceHero(worst, Modifier.animateItem(placementSpec = Motion.item)) }
-                    }
-                    item(key = "tiles") { CollegeTiles(nav, Modifier.animateItem(placementSpec = Motion.item)) }
-                }
-                1 -> {
-                    if (subjects.isNotEmpty()) {
-                        val short = subjects.count { it.status == "short" || it.status == "unrecoverable" }
-                        item(key = "header") {
-                            SectionHeader(
-                                if (short == 0) "All subjects" else "$short below ${minimumOf(subjects)}%",
-                                Modifier.animateItem(placementSpec = Motion.item),
-                            )
+        // The switcher stays pinned; the segment under it slides in when it changes.
+        Column(Modifier.fillMaxSize().padding(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding())) {
+            NeoSegments(segments, segment) { segment = it }
+            LazyColumn(
+                contentPadding = PaddingValues(top = 6.dp, bottom = padding.calculateBottomPadding()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxSize().segmentSlide(segment),
+            ) {                when (segment) {
+                    0 -> {
+                        subjects.firstOrNull()?.let { worst ->
+                            item(key = "hero") { AttendanceHero(worst, Modifier.animateItem(placementSpec = Motion.item)) }
                         }
-                        // A code can repeat (a theory and a lab paper, or a portal page with no codes).
-                        val keys = uniqueKeys(subjects) { it.code }
-                        itemsIndexed(subjects, key = { i, _ -> keys[i] }) { _, subject ->
-                            SubjectCard(subject, Modifier.animateItem(placementSpec = Motion.item))
+                        item(key = "tiles") { CollegeTiles(nav, Modifier.animateItem(placementSpec = Motion.item)) }
+                    }
+                    1 -> {
+                        if (subjects.isNotEmpty()) {
+                            val short = subjects.count { it.status == "short" || it.status == "unrecoverable" }
+                            item(key = "header") {
+                                SectionHeader(
+                                    if (short == 0) "All subjects" else "$short below ${minimumOf(subjects)}%",
+                                    Modifier.animateItem(placementSpec = Motion.item),
+                                )
+                            }
+                            // A code can repeat (a theory and a lab paper, or a portal page with no codes).
+                            val keys = uniqueKeys(subjects) { it.code }
+                            itemsIndexed(subjects, key = { i, _ -> keys[i] }) { _, subject ->
+                                SubjectCard(subject, Modifier.animateItem(placementSpec = Motion.item))
+                            }
                         }
                     }
+                    else -> {
+                        item(key = "portal") { PortalCard(attendance, portal, onPortal, Modifier.animateItem(placementSpec = Motion.item)) }
+                    }
                 }
-                else -> {
-                    item(key = "portal") { PortalCard(attendance, portal, onPortal, Modifier.animateItem(placementSpec = Motion.item)) }
-                }
-            }
+                    }
         }
     }
 }

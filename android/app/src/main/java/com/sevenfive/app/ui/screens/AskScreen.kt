@@ -112,10 +112,10 @@ fun AskScreen(vm: AppViewModel, onBack: () -> Unit) {
                                 "a reminder, or ask you before it writes anywhere else.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = app.secondaryLabel,
-                            modifier = Modifier.padding(horizontal = 4.dp),
                         )
                         if (chat.isEmpty()) {
-                            EmptyState(Icons.Outlined.AutoAwesome, "Try one of these")
+                            Text("TRY", style = MaterialTheme.typography.labelSmall, color = app.secondaryLabel,
+                                modifier = Modifier.padding(top = 18.dp))
                             FlowRow(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -153,22 +153,23 @@ fun AskScreen(vm: AppViewModel, onBack: () -> Unit) {
                         unfocusedContainerColor = Color.Transparent,
                         focusedIndicatorColor = Color.Transparent,
                         unfocusedIndicatorColor = Color.Transparent,
-                        cursorColor = MaterialTheme.colorScheme.primary,
+                        cursorColor = com.sevenfive.app.ui.theme.Orange,
                     ),
                     modifier = Modifier.weight(1f),
                 )
                 val can = draft.isNotBlank()
                 Box(
                     Modifier
-                        .size(38.dp)
+                        .size(42.dp)
                         .pressable(enabled = can, haptic = true) { send(draft) }
                         .background(
-                            if (can) MaterialTheme.colorScheme.primary else app.hairline,
+                            if (can) com.sevenfive.app.ui.theme.Orange else app.hairline,
                             CircleShape,
                         ),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Ask", tint = Color.White,
+                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Ask",
+                        tint = if (can) com.sevenfive.app.ui.theme.NeoInk else app.secondaryLabel,
                         modifier = Modifier.size(18.dp))
                 }
             }
@@ -192,19 +193,14 @@ private fun Turn(turn: ChatTurn) {
                     .padding(horizontal = 14.dp, vertical = 9.dp),
             )
         }
-        // The answer: glass on the left, with how it was answered underneath.
-        Column(
-            Modifier
-                .widthIn(max = 330.dp)
-                .glassSurface(shape = RoundedCornerShape(20.dp, 20.dp, 20.dp, 6.dp))
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-        ) {
+        // The answer: plain, readable text, no bubble, with how it was answered underneath.
+        Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
             when {
                 turn.error != null -> Text(turn.error, style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.error)
                 turn.answer == null -> Thinking()
                 else -> {
-                    Text(turn.answer.answer, style = MaterialTheme.typography.bodyLarge)
+                    Text(turn.answer.answer, style = MaterialTheme.typography.titleMedium)
                     val via = if (turn.answer.route == "claude") "Claude" else "offline answers"
                     val tools = turn.answer.tools.distinct().joinToString(", ")
                     Text(
@@ -232,7 +228,7 @@ private fun Thinking() {
                 animationSpec = infiniteRepeatable(tween(520, delayMillis = i * 160), RepeatMode.Reverse),
                 label = "dot$i",
             )
-            Box(Modifier.size(8.dp).alpha(a).background(LocalAppColors.current.secondaryLabel, CircleShape))
+            Box(Modifier.size(8.dp).alpha(a).background(com.sevenfive.app.ui.theme.Orange, CircleShape))
         }
     }
 }

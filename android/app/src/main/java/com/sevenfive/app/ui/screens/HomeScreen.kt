@@ -46,6 +46,8 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.fillMaxSize
+import com.sevenfive.app.ui.components.segmentSlide
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -123,80 +125,86 @@ fun HomeScreen(vm: AppViewModel, onSettings: () -> Unit) {
             Segment("Needs you", needs),
             Segment("AI"),
         )
-        LazyColumn(contentPadding = padding, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            item(key = "segments") { NeoSegments(segments, segment) { segment = it } }
-            when (segment) {
-                0 -> {
-                    // The next thing due, huge, then the day.
-                    item(key = "hero") { HomeHero(cards, Modifier.animateItem(placementSpec = Motion.item)) }
-                    item(key = "ask") { AskBar(Modifier.animateItem(placementSpec = Motion.item)) }
-                    item(key = "reminders") {
-                        val nav = LocalNav.current
-                        RemindersEntry(cards.reminders, Modifier.animateItem(placementSpec = Motion.item)) { nav(Routes.REMINDERS) }
+        // The switcher stays pinned; the segment under it slides in when it changes.
+        Column(Modifier.fillMaxSize().padding(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding())) {
+            NeoSegments(segments, segment) { segment = it }
+            LazyColumn(
+                contentPadding = PaddingValues(top = 6.dp, bottom = padding.calculateBottomPadding()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxSize().segmentSlide(segment),
+            ) {                when (segment) {
+                    0 -> {
+                        // The next thing due, huge, then the day.
+                        item(key = "hero") { HomeHero(cards, Modifier.animateItem(placementSpec = Motion.item)) }
+                        item(key = "ask") { AskBar(Modifier.animateItem(placementSpec = Motion.item)) }
+                        item(key = "reminders") {
+                            val nav = LocalNav.current
+                            RemindersEntry(cards.reminders, Modifier.animateItem(placementSpec = Motion.item)) { nav(Routes.REMINDERS) }
+                        }
+                        item(key = "briefing") { BriefingCard(vm, Modifier.animateItem(placementSpec = Motion.item)) }
+                        item(key = "today") { Today(cards, Modifier.animateItem(placementSpec = Motion.item)) }
                     }
-                    item(key = "briefing") { BriefingCard(vm, Modifier.animateItem(placementSpec = Motion.item)) }
-                    item(key = "today") { Today(cards, Modifier.animateItem(placementSpec = Motion.item)) }
-                }
-                1 -> {
-                    item(key = "intro") { ScreenIntro(subtitle) }
-                    if (due.isEmpty()) {
-                        item(key = "empty") {
-                            EmptyState(
-                                Icons.Outlined.EventAvailable,
-                                "A clear week",
-                                "Deadlines and exams from your groups, mail and Classroom show up here.",
+                    1 -> {
+                        item(key = "intro") { ScreenIntro(subtitle) }
+                        if (due.isEmpty()) {
+                            item(key = "empty") {
+                                EmptyState(
+                                    Icons.Outlined.EventAvailable,
+                                    "A clear week",
+                                    "Deadlines and exams from your groups, mail and Classroom show up here.",
+                                )
+                            }
+                        }
+                        items(due, key = { "i-${it.id}" }) { item ->
+                            val reminder = cards.reminders.firstOrNull { it.itemId == item.id }
+                                ?: cards.reminders.firstOrNull { it.itemId == null && it.title == item.title && it.dueAt == item.dueAt }
+                            DueCard(
+                                item, reminder, "item:${item.id}" in busy, "done:${item.id}" in busy, settings?.calls,
+                                Modifier.animateItem(placementSpec = Motion.item),
+                                onRemind = { minutes, channel -> vm.remind(item, minutes, channel) },
+                                onCallConsent = { minutes -> vm.enableCallsAndRemind(item, minutes) },
+                                onDone = { vm.markDone(item) },
                             )
                         }
                     }
-                    items(due, key = { "i-${it.id}" }) { item ->
-                        val reminder = cards.reminders.firstOrNull { it.itemId == item.id }
-                            ?: cards.reminders.firstOrNull { it.itemId == null && it.title == item.title && it.dueAt == item.dueAt }
-                        DueCard(
-                            item, reminder, "item:${item.id}" in busy, "done:${item.id}" in busy, settings?.calls,
-                            Modifier.animateItem(placementSpec = Motion.item),
-                            onRemind = { minutes, channel -> vm.remind(item, minutes, channel) },
-                            onCallConsent = { minutes -> vm.enableCallsAndRemind(item, minutes) },
-                            onDone = { vm.markDone(item) },
-                        )
-                    }
-                }
-                2 -> {
-                    if (cards.approvals.isEmpty() && approved.isEmpty() && cards.needsReview.isEmpty()) {
-                        item(key = "nothing") {
-                            EmptyState(Icons.Outlined.Done, "Nothing needs you", "Calendar changes your AI asks for, and messages it couldn't read, wait here for your tap.")
+                    2 -> {
+                        if (cards.approvals.isEmpty() && approved.isEmpty() && cards.needsReview.isEmpty()) {
+                            item(key = "nothing") {
+                                EmptyState(Icons.Outlined.Done, "Nothing needs you", "Calendar changes your AI asks for, and messages it couldn't read, wait here for your tap.")
+                            }
                         }
-                    }
-                    if (cards.approvals.isNotEmpty() || approved.isNotEmpty()) {
-                        item(key = "h-approvals") { SectionHeader("Needs your tap", Modifier.animateItem(placementSpec = Motion.item)) }
-                        items(cards.approvals, key = { "a-" + it.token }) { approval ->
-                            ApprovalCard(
-                                approval, vm.titleFor(approval), approval.token in busy,
-                                Modifier.animateItem(placementSpec = Motion.item),
-                            ) { vm.approve(approval) }
+                        if (cards.approvals.isNotEmpty() || approved.isNotEmpty()) {
+                            item(key = "h-approvals") { SectionHeader("Needs your tap", Modifier.animateItem(placementSpec = Motion.item)) }
+                            items(cards.approvals, key = { "a-" + it.token }) { approval ->
+                                ApprovalCard(
+                                    approval, vm.titleFor(approval), approval.token in busy,
+                                    Modifier.animateItem(placementSpec = Motion.item),
+                                ) { vm.approve(approval) }
+                            }
+                            items(approved, key = { "d-" + it.approval.token }) { done ->
+                                DoneApprovalCard(done, done.approval.token in busy, Modifier.animateItem(placementSpec = Motion.item)) {
+                                    vm.approve(done.approval)
+                                }
+                            }
                         }
-                        items(approved, key = { "d-" + it.approval.token }) { done ->
-                            DoneApprovalCard(done, done.approval.token in busy, Modifier.animateItem(placementSpec = Motion.item)) {
-                                vm.approve(done.approval)
+                        if (cards.needsReview.isNotEmpty()) {
+                            item(key = "h-review") { SectionHeader("Couldn't read these", Modifier.animateItem(placementSpec = Motion.item)) }
+                            items(cards.needsReview, key = { "r-${it.id}" }) { item ->
+                                NeedsReviewCard(item, Modifier.animateItem(placementSpec = Motion.item))
                             }
                         }
                     }
-                    if (cards.needsReview.isNotEmpty()) {
-                        item(key = "h-review") { SectionHeader("Couldn't read these", Modifier.animateItem(placementSpec = Motion.item)) }
-                        items(cards.needsReview, key = { "r-${it.id}" }) { item ->
-                            NeedsReviewCard(item, Modifier.animateItem(placementSpec = Motion.item))
+                    else -> {
+                        if (cards.audit.isNotEmpty()) {
+                            item(key = "ai") { YourAi(cards, Modifier.animateItem(placementSpec = Motion.item)) }
+                        } else {
+                            item(key = "ai-empty") {
+                                EmptyState(Icons.Outlined.Shield, "No AI activity yet", "Every time your AI reads or changes something, it shows here.")
+                            }
                         }
                     }
                 }
-                else -> {
-                    if (cards.audit.isNotEmpty()) {
-                        item(key = "ai") { YourAi(cards, Modifier.animateItem(placementSpec = Motion.item)) }
-                    } else {
-                        item(key = "ai-empty") {
-                            EmptyState(Icons.Outlined.Shield, "No AI activity yet", "Every time your AI reads or changes something, it shows here.")
-                        }
                     }
-                }
-            }
         }
     }
 }

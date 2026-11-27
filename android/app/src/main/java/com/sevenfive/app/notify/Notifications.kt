@@ -142,5 +142,5 @@ object Notifications {
         }
     }
 
-    private const val BRAND_ORANGE = 0xFFF27A0C.toInt()
+    private const val BRAND_ORANGE = 0xFFFF8A1F.toInt()
 }

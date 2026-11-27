@@ -97,12 +97,12 @@ internal fun HomeHero(cards: Cards, modifier: Modifier = Modifier) {
             val days = java.time.Duration.between(now, at.toInstant()).toDays()
             val countdown = Time.countdown(at.toOffsetDateTime(), now)
             NeoLabel("Next · due ${dayWord(at.toLocalDate()).lowercase(Locale.ENGLISH)}", dot = Orange)
-            Text(
+            com.sevenfive.app.ui.components.RollingText(
                 if (days > 0) countdown.replaceFirst(" ", "\n") else countdown,
                 style = MaterialTheme.typography.displayMedium.copy(fontFeatureSettings = "tnum"),
                 modifier = Modifier
                     .padding(top = 10.dp)
-                    .semantics { contentDescription = "Time left: $countdown" },
+                    .semantics(mergeDescendants = true) { contentDescription = "Time left: $countdown" },
             )
             Text(
                 if (countdown == "now") "due now" else "left",
@@ -263,6 +263,7 @@ internal data class Segment(val label: String, val count: Int = 0)
 @Composable
 internal fun NeoSegments(segments: List<Segment>, selected: Int, modifier: Modifier = Modifier, onSelect: (Int) -> Unit) {
     val app = LocalAppColors.current
+    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
     // Up to four share the width evenly; more scroll sideways, each as wide as its words.
     val many = segments.size > 4
     Row(
@@ -287,7 +288,10 @@ internal fun NeoSegments(segments: List<Segment>, selected: Int, modifier: Modif
                         this.selected = on
                         role = androidx.compose.ui.semantics.Role.Tab
                     }
-                    .clickable { onSelect(i) }
+                    .clickable {
+                        if (i != selected) haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                        onSelect(i)
+                    }
                     .then(if (many) Modifier.padding(horizontal = 14.dp) else Modifier),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,

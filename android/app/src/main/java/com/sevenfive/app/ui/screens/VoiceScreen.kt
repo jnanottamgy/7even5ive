@@ -9,6 +9,8 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -97,9 +99,9 @@ fun VoiceScreen(vm: AppViewModel, onBack: () -> Unit) {
             Orb(state.phase)
             Text(
                 statusLine(state),
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.headlineLarge,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
             )
             state.working?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall, color = app.secondaryLabel,
@@ -153,29 +155,39 @@ private fun statusLine(state: VoiceAssistant.State): String = when (state.phase)
     VoiceAssistant.Phase.ERROR -> state.message ?: "Something went wrong"
 }
 
+/**
+ * The orb, neo-minimal: one solid orange circle with the mic. While the conversation is live a
+ * single ring breathes out from it and fades; faster while the assistant speaks.
+ */
 @Composable
 private fun Orb(phase: VoiceAssistant.Phase) {
-    val primary = MaterialTheme.colorScheme.primary
+    val orange = com.sevenfive.app.ui.theme.Orange
     val live = phase == VoiceAssistant.Phase.LISTENING || phase == VoiceAssistant.Phase.SPEAKING
+    val speaking = phase == VoiceAssistant.Phase.SPEAKING
     val pulse = rememberInfiniteTransition(label = "orb")
-    val scale by pulse.animateFloat(
-        initialValue = 1f,
-        targetValue = if (phase == VoiceAssistant.Phase.SPEAKING) 1.14f else if (live) 1.06f else 1f,
-        animationSpec = infiniteRepeatable(tween(if (phase == VoiceAssistant.Phase.SPEAKING) 420 else 900), RepeatMode.Reverse),
-        label = "orb scale",
+    val wave by pulse.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(if (speaking) 900 else 1600), RepeatMode.Restart),
+        label = "orb wave",
     )
-    Box(Modifier.fillMaxWidth().padding(top = 12.dp), contentAlignment = Alignment.Center) {
+    Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
+        if (live) {
+            Box(
+                Modifier
+                    .size(120.dp)
+                    .scale(1f + wave * 0.6f)
+                    .graphicsLayer { alpha = (1f - wave) * 0.55f }
+                    .border(2.dp, orange, CircleShape),
+            )
+        }
         Box(
             Modifier
-                .size(132.dp)
-                .scale(scale)
-                .background(
-                    Brush.radialGradient(listOf(primary.copy(alpha = if (live) 0.95f else 0.55f), primary.copy(alpha = 0.18f))),
-                    CircleShape,
-                ),
+                .size(120.dp)
+                .background(orange.copy(alpha = if (live || phase == VoiceAssistant.Phase.IDLE) 1f else 0.55f), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.Mic, contentDescription = null, tint = Color.White, modifier = Modifier.size(44.dp))
+            Icon(Icons.Filled.Mic, contentDescription = null, tint = com.sevenfive.app.ui.theme.NeoInk, modifier = Modifier.size(40.dp))
         }
     }
 }
@@ -183,7 +195,9 @@ private fun Orb(phase: VoiceAssistant.Phase) {
 @Composable
 private fun Hints() {
     val app = LocalAppColors.current
-    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+        Text("TRY", style = MaterialTheme.typography.labelSmall, color = app.secondaryLabel,
+            modifier = Modifier.padding(bottom = 6.dp))
         listOf(
             "“What's due this week?”",
             "“Can I skip Database Management Systems tomorrow?”",
@@ -191,28 +205,35 @@ private fun Hints() {
             "“Remind me an hour before the quiz.”",
             "“Any placements in my mail?”",
         ).forEach {
-            Text(it, style = MaterialTheme.typography.bodyMedium, color = app.secondaryLabel,
-                modifier = Modifier.padding(vertical = 3.dp))
+            Text(it, style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(vertical = 6.dp))
         }
     }
 }
 
 @Composable
 private fun Bubble(line: VoiceAssistant.Line) {
-    val primary = MaterialTheme.colorScheme.primary
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = if (line.fromAgent) Arrangement.Start else Arrangement.End) {
+    if (line.fromAgent) {
+        // The answer: plain, readable text, no bubble.
         Text(
             line.text,
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (line.fromAgent) MaterialTheme.colorScheme.onSurface else Color.White,
-            modifier = Modifier
-                .widthIn(max = 300.dp)
-                .then(
-                    if (line.fromAgent) Modifier.glassSurface(shape = RoundedCornerShape(18.dp))
-                    else Modifier.background(primary, RoundedCornerShape(18.dp)),
-                )
-                .padding(horizontal = 14.dp, vertical = 10.dp),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         )
+    } else {
+        // What you said: a small ink pill on the right.
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            Text(
+                line.text,
+                style = MaterialTheme.typography.bodyMedium,
+                color = com.sevenfive.app.ui.theme.NeoGround,
+                modifier = Modifier
+                    .widthIn(max = 280.dp)
+                    .background(com.sevenfive.app.ui.theme.NeoInk, RoundedCornerShape(18.dp))
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+            )
+        }
     }
 }
 

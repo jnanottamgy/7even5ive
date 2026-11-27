@@ -119,7 +119,7 @@ fun CheckingScreen(vm: AuthViewModel, state: AccountState.Checking) {
         Wordmark()
         Spacer(Modifier.height(28.dp))
         if (state.problem == null && error == null) {
-            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+            com.sevenfive.app.ui.components.BrandRing(size = 28.dp, spinning = true)
             Spacer(Modifier.height(12.dp))
             Quiet("Opening your account…")
         } else {
@@ -373,10 +373,11 @@ fun AuthScaffold(bottom: (@Composable ColumnScope.() -> Unit)? = null, content: 
                     .weight(1f)
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 28.dp),
+                    .padding(horizontal = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Column(Modifier.widthIn(max = 420.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                // Neo-minimal: one left edge for everything, like the rest of the app.
+                Column(Modifier.widthIn(max = 420.dp).fillMaxWidth(), horizontalAlignment = Alignment.Start) {
                     content()
                     Spacer(Modifier.height(24.dp))
                 }
@@ -396,24 +397,24 @@ fun AuthScaffold(bottom: (@Composable ColumnScope.() -> Unit)? = null, content: 
 
 @Composable
 fun Wordmark() {
-    val primary = MaterialTheme.colorScheme.primary
-    Text(
-        buildAnnotatedString {
-            append("7even")
-            withStyle(SpanStyle(color = primary)) { append("5") }
-            append("ive")
-        },
-        fontSize = 44.sp,
-        fontWeight = FontWeight.Black,
-        letterSpacing = (-1.2).sp,
-        color = MaterialTheme.colorScheme.onBackground,
-        modifier = Modifier.semantics { contentDescription = "7even5ive" },
-    )
+    Column {
+        com.sevenfive.app.ui.components.BrandRing(size = 40.dp)
+        Text(
+            buildAnnotatedString {
+                append("7even")
+                withStyle(SpanStyle(color = com.sevenfive.app.ui.theme.Orange)) { append("5") }
+                append("ive")
+            },
+            style = MaterialTheme.typography.displaySmall,
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.padding(top = 18.dp).semantics { contentDescription = "7even5ive" },
+        )
+    }
 }
 
 @Composable
 fun Title(text: String) {
-    Text(text, style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center,
+    Text(text, style = MaterialTheme.typography.headlineLarge, textAlign = TextAlign.Start,
         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp))
 }
 
@@ -423,7 +424,7 @@ fun Quiet(text: String, small: Boolean = false) {
         text,
         style = if (small) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
         color = LocalAppColors.current.secondaryLabel,
-        textAlign = TextAlign.Center,
+        textAlign = TextAlign.Start,
         modifier = Modifier.fillMaxWidth(),
     )
 }
@@ -432,7 +433,7 @@ fun Quiet(text: String, small: Boolean = false) {
 fun Problem(text: String?) {
     if (text == null) return
     Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error,
-        textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        textAlign = TextAlign.Start, modifier = Modifier.fillMaxWidth())
 }
 
 @Composable
@@ -441,8 +442,8 @@ fun Notice(text: String) {
         text,
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurface,
-        textAlign = TextAlign.Center,
-        modifier = Modifier.fillMaxWidth().glassSurface(shape = MaterialTheme.shapes.medium).padding(12.dp),
+        textAlign = TextAlign.Start,
+        modifier = Modifier.fillMaxWidth().glassSurface(shape = MaterialTheme.shapes.medium).padding(14.dp),
     )
 }
 
@@ -450,8 +451,8 @@ fun Notice(text: String) {
 fun Link(text: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Text(
         text,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
+        style = MaterialTheme.typography.labelLarge.copy(textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline),
+        color = MaterialTheme.colorScheme.onSurface,
         modifier = modifier.clip(RoundedCornerShape(8.dp)).pressable(onClick = onClick).padding(4.dp),
     )
 }
@@ -459,9 +460,9 @@ fun Link(text: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
 @Composable
 fun WideButton(text: String, primary: Boolean = true, enabled: Boolean = true, busy: Boolean = false, onClick: () -> Unit) {
     if (primary) {
-        PrimaryPill(text, onClick, Modifier.fillMaxWidth().height(50.dp), enabled = enabled, busy = busy)
+        PrimaryPill(text, onClick, Modifier.fillMaxWidth().height(54.dp), enabled = enabled, busy = busy)
     } else {
-        GlassPill(text, onClick, Modifier.fillMaxWidth().height(50.dp), enabled = enabled, busy = busy)
+        GlassPill(text, onClick, Modifier.fillMaxWidth().height(54.dp), enabled = enabled, busy = busy)
     }
 }
 
@@ -524,9 +525,9 @@ private fun fieldColors() = TextFieldDefaults.colors(
     unfocusedIndicatorColor = Color.Transparent,
     disabledIndicatorColor = Color.Transparent,
     errorIndicatorColor = Color.Transparent,
-    focusedLabelColor = MaterialTheme.colorScheme.primary,
+    focusedLabelColor = MaterialTheme.colorScheme.onSurface,
     unfocusedLabelColor = LocalAppColors.current.secondaryLabel,
-    cursorColor = MaterialTheme.colorScheme.primary,
+    cursorColor = com.sevenfive.app.ui.theme.Orange,
 )
 
 @Composable
@@ -559,7 +560,7 @@ fun AuthField(
                 else androidx.compose.ui.text.input.KeyboardCapitalization.None,
             ),
             keyboardActions = KeyboardActions(onAny = { onIme() }),
-            shape = RoundedCornerShape(14.dp),
+            shape = RoundedCornerShape(18.dp),
             colors = fieldColors(),
             modifier = Modifier.fillMaxWidth(),
         )
@@ -595,7 +596,7 @@ fun PasswordField(
             },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ime, autoCorrectEnabled = false),
             keyboardActions = KeyboardActions(onAny = { onIme() }),
-            shape = RoundedCornerShape(14.dp),
+            shape = RoundedCornerShape(18.dp),
             colors = fieldColors(),
             modifier = Modifier.fillMaxWidth(),
         )
@@ -617,7 +618,7 @@ private fun CodeField(value: String, onChange: (String) -> Unit, onDone: () -> U
         textStyle = MaterialTheme.typography.headlineSmall.copy(letterSpacing = 8.sp, textAlign = TextAlign.Center),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done),
         keyboardActions = KeyboardActions(onAny = { onDone() }),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(18.dp),
         colors = fieldColors(),
         modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Code from the email" },
     )

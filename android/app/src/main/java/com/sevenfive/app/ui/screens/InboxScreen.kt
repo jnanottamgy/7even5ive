@@ -16,6 +16,10 @@ import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import com.sevenfive.app.ui.components.segmentSlide
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -102,31 +106,37 @@ fun InboxScreen(vm: AppViewModel, onSettings: () -> Unit) {
             Segment("Exam notices", exams.size),
             Segment("Events & more", rest.size),
         )
-        LazyColumn(contentPadding = padding, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            item(key = "segments") { NeoSegments(segments, segment) { segment = it } }
-            when (segment) {
-                0 -> {
-                    item(key = "hero") {
-                        InboxHero(mailCards.size + others.size, cards.filtered, Modifier.animateItem(placementSpec = Motion.item))
+        // The switcher stays pinned; the segment under it slides in when it changes.
+        Column(Modifier.fillMaxSize().padding(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding())) {
+            NeoSegments(segments, segment) { segment = it }
+            LazyColumn(
+                contentPadding = PaddingValues(top = 6.dp, bottom = padding.calculateBottomPadding()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxSize().segmentSlide(segment),
+            ) {                when (segment) {
+                    0 -> {
+                        item(key = "hero") {
+                            InboxHero(mailCards.size + others.size, cards.filtered, Modifier.animateItem(placementSpec = Motion.item))
+                        }
+                        item(key = "mailbox") { MailboxCard(cards.mail, checking, Modifier.animateItem(placementSpec = Motion.item)) { vm.checkMail() } }
                     }
-                    item(key = "mailbox") { MailboxCard(cards.mail, checking, Modifier.animateItem(placementSpec = Motion.item)) { vm.checkMail() } }
-                }
-                1 -> mailSegment(placements, "No placement offers yet", "Job offers and placement drives from college mail show up here.")
-                2 -> mailSegment(internships, "No internships yet", "Internship openings from college mail show up here.")
-                3 -> mailSegment(exams, "No exam notices", "Exam timetables, hall tickets and results notices show up here.")
-                else -> {
-                    if (rest.isEmpty()) {
-                        item(key = "empty-other") {
-                            EmptyState(Icons.Outlined.MarkEmailRead, "Nothing else worth your time",
-                                "Events and opportunities from mail, your groups and Classroom show up here.")
+                    1 -> mailSegment(placements, "No placement offers yet", "Job offers and placement drives from college mail show up here.")
+                    2 -> mailSegment(internships, "No internships yet", "Internship openings from college mail show up here.")
+                    3 -> mailSegment(exams, "No exam notices", "Exam timetables, hall tickets and results notices show up here.")
+                    else -> {
+                        if (rest.isEmpty()) {
+                            item(key = "empty-other") {
+                                EmptyState(Icons.Outlined.MarkEmailRead, "Nothing else worth your time",
+                                    "Events and opportunities from mail, your groups and Classroom show up here.")
+                            }
+                        }
+                        items(rest, key = { "o-${it.id}" }) { item ->
+                            if (item.fromMail) MailCard(item, Modifier.animateItem(placementSpec = Motion.item))
+                            else OpportunityCard(item, Modifier.animateItem(placementSpec = Motion.item))
                         }
                     }
-                    items(rest, key = { "o-${it.id}" }) { item ->
-                        if (item.fromMail) MailCard(item, Modifier.animateItem(placementSpec = Motion.item))
-                        else OpportunityCard(item, Modifier.animateItem(placementSpec = Motion.item))
-                    }
                 }
-            }
+                    }
         }
     }
 }

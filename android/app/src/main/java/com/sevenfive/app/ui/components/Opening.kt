@@ -4,6 +4,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -153,6 +154,38 @@ fun OpeningScreen(modifier: Modifier = Modifier, onFinished: () -> Unit = {}) {
                 .navigationBarsPadding()
                 .padding(start = 32.dp, bottom = 28.dp)
                 .graphicsLayer { alpha = words },
+        )
+    }
+}
+
+/** The brand's open orange ring. [spinning] turns it slowly: the app's one loading mark. */
+@Composable
+fun BrandRing(modifier: Modifier = Modifier, size: androidx.compose.ui.unit.Dp = 36.dp, spinning: Boolean = false) {
+    val angle = if (spinning) {
+        val turn = androidx.compose.animation.core.rememberInfiniteTransition(label = "ring")
+        turn.animateFloat(
+            initialValue = 0f,
+            targetValue = 360f,
+            animationSpec = androidx.compose.animation.core.infiniteRepeatable(tween(1100, easing = LinearEasing)),
+            label = "ring turn",
+        ).value
+    } else 0f
+    Canvas(
+        modifier
+            .size(size)
+            .graphicsLayer { rotationZ = angle }
+            .semantics { if (spinning) contentDescription = "Loading" },
+    ) {
+        val stroke = this.size.minDimension * 0.11f
+        val inset = stroke / 2
+        drawArc(
+            color = Orange,
+            startAngle = -90f,
+            sweepAngle = 270f,
+            useCenter = false,
+            topLeft = androidx.compose.ui.geometry.Offset(inset, inset),
+            size = androidx.compose.ui.geometry.Size(this.size.width - stroke, this.size.height - stroke),
+            style = Stroke(width = stroke, cap = StrokeCap.Round),
         )
     }
 }
