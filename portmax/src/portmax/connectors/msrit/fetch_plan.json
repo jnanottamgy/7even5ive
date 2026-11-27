@@ -1,0 +1,17 @@
+{
+  "version": "1",
+  "steps": [
+    {"id": "dashboard", "path": "/newparents/index.php?option=com_studentdashboard&controller=studentdashboard&task=dashboard"},
+    {"id": "attendance", "path": "/newparents/index.php?option=com_studentdashboard&controller=studentdashboard&task=attendencelist"},
+    {"id": "timetable", "path": "/newparents/index.php?option=com_studentdashboard&controller=studentdashboard&task=timetable"},
+    {"id": "results", "path": "/newparents/index.php?option=com_history&controller=history&task=getResult"}
+  ],
+  "keepalive_step": "dashboard",
+  "tool_steps": {
+    "get_profile": ["dashboard"],
+    "get_attendance": ["dashboard", "attendance"],
+    "get_timetable": ["timetable"],
+    "get_results": ["results"]
+  },
+  "pace_ms": 600
+}

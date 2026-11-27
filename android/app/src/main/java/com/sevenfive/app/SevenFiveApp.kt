@@ -58,7 +58,7 @@ class SevenFiveApp : Application() {
 /** Hand-wired dependencies: a prototype doesn't need a DI framework. */
 class AppContainer(context: Context) {
     val appContext: Context = context.applicationContext
-    val servers = ServerSettings(context, BuildConfig.DEFAULT_HOST, BuildConfig.DEFAULT_SERVER)
+    val servers = ServerSettings(context, BuildConfig.DEFAULT_HOST, BuildConfig.DEFAULT_SERVER, BuildConfig.PORTAL)
     private val sessions = SessionStore(context)
 
     /** Who is signed in. The demo's token is public (it is "Try the demo"); accounts use Supabase. */
