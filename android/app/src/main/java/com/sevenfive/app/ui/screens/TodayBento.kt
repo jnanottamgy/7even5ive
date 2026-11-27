@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -288,7 +289,7 @@ internal fun TodayRow(
     Row(
         modifier
             .fillMaxWidth()
-            .height(62.dp)
+            .height(60.dp)
             .clip(RoundedCornerShape(14.dp))
             .pressable(scaleTo = 0.985f, onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,
@@ -305,7 +306,26 @@ internal fun TodayRow(
         }
         Spacer(Modifier.width(12.dp))
         trailing()
+        // The chevron says "this opens something".
+        Icon(
+            androidx.compose.material.icons.Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+            contentDescription = null,
+            tint = app.secondaryLabel,
+            modifier = Modifier.padding(start = 4.dp).size(22.dp),
+        )
     }
+}
+
+/** Today's rows sit together in one rounded card, like a settings list: clearly tappable. */
+@Composable
+internal fun RowGroup(modifier: Modifier = Modifier, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+    Column(
+        modifier
+            .fillMaxWidth()
+            .glassSurface(shape = RoundedCornerShape(24.dp))
+            .padding(start = 14.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+        content = content,
+    )
 }
 
 /** The hairline between Today's rows, starting under the text, not the icon. */

@@ -648,6 +648,7 @@ private fun TodayDashboard(vm: AppViewModel, cards: Cards, month: com.sevenfive.
     Column {
         HomeHero(cards, withAttendance = false)
         Spacer(Modifier.height(14.dp))
+        RowGroup {
 
         // Your day.
         val hour = java.time.LocalTime.now().hour
@@ -757,6 +758,7 @@ private fun TodayDashboard(vm: AppViewModel, cards: Cards, month: com.sevenfive.
                 Text(if (month.total > 0) "${month.onTime}/${month.total}" else "—", style = MaterialTheme.typography.titleMedium)
             },
         ) { onSheet("ontime") }
+        }
     }
 }
 

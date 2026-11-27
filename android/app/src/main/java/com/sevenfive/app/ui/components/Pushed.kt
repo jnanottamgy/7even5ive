@@ -116,7 +116,7 @@ fun PushTopBar(
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalHazeApi::class)
 @Composable
 fun PushScaffold(title: String, onBack: () -> Unit, content: @Composable (PaddingValues) -> Unit) {
-    val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val scroll = TopAppBarDefaults.pinnedScrollBehavior()
     val haze = rememberHazeState()
     val app = LocalAppColors.current
     // Above the tab bar where it shows, else above the system's navigation bar.
@@ -130,14 +130,14 @@ fun PushScaffold(title: String, onBack: () -> Unit, content: @Composable (Paddin
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             Column(Modifier.hazeEffect(state = haze, style = frostedStyle()) {
-                alpha = scroll.state.collapsedFraction
+                alpha = scroll.state.overlappedFraction
                 inputScale = HazeInputScale.Auto
             }) {
-                LargeTopAppBar(
-                    title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                TopAppBar(
+                    title = { Text(title, style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     navigationIcon = { BackButton(onBack) },
                     scrollBehavior = scroll,
-                    colors = TopAppBarDefaults.largeTopAppBarColors(
+                    colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = Color.Transparent,
                         scrolledContainerColor = Color.Transparent,
                     ),
@@ -146,7 +146,7 @@ fun PushScaffold(title: String, onBack: () -> Unit, content: @Composable (Paddin
                     Modifier
                         .fillMaxWidth()
                         .height(0.6.dp)
-                        .graphicsLayer { alpha = scroll.state.collapsedFraction }
+                        .graphicsLayer { alpha = scroll.state.overlappedFraction }
                         .background(app.hairline),
                 )
             }
