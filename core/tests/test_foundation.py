@@ -60,7 +60,12 @@ def test_an_old_database_gains_the_new_columns_and_keeps_its_rows(tmp_path):
         CREATE TABLE reminders (id INTEGER PRIMARY KEY, student_id BIGINT NOT NULL,
           item_id BIGINT NOT NULL REFERENCES items(id), fire_at TEXT NOT NULL,
           status TEXT NOT NULL DEFAULT 'pending', sent_at TEXT, UNIQUE(item_id, fire_at));
+        CREATE TABLE notifications (id INTEGER PRIMARY KEY, student_id BIGINT NOT NULL,
+          kind TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL, item_id BIGINT,
+          created_at TEXT NOT NULL);
         INSERT INTO students(name) VALUES ('Old');
+        INSERT INTO notifications(student_id, kind, title, body, created_at)
+          VALUES (1, 'reminder', 'Old title', 'Old body', 'x');
         INSERT INTO items(student_id, kind, subject, title, due_at, route, source, created_at)
           VALUES (1, 'deadline', 'X', 'T', '2030-01-04T23:59+05:30', 'bot', 'whatsapp', 'x');
         INSERT INTO reminders(student_id, item_id, fire_at) VALUES (1, 1, '2030-01-04T22:59+05:30');
@@ -69,6 +74,8 @@ def test_an_old_database_gains_the_new_columns_and_keeps_its_rows(tmp_path):
     db = Database(str(path))
     assert db.reminders(1)[0]["channel"] == "push"
     assert db.student(1)["call_consent_at"] is None
+    old_message = db.notifications(1, 0)[0]
+    assert old_message["title"] == "Old title" and old_message["reminder_id"] is None
     Database(str(path))  # a second start changes nothing
 
 
@@ -131,7 +138,7 @@ def test_a_reminder_lands_in_the_outbox_and_the_phone_pulls_it(make_app):
     woke: list[int] = []
     a.sender = notify.OutboxSender(a.db, wake=woke.append)
     item = file_item(a, sid)
-    a.gateway.call(sid, "set_reminder", {"item_id": item, "before_minutes": 60})
+    reminder = a.gateway.call(sid, "set_reminder", {"item_id": item, "before_minutes": 60})
     client = TestClient(create(a))
     first = client.get("/api/notifications?after=-1", headers=AUTH).json()
     assert first == {"notifications": [], "latest_id": 0}
@@ -141,6 +148,9 @@ def test_a_reminder_lands_in_the_outbox_and_the_phone_pulls_it(make_app):
     assert [n["title"] for n in got["notifications"]] == [
         "Database Management Systems: DBMS assignment due Fri"]
     assert got["notifications"][0]["body"] == "Due Fri 4 Jan, 11:59 PM"
+    # Which reminder fired: the phone's own alarm for it may have shown it already.
+    assert got["notifications"][0]["reminder_id"] == reminder["result"]["reminder_id"]
+    assert got["notifications"][0]["item_id"] == item
     assert got["latest_id"] == got["notifications"][0]["id"] and woke == [sid]
     assert client.get(f"/api/notifications?after={got['latest_id']}",
                       headers=AUTH).json()["notifications"] == []

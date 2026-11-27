@@ -127,6 +127,21 @@ object DemoTour {
             DemoAction.NO_SEND_TOOL,
         ),
         DemoStep(
+            Routes.HOME, "Ask your semester",
+            "Tap Ask your semester and try “Can I skip Friday?”. The answer comes only from the " +
+                "student's data, through the same gateway an AI uses over MCP, and says which tools it called.",
+        ),
+        DemoStep(
+            Routes.ATTENDANCE, "Plan a day off",
+            "Tap Planner, pick a day, and tap a class to attend or skip it: every subject's ring " +
+                "moves to where it would end up. Grades and Timetable sit beside it.",
+        ),
+        DemoStep(
+            Routes.HOME, "Every AI request, logged",
+            "Scroll to AI activity: each request through the gateway, what ran, what waited for " +
+                "a tap and what was refused. The proof the rules hold.",
+        ),
+        DemoStep(
             Routes.HOME, "Reminders only on request",
             "No spam notifications. Tap Remind me on the quiz card, 1 hour before: it arrives as a " +
                 "notification then. Open the Reminders tab.",

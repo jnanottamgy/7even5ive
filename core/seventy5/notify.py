@@ -25,7 +25,7 @@ log = logging.getLogger(__name__)
 
 class Sender(Protocol):
     def send(self, student_id: int, title: str, body: str, *, kind: str = "reminder",
-             item_id: int | None = None) -> None: ...
+             item_id: int | None = None, reminder_id: int | None = None) -> None: ...
 
 
 @dataclass
@@ -35,9 +35,9 @@ class LogSender:
     sent: list[dict[str, Any]] = field(default_factory=list)
 
     def send(self, student_id: int, title: str, body: str, *, kind: str = "reminder",
-             item_id: int | None = None) -> None:
+             item_id: int | None = None, reminder_id: int | None = None) -> None:
         self.sent.append({"student_id": student_id, "title": title, "body": body,
-                          "kind": kind, "item_id": item_id})
+                          "kind": kind, "item_id": item_id, "reminder_id": reminder_id})
         log.info("notification sent", extra={"student": student_id, "kind": kind})
 
 
@@ -49,9 +49,9 @@ class OutboxSender:
         self.wake = wake
 
     def send(self, student_id: int, title: str, body: str, *, kind: str = "reminder",
-             item_id: int | None = None) -> None:
+             item_id: int | None = None, reminder_id: int | None = None) -> None:
         self.db.add_notification(student_id, kind, title, body, item_id,
-                                 clock.iso(clock.now()))
+                                 clock.iso(clock.now()), reminder_id)
         log.info("notification queued", extra={"student": student_id, "kind": kind})
         if self.wake is not None:
             try:
@@ -133,6 +133,7 @@ def fire_due(db: Database, sender: Sender, caller: Any = None) -> int:
             # sends the push instead. Either way the student hears about it exactly once.
             calls.place_for_reminder(db, caller, sender, r, item)
             continue
+        # The reminder's id goes with it: the phone's own alarm for it may have shown it already.
         sender.send(r["student_id"], f"{r['subject']}: {r['title']}", due_text(r["due_at"]),
-                    kind="reminder", item_id=r["item_id"])
+                    kind="reminder", item_id=r["item_id"], reminder_id=r["id"])
     return fired

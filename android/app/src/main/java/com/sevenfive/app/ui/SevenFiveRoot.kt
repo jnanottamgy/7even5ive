@@ -68,6 +68,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -95,7 +96,13 @@ import com.sevenfive.app.data.AccountState
 import com.sevenfive.app.ui.auth.AuthStep
 import com.sevenfive.app.ui.auth.AuthViewModel
 import com.sevenfive.app.ui.auth.ProfileEditScreen
+import com.sevenfive.app.ui.screens.AiLogScreen
+import com.sevenfive.app.ui.screens.AskScreen
 import com.sevenfive.app.ui.screens.AttendanceScreen
+import com.sevenfive.app.ui.screens.GradesScreen
+import com.sevenfive.app.ui.screens.PlannerScreen
+import com.sevenfive.app.ui.screens.SearchScreen
+import com.sevenfive.app.ui.screens.TimetableScreen
 import com.sevenfive.app.ui.screens.HomeScreen
 import com.sevenfive.app.ui.screens.InboxScreen
 import com.sevenfive.app.ui.screens.MaterialsScreen
@@ -125,10 +132,19 @@ object Routes {
     const val PORTAL_CHECK = "portal-check"
     const val VOICE = "voice"
     const val PROFILE = "profile"
+    const val SEARCH = "search"
+    const val ASK = "ask"
+    const val AI_LOG = "ai-log"
+    const val PLANNER = "planner"
+    const val TIMETABLE = "timetable"
+    const val GRADES = "grades"
 }
 
 /** Opens the voice assistant from any tab's header (null where there is none). */
 val LocalOpenVoice = staticCompositionLocalOf<(() -> Unit)?> { null }
+
+/** Opens a pushed screen by route, from anywhere under the root (cards, tiles, bar buttons). */
+val LocalNav = staticCompositionLocalOf<(String) -> Unit> { {} }
 
 private data class Tab(val route: String, val label: String, val on: ImageVector, val off: ImageVector)
 
@@ -141,7 +157,10 @@ private val tabs = listOf(
 )
 
 /** Screens pushed on top of the tabs: they slide in from the right, like an iOS navigation stack. */
-private val pushed = setOf(Routes.SETTINGS, Routes.PORTAL, Routes.PORTAL_CHECK, Routes.VOICE, Routes.PROFILE)
+private val pushed = setOf(
+    Routes.SETTINGS, Routes.PORTAL, Routes.PORTAL_CHECK, Routes.VOICE, Routes.PROFILE, Routes.SEARCH, Routes.ASK,
+    Routes.AI_LOG, Routes.PLANNER, Routes.TIMETABLE, Routes.GRADES,
+)
 
 @Composable
 fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
@@ -250,6 +269,7 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
         CompositionLocalProvider(
             LocalBottomInset provides inner.calculateBottomPadding(),
             LocalOpenVoice provides { nav.navigate(Routes.VOICE) { launchSingleTop = true } },
+            LocalNav provides { r: String -> nav.navigate(r) { launchSingleTop = true } },
         ) {
             Box(Modifier.fillMaxSize().hazeSource(haze)) {
                 NavHost(
@@ -289,6 +309,13 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
                         PortalCheckScreen(vm, vm.portalCheckUrl.value, onBack = { nav.popBackStack() })
                     }
                     composable(Routes.VOICE) { VoiceScreen(vm, onBack = { nav.popBackStack() }) }
+                    val back = { nav.popBackStack(); Unit }
+                    composable(Routes.SEARCH) { SearchScreen(vm, back) }
+                    composable(Routes.ASK) { AskScreen(vm, back) }
+                    composable(Routes.AI_LOG) { AiLogScreen(vm, back) }
+                    composable(Routes.PLANNER) { PlannerScreen(vm, back) }
+                    composable(Routes.TIMETABLE) { TimetableScreen(vm, back) }
+                    composable(Routes.GRADES) { GradesScreen(vm, back) }
                 }
             }
         }

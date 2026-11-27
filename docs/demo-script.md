@@ -16,7 +16,7 @@ The app has the whole demo built in: **gear → Demo tour → Start the demo tou
 resets the server to the demo morning, then a guide bar docks above the tabs: each step opens
 the right tab, shows the line to say, and a button makes the live moment happen (the forward,
 the forgery, the AI's calendar request, the send that is refused, the server ping). **Next** and
-**Back** move between steps; **✕** ends the tour. The steps are the same ten as the table below.
+**Back** move between steps; **✕** ends the tour. The steps are the same as the table below.
 
 The live moments go through demo-only actions on the demo server (`/demo/*` in
 `core/seventy5/cloud.py`): the server signs each WhatsApp event with the bot's secret and sends
@@ -55,6 +55,9 @@ The laptop driver below does the same from a terminal, if you prefer that.
 | 6 | **Attendance** → **Refresh** → log in: USN `1MC24CS042`, DOB **14/08/2005**, code `PM42X`, **Next**, digits `2345`, **Log in** | Exact bunk math from the student's own portal session; we never see the password. Mention it's our test portal (MSRIT blocks apps). | Worst subject first (DBMS 73.33%: "attend the next 2 classes…"), then **Updated just now** | If the portal asks to log in again, do it; if it errors, show the existing attendance and move on. |
 | 7 | **This week**; laptop: Enter → **Approve** on the card → tap **Approved** again | Your own AI (Claude/ChatGPT over MCP) can ask; only you can approve a write. | **"Add to Google Calendar? DAA Quiz 2…"** at the top → *Added to Google Calendar* → second tap: **"approval already used"** | Pull down to see the card. |
 | 8 | (laptop only) | No prompt can make it send mail: the tool doesn't exist; the rules are in the gateway. | Laptop: `send_email` → **403**, no token → **401** | — |
+| 8b | **This week** → **Ask your semester** → "Can I skip Friday?" | Ask your semester: answered only from the student's own data, through the same gateway an AI uses over MCP. | The answer, with how it was answered and the tools it called | Without a model key the server answers by code: still fine. |
+| 8c | **Attendance** → **Planner** → pick a day → tap classes | Plan a day off: each subject's ring moves to where it would end up. Grades and Timetable sit beside it. | The rings move as classes are skipped | — |
+| 8d | **This week** → scroll to **AI activity** | Every request through the gateway, logged: what ran, what waited for a tap, what was refused. | The latest requests with counts | Settings → **AI activity** opens the full log. |
 | 9 | Quiz card → **Remind me** → *1 hour before* → **Reminders** tab → **Cancel** | Reminders only when you ask; they arrive as a notification. | The reminder appears, then disappears | — |
 | 9b | Settings → **Urgent call** → turn on (read the consent) → **Test call now** | For what really matters: ElevenLabs rings shortly before it's due; two a day at most, never at night; a missed call becomes one notification. | The phone rings (with the ElevenLabs keys set), or "Call recorded" without them | Show Settings' call list. |
 | 9c | Microphone at the top → **Start talking** → "What's due this week?" | Just ask. Every fact comes from the same gateway as a tap; adding to the calendar still waits for Approve. | The assistant answers with the week's items | Without ElevenLabs keys the screen says voice isn't set up: skip. |

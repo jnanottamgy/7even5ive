@@ -1,6 +1,8 @@
 package com.sevenfive.app.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -12,9 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
@@ -30,6 +30,16 @@ import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.EventAvailable
 import androidx.compose.material.icons.outlined.NotificationAdd
 import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
+import com.sevenfive.app.ui.LocalNav
+import com.sevenfive.app.ui.Routes
+import com.sevenfive.app.util.Opener
+import com.sevenfive.app.util.Week
+import com.sevenfive.app.ui.theme.pressable
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -52,7 +62,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sevenfive.app.data.Approval
 import com.sevenfive.app.data.CallSettings
 import com.sevenfive.app.data.Cards
-import com.sevenfive.app.data.ClassSlot
 import com.sevenfive.app.data.Item
 import com.sevenfive.app.data.Reminder
 import com.sevenfive.app.ui.AppViewModel
@@ -71,7 +80,6 @@ import com.sevenfive.app.ui.components.SectionHeader
 import com.sevenfive.app.ui.components.TabScaffold
 import com.sevenfive.app.ui.components.kindColor
 import com.sevenfive.app.ui.components.kindStyle
-import com.sevenfive.app.ui.components.uniqueKeys
 import com.sevenfive.app.ui.theme.LocalAppColors
 import com.sevenfive.app.ui.theme.LocalStatusColors
 import com.sevenfive.app.ui.theme.Motion
@@ -106,11 +114,10 @@ fun HomeScreen(vm: AppViewModel, onSettings: () -> Unit) {
         }
         LazyColumn(contentPadding = padding, verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item(key = "intro") { ScreenIntro(subtitle) }
+            item(key = "ask") { AskBar(Modifier.animateItem(placementSpec = Motion.item)) }
             item(key = "glance") { Glance(cards, Modifier.animateItem(placementSpec = Motion.item)) }
             item(key = "briefing") { BriefingCard(vm, Modifier.animateItem(placementSpec = Motion.item)) }
-            if (cards.classesToday.isNotEmpty()) {
-                item(key = "classes") { TodayClasses(cards.classesToday, Modifier.animateItem(placementSpec = Motion.item)) }
-            }
+            item(key = "today") { Today(cards, Modifier.animateItem(placementSpec = Motion.item)) }
 
             if (cards.approvals.isNotEmpty() || approved.isNotEmpty()) {
                 item(key = "h-approvals") { SectionHeader("Needs your tap", Modifier.animateItem(placementSpec = Motion.item)) }
@@ -149,6 +156,10 @@ fun HomeScreen(vm: AppViewModel, onSettings: () -> Unit) {
                 )
             }
 
+            if (cards.audit.isNotEmpty()) {
+                item(key = "ai") { YourAi(cards, Modifier.animateItem(placementSpec = Motion.item)) }
+            }
+
             if (cards.needsReview.isNotEmpty()) {
                 item(key = "h-review") { SectionHeader("Couldn't read these", Modifier.animateItem(placementSpec = Motion.item)) }
                 items(cards.needsReview, key = { "r-${it.id}" }) { item ->
@@ -156,6 +167,85 @@ fun HomeScreen(vm: AppViewModel, onSettings: () -> Unit) {
                 }
             }
         }
+    }
+}
+
+/** The way into Ask your semester: looks like a search field, opens the conversation. */
+@Composable
+private fun AskBar(modifier: Modifier = Modifier) {
+    val nav = LocalNav.current
+    val app = LocalAppColors.current
+    Row(
+        modifier
+            .fillMaxWidth()
+            .pressable(scaleTo = 0.98f, haptic = true) { nav(Routes.ASK) }
+            .glassSurface(shape = CircleShape, strong = true)
+            .padding(horizontal = 16.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Outlined.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(10.dp))
+        Text("Ask your semester… “Can I skip Friday?”", style = MaterialTheme.typography.bodyLarge,
+            color = app.secondaryLabel, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** Today's remaining classes from the timetable; nothing when the portal has none. */
+@Composable
+private fun Today(cards: Cards, modifier: Modifier = Modifier) {
+    if (!cards.timetable.connected) return
+    val nav = LocalNav.current
+    val now = java.time.LocalTime.now()
+    val left = Week.on(cards.timetable.data, java.time.LocalDate.now().dayOfWeek)
+        .filter { s -> Week.time(s.end)?.isAfter(now) ?: true }
+    Column(modifier.pressable(scaleTo = 0.985f) { nav(Routes.TIMETABLE) }) {
+        SectionHeader("Today", trailing = {
+            Text("Timetable", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+        })
+        if (left.isEmpty()) {
+            Text(
+                "No more classes today.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = LocalAppColors.current.secondaryLabel,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .glassSurface(shape = MaterialTheme.shapes.medium)
+                    .padding(14.dp),
+            )
+        } else {
+            DayClasses(cards, left.take(3), highlightNow = true)
+        }
+    }
+}
+
+/** What your AI did through the gateway lately, and a way into the full log. */
+@Composable
+private fun YourAi(cards: Cards, modifier: Modifier = Modifier) {
+    val nav = LocalNav.current
+    val status = LocalStatusColors.current
+    val app = LocalAppColors.current
+    val refused = cards.audit.count { it.decision == "deny" }
+    val held = cards.audit.count { it.decision == "ask" }
+    Row(
+        modifier
+            .fillMaxWidth()
+            .pressable(scaleTo = 0.98f) { nav(Routes.AI_LOG) }
+            .glassSurface()
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconTile(Icons.Outlined.Shield, status.safe)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text("AI activity", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "${cards.audit.size} requests through the gateway · $held held for you · $refused refused",
+                style = MaterialTheme.typography.bodySmall,
+                color = app.secondaryLabel,
+            )
+        }
+        Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null, tint = app.tertiaryLabel)
     }
 }
 
@@ -317,32 +407,7 @@ private fun BriefingCard(vm: AppViewModel, modifier: Modifier = Modifier) {
 }
 
 /** Today's classes from the portal's timetable, in a row. */
-@Composable
-private fun TodayClasses(classes: List<ClassSlot>, modifier: Modifier = Modifier) {
-    val app = LocalAppColors.current
-    Column(modifier) {
-        SectionHeader("Today's classes")
-        // Two slots can share a start and a subject (a lab split in two): keys must still differ.
-        val keys = uniqueKeys(classes) { "${it.start}-${it.subjectCode}" }
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            itemsIndexed(classes, key = { i, _ -> keys[i] }) { _, c ->
-                Column(
-                    Modifier
-                        .glassSurface(shape = MaterialTheme.shapes.medium)
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                ) {
-                    Text(Time.hourMinute(c.start), style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
-                    Text(c.subject, style = MaterialTheme.typography.bodyMedium, maxLines = 1,
-                        overflow = TextOverflow.Ellipsis, modifier = Modifier.width(150.dp))
-                    Text(listOfNotNull(c.subjectCode, c.room).joinToString(" · "),
-                        style = MaterialTheme.typography.labelSmall, color = app.secondaryLabel)
-                }
-            }
-        }
-    }
-}
-
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DueCard(
     item: Item,
@@ -401,9 +466,18 @@ private fun DueCard(
                 RouteBadge(item.route)
             }
             Spacer(Modifier.height(10.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // Wraps on a narrow phone: a long reminder time and three pills don't fit one line.
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 RemindButton(reminder, busy, calls, onRemind, onCallConsent)
-                Spacer(Modifier.weight(1f))
+                if (due != null) {
+                    val context = LocalContext.current
+                    GlassPill("Calendar", onClick = {
+                        Opener.addToPhoneCalendar(context, item)?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
+                    }, icon = Icons.Outlined.EventAvailable, tint = MaterialTheme.colorScheme.onSurface)
+                }
                 GlassPill("Done", onClick = onDone, busy = doneBusy, icon = Icons.Outlined.Done,
                     tint = LocalStatusColors.current.safe)
             }

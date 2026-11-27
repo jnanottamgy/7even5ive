@@ -105,10 +105,11 @@ CREATE TABLE IF NOT EXISTS audit (
   reason TEXT, at TEXT NOT NULL
 );
 -- The outbox: every message 7even5ive sends the student (a reminder, a missed call). The
--- phone pulls it; a push only wakes the phone up and carries nothing.
+-- phone pulls it; a push only wakes the phone up and carries nothing. reminder_id names the
+-- reminder a message fired, so a phone whose own alarm already showed it stays quiet.
 CREATE TABLE IF NOT EXISTS notifications (
   id {pk}, student_id BIGINT NOT NULL, kind TEXT NOT NULL, title TEXT NOT NULL,
-  body TEXT NOT NULL, item_id BIGINT, created_at TEXT NOT NULL
+  body TEXT NOT NULL, item_id BIGINT, created_at TEXT NOT NULL, reminder_id BIGINT
 );
 -- Phones that asked to be woken by Firebase when the outbox gets something.
 CREATE TABLE IF NOT EXISTS devices (
@@ -203,6 +204,7 @@ COLUMNS: dict[str, dict[str, str]] = {
     "items": {"external_id": "TEXT", "external_version": "BIGINT", "category": "TEXT",
               "organisation": "TEXT", "role": "TEXT", "link": "TEXT", "mail_link": "TEXT",
               "summary": "TEXT", "event_at": "TEXT"},
+    "notifications": {"reminder_id": "BIGINT"},
     "reminders": {"channel": "TEXT NOT NULL DEFAULT 'push'"},
     "students": {"call_consent_at": "TEXT", "quiet_start": "TEXT", "quiet_end": "TEXT",
                  "auth_user_id": "TEXT", "username": "TEXT", "email": "TEXT", "college": "TEXT",
@@ -877,6 +879,11 @@ class Database:
                             tuple(row.values())).fetchone()
             return int(new["id"])
 
+    def item_for_event(self, student_id: int, event_id: int) -> Any | None:
+        return self.conn.execute(
+            "SELECT * FROM items WHERE event_id=? AND student_id=?", (event_id, student_id)
+        ).fetchone()
+
     def item(self, student_id: int, item_id: int) -> Any | None:
         return self.conn.execute(
             "SELECT * FROM items WHERE id=? AND student_id=?", (item_id, student_id)
@@ -1077,11 +1084,12 @@ class Database:
 
     # --- the outbox and the phones it wakes ---------------------------------------------
     def add_notification(self, student_id: int, kind: str, title: str, body: str,
-                         item_id: int | None, now: str) -> int:
+                         item_id: int | None, now: str, reminder_id: int | None = None) -> int:
         with self.tx() as c:
             row = c.execute("INSERT INTO notifications(student_id, kind, title, body, item_id,"
-                            " created_at) VALUES (?,?,?,?,?,?) RETURNING id",
-                            (student_id, kind, title, body, item_id, now)).fetchone()
+                            " created_at, reminder_id) VALUES (?,?,?,?,?,?,?) RETURNING id",
+                            (student_id, kind, title, body, item_id, now,
+                             reminder_id)).fetchone()
             return int(row["id"])
 
     def notifications(self, student_id: int, after: int, limit: int = 50) -> list[Any]:

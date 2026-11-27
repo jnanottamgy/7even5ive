@@ -73,6 +73,7 @@ fun AttendanceScreen(vm: AppViewModel, onSettings: () -> Unit, onPortal: () -> U
     val portal by vm.portal.collectAsStateWithLifecycle()
     val attendance = state.cards?.attendance
 
+    val nav = com.sevenfive.app.ui.LocalNav.current
     TabScaffold("Attendance", vm, onSettings) { padding ->
         if (attendance == null) {
             LoadingOrError(state.loading, padding)
@@ -81,6 +82,7 @@ fun AttendanceScreen(vm: AppViewModel, onSettings: () -> Unit, onPortal: () -> U
         val subjects = worstFirst(attendance.subjects)
         LazyColumn(contentPadding = padding, verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item(key = "intro") { ScreenIntro("Worst subject first, with exactly what to do.") }
+            item(key = "tiles") { CollegeTiles(nav, Modifier.animateItem(placementSpec = Motion.item)) }
             item(key = "portal") { PortalCard(attendance, portal, onPortal, Modifier.animateItem(placementSpec = Motion.item)) }
             if (subjects.isNotEmpty()) {
                 val short = subjects.count { it.status == "short" || it.status == "unrecoverable" }
@@ -103,7 +105,7 @@ fun AttendanceScreen(vm: AppViewModel, onSettings: () -> Unit, onPortal: () -> U
 private fun minimumOf(subjects: List<SubjectAttendance>) =
     subjects.firstOrNull()?.minimumPercent?.let { pct(it) } ?: "75"
 
-private fun pct(v: Double): String =
+internal fun pct(v: Double): String =
     if (v % 1.0 == 0.0) v.toInt().toString() else String.format(Locale.ENGLISH, "%.2f", v).trimEnd('0').trimEnd('.')
 
 @Composable
@@ -227,7 +229,7 @@ private fun SubjectCard(s: SubjectAttendance, modifier: Modifier = Modifier) {
  * small tick at the minimum, so "how far from 75%" reads at a glance.
  */
 @Composable
-private fun AttendanceRing(percent: Double, minimum: Double, color: Color, size: Dp = 62.dp) {
+internal fun AttendanceRing(percent: Double, minimum: Double, color: Color, size: Dp = 62.dp) {
     val target = (percent / 100.0).coerceIn(0.0, 1.0).toFloat()
     val sweep = remember { Animatable(0f) }
     LaunchedEffect(target) { sweep.animateTo(target, spring(dampingRatio = 0.9f, stiffness = Spring.StiffnessVeryLow)) }

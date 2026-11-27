@@ -103,6 +103,8 @@ dependencies {
     // Frosted glass: real backdrop blur on Android 12+, a translucent tint before. 1.6.10 is the
     // release built on Compose 1.8 and activity 1.10.1, the versions above.
     implementation("dev.chrisbanes.haze:haze:1.6.10")
+    // The home-screen widget, written in Compose.
+    implementation("androidx.glance:glance-appwidget:1.1.1")
 
     // Pulls the outbox every 15 minutes and keeps the portal session alive in the background.
     implementation("androidx.work:work-runtime-ktx:2.10.2")
