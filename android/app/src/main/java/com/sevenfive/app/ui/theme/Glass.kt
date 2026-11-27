@@ -30,9 +30,9 @@ import dev.chrisbanes.haze.hazeEffect
 import kotlin.math.max
 
 /**
- * The room under everything: the flat neo ground, a warm glow drifting slowly across, and small
- * particles rising with a gentle sway, like dust in light. Quiet: seen only between cards, and
- * still when the phone's animations are off.
+ * The room under everything: the flat neo ground, a warm glow drifting slowly across, and fine
+ * contour lines spreading from the top-right corner that slowly breathe, like a map's or a sound's.
+ * Quiet: seen only between cards, and still when the phone's animations are off.
  */
 @Composable
 fun AuroraBackground(modifier: Modifier = Modifier) {
@@ -44,14 +44,14 @@ fun AuroraBackground(modifier: Modifier = Modifier) {
         ) == 0f
     }
     val turn = androidx.compose.animation.core.rememberInfiniteTransition(label = "rings")
-    // The particles' clock: one long loop; every particle's motion fits it exactly.
+    // The contours' clock: their wobble turns once every 40 seconds, seamlessly.
     val float by turn.animateFloat(
         initialValue = 0f,
         targetValue = if (still) 0f else 1f,
         animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-            androidx.compose.animation.core.tween(150_000, easing = androidx.compose.animation.core.LinearEasing),
+            androidx.compose.animation.core.tween(40_000, easing = androidx.compose.animation.core.LinearEasing),
         ),
-        label = "particles",
+        label = "contours",
     )
     // The glow's wander: once round a slow figure-of-eight a minute.
     val drift by turn.animateFloat(
@@ -81,18 +81,31 @@ fun AuroraBackground(modifier: Modifier = Modifier) {
                 radius = reach,
                 center = glow,
             )
-            // Particles: small dots drifting slowly up with a gentle sway, mostly soft ink, a few
-            // orange. Each one's speed and sway are whole turns of the loop, so it never jumps.
-            val t = float
-            particles.forEach { p ->
-                val y = ((p.y - t * p.rise) % 1f + 1f) % 1f
-                val x = p.x + p.sway * kotlin.math.sin((t * p.waves + p.phase) * 2f * Math.PI.toFloat())
-                // Fade in near the bottom, out near the top.
-                val edge = (kotlin.math.min(y, 1f - y) / 0.12f).coerceIn(0f, 1f)
-                drawCircle(
-                    (if (p.warm) Orange else NeoInk).copy(alpha = p.alpha * edge),
-                    radius = p.size.dp.toPx(),
-                    center = Offset(x * size.width, y * size.height),
+            // Contour lines, like a map's or a sound's: loops spreading from the top-right corner,
+            // each gently wobbling; the wobble's phase turns slowly, so the lines breathe and flow.
+            val wobble = float * 2f * Math.PI.toFloat()
+            val center = Offset(size.width * 0.92f, size.height * 0.16f)
+            val step = size.width * 0.15f
+            val line = 1.dp.toPx()
+            for (n in 0 until 8) {
+                val base = size.width * 0.22f + n * step
+                val path = androidx.compose.ui.graphics.Path()
+                val points = 144
+                for (k in 0..points) {
+                    val a = k / points.toFloat() * 2f * Math.PI.toFloat()
+                    val r = base +
+                        step * 0.16f * kotlin.math.sin(3f * a + wobble + n * 0.55f) +
+                        step * 0.10f * kotlin.math.sin(5f * a - 2f * wobble + n * 0.9f)
+                    val x = center.x + r * kotlin.math.cos(a)
+                    val y = center.y + r * kotlin.math.sin(a)
+                    if (k == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                }
+                path.close()
+                val warm = n == 2
+                drawPath(
+                    path,
+                    color = if (warm) Orange.copy(alpha = 0.30f) else NeoInk.copy(alpha = 0.10f - n * 0.005f),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = if (warm) line * 1.6f else line),
                 )
             }
         },
@@ -154,25 +167,3 @@ fun Modifier.frosted(state: HazeState, shape: Shape, edgeWidth: Dp = 0.8.dp): Mo
 val LocalBottomInset = compositionLocalOf { 0.dp }
 
 
-/** One background particle: where it starts, how it moves, how it looks. */
-private data class Particle(
-    val x: Float, val y: Float, val rise: Float, val sway: Float, val waves: Float,
-    val phase: Float, val size: Float, val alpha: Float, val warm: Boolean,
-)
-
-/** The same 34 particles every time (a fixed seed), so the background never reshuffles. */
-private val particles: List<Particle> = kotlin.random.Random(75).let { r ->
-    List(34) { i ->
-        Particle(
-            x = r.nextFloat(),
-            y = r.nextFloat(),
-            rise = (1 + r.nextInt(3)).toFloat(), // 1 to 3 screen heights per loop: slow
-            sway = 0.01f + r.nextFloat() * 0.03f,
-            waves = (2 + r.nextInt(4)).toFloat(),
-            phase = r.nextFloat(),
-            size = 1.5f + r.nextFloat() * 2.5f,
-            alpha = 0.10f + r.nextFloat() * 0.22f,
-            warm = i % 4 == 0,
-        )
-    }
-}
