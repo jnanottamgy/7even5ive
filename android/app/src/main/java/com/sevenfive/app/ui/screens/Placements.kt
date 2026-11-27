@@ -109,7 +109,6 @@ internal fun PlacementCard(item: Item, cards: Cards, modifier: Modifier = Modifi
     val context = LocalContext.current
     val uri = LocalUriHandler.current
     val app = LocalAppColors.current
-    val now by rememberNow(1_000L)
     val sid = cards.student?.id ?: 0
     var stage by remember(item.id, sid) { mutableIntStateOf(LocalLog.stage(context, sid, item.id)) }
     fun set(to: Int) {
@@ -151,15 +150,10 @@ internal fun PlacementCard(item: Item, cards: Cards, modifier: Modifier = Modifi
                 Text(it, style = MaterialTheme.typography.bodySmall, color = app.secondaryLabel, modifier = Modifier.padding(start = 16.dp, top = 2.dp))
             }
 
-            // Time left to register, live.
+            // Time left to register, live: its own small piece, so only it ticks every second.
             if (deadline != null) {
                 Spacer(Modifier.height(12.dp))
-                val left = Time.countdown(deadline, now)
-                Text(
-                    if (left == "now") "Registration closed" else "Register within $left",
-                    style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum"),
-                    color = if (deadline.toInstant().isBefore(now.plusSeconds(86_400))) com.sevenfive.app.ui.theme.LocalStatusColors.current.short else NeoInk,
-                )
+                RegisterCountdown(deadline)
                 Text("Last date ${Time.dayAndTime(deadline)}", style = MaterialTheme.typography.bodySmall, color = app.secondaryLabel)
             }
             if (drive != null) {
@@ -243,3 +237,14 @@ private fun Pipeline(stage: Int, onSet: (Int) -> Unit) {
 
 private fun fmt(v: Double): String =
     if (v % 1.0 == 0.0) String.format(Locale.ENGLISH, "%.1f", v) else String.format(Locale.ENGLISH, "%.2f", v).trimEnd('0')
+
+@Composable
+private fun RegisterCountdown(deadline: java.time.OffsetDateTime) {
+    val now by rememberNow(1_000L)
+    val left = Time.countdown(deadline, now)
+    Text(
+        if (left == "now") "Registration closed" else "Register within $left",
+        style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum"),
+        color = if (deadline.toInstant().isBefore(now.plusSeconds(86_400))) com.sevenfive.app.ui.theme.LocalStatusColors.current.short else NeoInk,
+    )
+}

@@ -690,8 +690,8 @@ private fun TodayDashboard(vm: AppViewModel, cards: Cards, month: com.sevenfive.
         ) { nav(Routes.ATTENDANCE) }
         RowDivider()
 
-        // The busy stretch, or a calm week.
-        val clash = findClash(cards.dueThisWeek)
+        // The busy stretch, or a calm week (worked out once per change in the cards).
+        val clash = remember(cards.dueThisWeek) { findClash(cards.dueThisWeek) }
         if (clash != null) {
             val exams = clash.items.count { it.first.kind == "exam" }
             val rest = clash.items.size - exams

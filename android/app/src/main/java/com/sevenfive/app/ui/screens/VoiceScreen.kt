@@ -162,7 +162,7 @@ private fun Orb(phase: VoiceAssistant.Phase, active: Boolean, onClick: () -> Uni
     val live = phase == VoiceAssistant.Phase.LISTENING || phase == VoiceAssistant.Phase.SPEAKING
     val speaking = phase == VoiceAssistant.Phase.SPEAKING
     val pulse = rememberInfiniteTransition(label = "orb")
-    val wave by pulse.animateFloat(
+    val wave = pulse.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(tween(if (speaking) 900 else 1600), RepeatMode.Restart),
@@ -173,8 +173,12 @@ private fun Orb(phase: VoiceAssistant.Phase, active: Boolean, onClick: () -> Uni
             Box(
                 Modifier
                     .size(120.dp)
-                    .scale(1f + wave * 0.6f)
-                    .graphicsLayer { alpha = (1f - wave) * 0.55f }
+                    .graphicsLayer {
+                        val w = wave.value
+                        scaleX = 1f + w * 0.6f
+                        scaleY = 1f + w * 0.6f
+                        alpha = (1f - w) * 0.55f
+                    }
                     .border(2.dp, orange, CircleShape),
             )
         }

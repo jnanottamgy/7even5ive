@@ -72,9 +72,8 @@ fun OpeningScreen(modifier: Modifier = Modifier, onFinished: () -> Unit = {}) {
         clock.animateTo(OPENING_SEQUENCE_MILLIS.toFloat(), tween(OPENING_SEQUENCE_MILLIS, easing = LinearEasing))
         onFinished()
     }
-    val t = clock.value
-    val ring = phase(t, 0f, RING_MS)
-    val words = phase(t, WORDS_AT, WORDS_MS)
+    // The clock is read only inside drawing and layer blocks, never while composing: the 3 s
+    // sequence redraws, it never rebuilds the screen frame by frame.
     val app = LocalAppColors.current
     Box(
         modifier
@@ -89,7 +88,7 @@ fun OpeningScreen(modifier: Modifier = Modifier, onFinished: () -> Unit = {}) {
                 drawArc(
                     color = Orange,
                     startAngle = -90f,
-                    sweepAngle = 270f * ring,
+                    sweepAngle = 270f * phase(clock.value, 0f, RING_MS),
                     useCenter = false,
                     topLeft = androidx.compose.ui.geometry.Offset(inset, inset),
                     size = androidx.compose.ui.geometry.Size(size.width - stroke, size.height - stroke),
@@ -107,6 +106,7 @@ fun OpeningScreen(modifier: Modifier = Modifier, onFinished: () -> Unit = {}) {
                 modifier = Modifier
                     .padding(top = 28.dp)
                     .graphicsLayer {
+                        val words = phase(clock.value, WORDS_AT, WORDS_MS)
                         alpha = words
                         translationX = -(1f - words) * 28.dp.toPx()
                     },
@@ -120,18 +120,17 @@ fun OpeningScreen(modifier: Modifier = Modifier, onFinished: () -> Unit = {}) {
                     .clearAndSetSemantics { contentDescription = SENTENCE },
             ) {
                 SENTENCE.substring(0, ORANGE_FROM).forEachIndexed { i, ch ->
-                    val a = phase(t, LETTERS_AT + i * LETTER_STEP, LETTER_MS)
                     Text(
                         ch.toString(),
                         style = MaterialTheme.typography.titleLarge,
                         color = app.secondaryLabel,
                         modifier = Modifier.graphicsLayer {
+                            val a = phase(clock.value, LETTERS_AT + i * LETTER_STEP, LETTER_MS)
                             alpha = a
                             translationX = -(1f - a) * 12.dp.toPx()
                         },
                     )
                 }
-                val swipe = LinearOutSlowInEasing.transform(((t - SORTED_AT) / SORTED_MS).coerceIn(0f, 1f))
                 Text(
                     SENTENCE.substring(ORANGE_FROM),
                     style = MaterialTheme.typography.titleLarge,
@@ -139,6 +138,8 @@ fun OpeningScreen(modifier: Modifier = Modifier, onFinished: () -> Unit = {}) {
                     // A deeper orange than the ring, so the word stays readable on the light ground.
                     color = Color(0xFFE0670A),
                     modifier = Modifier.graphicsLayer {
+                        val t = clock.value
+                        val swipe = LinearOutSlowInEasing.transform(((t - SORTED_AT) / SORTED_MS).coerceIn(0f, 1f))
                         alpha = if (t < SORTED_AT) 0f else 1f
                         translationX = (1f - swipe) * screenWidth.toPx()
                     },
@@ -153,7 +154,7 @@ fun OpeningScreen(modifier: Modifier = Modifier, onFinished: () -> Unit = {}) {
                 .align(Alignment.BottomStart)
                 .navigationBarsPadding()
                 .padding(start = 32.dp, bottom = 28.dp)
-                .graphicsLayer { alpha = words },
+                .graphicsLayer { alpha = phase(clock.value, WORDS_AT, WORDS_MS) },
         )
     }
 }
@@ -161,19 +162,19 @@ fun OpeningScreen(modifier: Modifier = Modifier, onFinished: () -> Unit = {}) {
 /** The brand's open orange ring. [spinning] turns it slowly: the app's one loading mark. */
 @Composable
 fun BrandRing(modifier: Modifier = Modifier, size: androidx.compose.ui.unit.Dp = 36.dp, spinning: Boolean = false) {
-    val angle = if (spinning) {
+    val angle: androidx.compose.runtime.State<Float>? = if (spinning) {
         val turn = androidx.compose.animation.core.rememberInfiniteTransition(label = "ring")
         turn.animateFloat(
             initialValue = 0f,
             targetValue = 360f,
             animationSpec = androidx.compose.animation.core.infiniteRepeatable(tween(1100, easing = LinearEasing)),
             label = "ring turn",
-        ).value
-    } else 0f
+        )
+    } else null
     Canvas(
         modifier
             .size(size)
-            .graphicsLayer { rotationZ = angle }
+            .graphicsLayer { rotationZ = angle?.value ?: 0f }
             .semantics { if (spinning) contentDescription = "Loading" },
     ) {
         val stroke = this.size.minDimension * 0.11f

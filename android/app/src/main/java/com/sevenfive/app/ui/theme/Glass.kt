@@ -145,12 +145,17 @@ fun Modifier.glassSurface(
     // the light, bright white along the top fading to a fine dark line at the bottom.
     val top = if (strong) 0.82f else app.glassFill.alpha + 0.12f
     val bottom = if (strong) 0.66f else app.glassFill.alpha - 0.08f
-    val fill = Brush.verticalGradient(listOf(Color.White.copy(alpha = top), Color.White.copy(alpha = bottom)))
-    val rim = Brush.verticalGradient(
-        0f to app.glassEdge,
-        0.45f to Color.White.copy(alpha = 0.35f),
-        1f to NeoInk.copy(alpha = 0.07f),
-    )
+    // Made once per look, not on every recomposition.
+    val fill = androidx.compose.runtime.remember(top, bottom) {
+        Brush.verticalGradient(listOf(Color.White.copy(alpha = top), Color.White.copy(alpha = bottom)))
+    }
+    val rim = androidx.compose.runtime.remember(app.glassEdge) {
+        Brush.verticalGradient(
+            0f to app.glassEdge,
+            0.45f to Color.White.copy(alpha = 0.35f),
+            1f to NeoInk.copy(alpha = 0.07f),
+        )
+    }
     return this
         .clip(shape)
         .background(fill)

@@ -56,9 +56,16 @@ class CardsRepository(private val core: CoreApi, private val cacheFile: File? = 
                 }
                 applying.withLock {
                     if (generation != asked) return@withLock
-                    _state.value = CardsState(cards, loading = false, error = null, updatedAt = Instant.now())
-                    saveCache(json)
-                    onCards(cards)
+                    // Nothing changed since the last poll (most polls): keep the very same object, so
+                    // every screen sees identical data and skips its work instead of redrawing.
+                    val previous = _state.value.cards
+                    val same = previous != null && previous == cards
+                    val kept = if (same) previous!! else cards
+                    _state.value = CardsState(kept, loading = false, error = null, updatedAt = Instant.now())
+                    if (!same) saveCache(json)
+                    // Always: it notices time passing too (the lock-screen countdown's last 24 h),
+                    // and only acts when what it would show changes.
+                    onCards(kept)
                 }
             } catch (e: ApiException) {
                 // A busy server is asked again by the next poll by itself: the banner says so.

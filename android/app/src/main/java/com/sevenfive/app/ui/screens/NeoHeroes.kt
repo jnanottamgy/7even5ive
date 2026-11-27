@@ -86,33 +86,18 @@ private fun dayWord(date: LocalDate, today: LocalDate = LocalDate.now()): String
 @Composable
 internal fun HomeHero(cards: Cards, modifier: Modifier = Modifier, withAttendance: Boolean = true) {
     val app = LocalAppColors.current
-    val zone = ZoneId.systemDefault()
-    val next = cards.dueThisWeek
-        .mapNotNull { item -> Time.parse(item.dueAt)?.let { item to it.atZoneSameInstant(zone) } }
-        .minByOrNull { it.second }
+    // Worked out once per change in the cards, not on every tick of the countdown.
+    val next = androidx.compose.runtime.remember(cards.dueThisWeek) {
+        val zone = ZoneId.systemDefault()
+        cards.dueThisWeek
+            .mapNotNull { item -> Time.parse(item.dueAt)?.let { item to it.atZoneSameInstant(zone) } }
+            .minByOrNull { it.second }
+    }
     Column(modifier.fillMaxWidth().padding(top = 6.dp, bottom = 4.dp)) {
         if (next != null) {
             val (item, at) = next
-            // Real time: a countdown that ticks every second, not a fixed clock time.
-            val now by rememberNow(1_000L)
-            val days = java.time.Duration.between(now, at.toInstant()).toDays()
-            val countdown = Time.countdown(at.toOffsetDateTime(), now)
             NeoLabel("Next · due ${dayWord(at.toLocalDate()).lowercase(Locale.ENGLISH)}", dot = Orange)
-            Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.Bottom) {
-                com.sevenfive.app.ui.components.RollingText(
-                    countdown,
-                    // Days make it longer: one size down so it still fits on one line.
-                    style = (if (days > 0) MaterialTheme.typography.displaySmall else MaterialTheme.typography.displayMedium)
-                        .copy(fontFeatureSettings = "tnum"),
-                    modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = "Time left: $countdown" },
-                )
-                Text(
-                    if (countdown == "now") " due now" else " left",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = app.secondaryLabel,
-                    modifier = Modifier.padding(bottom = 8.dp),
-                )
-            }
+            LiveCountdown(at, Modifier.padding(top = 8.dp))
             Text(
                 item.title ?: kindStyle(item.kind).label,
                 style = MaterialTheme.typography.titleLarge,
@@ -283,12 +268,13 @@ internal fun NeoSegments(segments: List<Segment>, selected: Int, modifier: Modif
                 .padding(4.dp),
         ) {
             val slot = maxWidth / segments.size
-            val x by androidx.compose.animation.core.animateDpAsState(
+            val x = androidx.compose.animation.core.animateDpAsState(
                 slot * selected,
                 androidx.compose.animation.core.spring(dampingRatio = 0.78f, stiffness = 420f),
                 label = "segment pill",
             )
-            Box(Modifier.offset(x = x).width(slot).height(40.dp).clip(CircleShape).background(NeoInk))
+            // Read while placing, not composing: the slide moves a layer, it rebuilds nothing.
+            Box(Modifier.offset { androidx.compose.ui.unit.IntOffset(x.value.roundToPx(), 0) }.width(slot).height(40.dp).clip(CircleShape).background(NeoInk))
             Row(Modifier.fillMaxWidth()) {
                 segments.forEachIndexed { i, seg -> SegmentLabel(seg, i == selected, Modifier.width(slot)) { pick(i) } }
             }
@@ -508,5 +494,33 @@ internal fun DoneHistory(month: com.sevenfive.app.data.LocalLog.Month, modifier:
             drawArc(NeoInk, -90f, 360f * share, false, tl, box,
                 style = androidx.compose.ui.graphics.drawscope.Stroke(stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round))
         }
+    }
+}
+
+
+/**
+ * The live countdown on its own: it ticks every second, and only these few characters recompose
+ * then, not the hero, the list or the screen around them.
+ */
+@Composable
+private fun LiveCountdown(at: java.time.ZonedDateTime, modifier: Modifier = Modifier) {
+    val app = LocalAppColors.current
+    val now by rememberNow(1_000L)
+    val days = java.time.Duration.between(now, at.toInstant()).toDays()
+    val countdown = Time.countdown(at.toOffsetDateTime(), now)
+    Row(modifier, verticalAlignment = Alignment.Bottom) {
+        com.sevenfive.app.ui.components.RollingText(
+            countdown,
+            // Days make it longer: one size down so it still fits on one line.
+            style = (if (days > 0) MaterialTheme.typography.displaySmall else MaterialTheme.typography.displayMedium)
+                .copy(fontFeatureSettings = "tnum"),
+            modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = "Time left: $countdown" },
+        )
+        Text(
+            if (countdown == "now") " due now" else " left",
+            style = MaterialTheme.typography.titleMedium,
+            color = app.secondaryLabel,
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
     }
 }
