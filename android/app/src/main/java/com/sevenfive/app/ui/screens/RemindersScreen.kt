@@ -87,6 +87,7 @@ fun RemindersScreen(vm: AppViewModel, onSettings: () -> Unit) {
 
 @Composable
 private fun ReminderCard(r: Reminder, busy: Boolean, modifier: Modifier = Modifier, onCancel: () -> Unit) {
+    val liveNow by com.sevenfive.app.ui.components.rememberNow(30_000L)
     val fires = Time.parse(r.firesAt)
     val due = Time.parse(r.dueAt)
     val app = LocalAppColors.current
@@ -96,7 +97,7 @@ private fun ReminderCard(r: Reminder, busy: Boolean, modifier: Modifier = Modifi
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    (if (r.isCall) "Call · " else "") + (fires?.let { "${Time.dayAndTime(it)} · ${Time.until(it)}" } ?: "Soon"),
+                    (if (r.isCall) "Call · " else "") + (fires?.let { "${Time.dayAndTime(it)} · ${Time.until(it, liveNow)}" } ?: "Soon"),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary,

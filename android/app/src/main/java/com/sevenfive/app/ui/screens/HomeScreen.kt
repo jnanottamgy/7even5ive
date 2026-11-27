@@ -450,10 +450,11 @@ private fun DueCard(
     onCallConsent: (Int) -> Unit,
     onDone: () -> Unit,
 ) {
+    val liveNow by com.sevenfive.app.ui.components.rememberNow(30_000L)
     val due = Time.parse(item.dueAt)
     val app = LocalAppColors.current
     // Within a day reads red; later reads in the brand colour.
-    val urgent = due != null && due.toInstant().isBefore(Instant.now().plus(Duration.ofHours(24)))
+    val urgent = due != null && due.toInstant().isBefore(liveNow.plus(Duration.ofHours(24)))
     AppCard(modifier) {
         Column {
             Row(verticalAlignment = Alignment.Top) {
@@ -469,7 +470,7 @@ private fun DueCard(
                     Spacer(Modifier.width(8.dp))
                     val tint = if (urgent) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                     Text(
-                        Time.until(due),
+                        Time.until(due, liveNow),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = tint,

@@ -41,6 +41,7 @@ import androidx.compose.material.icons.automirrored.filled.LibraryBooks
 import androidx.compose.material.icons.automirrored.outlined.LibraryBooks
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.outlined.Alarm
@@ -260,6 +261,7 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
                                 else -> 0
                             }
                         },
+                        onAi = { nav.navigate(Routes.VOICE) { launchSingleTop = true } },
                         onSelect = { nav.goToTab(it.route) },
                     )
                 }
@@ -354,7 +356,7 @@ private fun Nav.popExit(): ExitTransition =
  * pill that glides between tabs on a spring.
  */
 @Composable
-private fun GlassTabBar(haze: HazeState, selected: Int, badge: (Tab) -> Int, onSelect: (Tab) -> Unit) {
+private fun GlassTabBar(haze: HazeState, selected: Int, badge: (Tab) -> Int, onAi: () -> Unit, onSelect: (Tab) -> Unit) {
     val haptics = LocalHapticFeedback.current
     val app = LocalAppColors.current
     val primary = MaterialTheme.colorScheme.primary
@@ -365,9 +367,34 @@ private fun GlassTabBar(haze: HazeState, selected: Int, badge: (Tab) -> Int, onS
             .frosted(haze, CircleShape),
     ) {
         // Neo-minimal: an icon and a word per tab; the current one in ink with an orange dot.
-        val itemWidth = maxWidth / tabs.size
+        // In the middle, the AI: one orange button that opens the voice assistant.
+        val itemWidth = maxWidth / (tabs.size + 1)
         Row(Modifier.fillMaxSize()) {
             tabs.forEachIndexed { index, tab ->
+                if (index == AI_SLOT) {
+                    Box(
+                        Modifier
+                            .width(itemWidth)
+                            .fillMaxHeight()
+                            .semantics { contentDescription = "Talk to your AI" }
+                            .pressable(scaleTo = 0.9f, haptic = true, role = Role.Button, onClick = onAi),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Box(
+                            Modifier
+                                .size(46.dp)
+                                .background(com.sevenfive.app.ui.theme.Orange, CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                Icons.Filled.Mic,
+                                contentDescription = null,
+                                tint = com.sevenfive.app.ui.theme.NeoInk,
+                                modifier = Modifier.size(22.dp),
+                            )
+                        }
+                    }
+                }
                 val on = index == selected
                 val tint = if (on) MaterialTheme.colorScheme.onSurface else app.secondaryLabel
                 val lift by animateFloatAsState(if (on) 1f else 0f, Motion.fade, label = "tab dot")
@@ -414,8 +441,8 @@ private fun GlassTabBar(haze: HazeState, selected: Int, badge: (Tab) -> Int, onS
                     Text(
                         tab.label,
                         color = tint,
-                        fontSize = 11.5.sp,
-                        lineHeight = 14.sp,
+                        fontSize = 10.5.sp,
+                        lineHeight = 13.sp,
                         fontFamily = com.sevenfive.app.ui.theme.Neo,
                         fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium,
                         maxLines = 1,
@@ -434,6 +461,9 @@ private fun GlassTabBar(haze: HazeState, selected: Int, badge: (Tab) -> Int, onS
         }
     }
 }
+
+/** Where the AI button sits in the tab bar: after the first two tabs, in the middle. */
+private const val AI_SLOT = 2
 
 private fun NavHostController.goToTab(route: String) = navigate(route) {
     popUpTo(graph.findStartDestination().id) { saveState = true }

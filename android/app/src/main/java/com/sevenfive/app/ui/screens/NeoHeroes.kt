@@ -2,6 +2,8 @@ package com.sevenfive.app.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -35,6 +37,8 @@ import androidx.compose.ui.unit.sp
 import com.sevenfive.app.data.Cards
 import com.sevenfive.app.data.SubjectAttendance
 import com.sevenfive.app.ui.components.kindStyle
+import com.sevenfive.app.ui.components.rememberNow
+import androidx.compose.runtime.getValue
 import com.sevenfive.app.ui.theme.LocalAppColors
 import com.sevenfive.app.ui.theme.NeoInk
 import com.sevenfive.app.ui.theme.Orange
@@ -86,11 +90,23 @@ internal fun HomeHero(cards: Cards, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 12.dp, bottom = 8.dp)) {
         if (next != null) {
             val (item, at) = next
-            NeoLabel("Next", dot = Orange)
+            // Real time: a countdown that ticks every second, not a fixed clock time.
+            val now by rememberNow(1_000L)
+            val days = java.time.Duration.between(now, at.toInstant()).toDays()
+            val countdown = Time.countdown(at.toOffsetDateTime(), now)
+            NeoLabel("Next · due ${dayWord(at.toLocalDate()).lowercase(Locale.ENGLISH)}", dot = Orange)
             Text(
-                dayWord(at.toLocalDate()) + "\n" + at.format(hourMinute),
-                style = MaterialTheme.typography.displayMedium,
-                modifier = Modifier.padding(top = 10.dp),
+                if (days > 0) countdown.replaceFirst(" ", "\n") else countdown,
+                style = MaterialTheme.typography.displayMedium.copy(fontFeatureSettings = "tnum"),
+                modifier = Modifier
+                    .padding(top = 10.dp)
+                    .semantics { contentDescription = "Time left: $countdown" },
+            )
+            Text(
+                if (countdown == "now") "due now" else "left",
+                style = MaterialTheme.typography.titleMedium,
+                color = app.secondaryLabel,
+                modifier = Modifier.padding(top = 2.dp),
             )
             Text(
                 item.title ?: kindStyle(item.kind).label,
@@ -245,12 +261,15 @@ internal data class Segment(val label: String, val count: Int = 0)
 @Composable
 internal fun NeoSegments(segments: List<Segment>, selected: Int, modifier: Modifier = Modifier, onSelect: (Int) -> Unit) {
     val app = LocalAppColors.current
+    // Three or fewer share the width; more scroll sideways, each as wide as its words.
+    val many = segments.size > 3
     Row(
         modifier
             .fillMaxWidth()
             .padding(top = 2.dp, bottom = 6.dp)
             .clip(CircleShape)
             .background(app.glassFill)
+            .then(if (many) Modifier.horizontalScroll(rememberScrollState()) else Modifier)
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
@@ -258,7 +277,7 @@ internal fun NeoSegments(segments: List<Segment>, selected: Int, modifier: Modif
             val on = i == selected
             Row(
                 Modifier
-                    .weight(1f)
+                    .then(if (many) Modifier.padding(horizontal = 0.dp) else Modifier.weight(1f))
                     .height(40.dp)
                     .clip(CircleShape)
                     .background(if (on) NeoInk else Color.Transparent)
@@ -266,7 +285,8 @@ internal fun NeoSegments(segments: List<Segment>, selected: Int, modifier: Modif
                         this.selected = on
                         role = androidx.compose.ui.semantics.Role.Tab
                     }
-                    .clickable { onSelect(i) },
+                    .clickable { onSelect(i) }
+                    .then(if (many) Modifier.padding(horizontal = 14.dp) else Modifier),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {

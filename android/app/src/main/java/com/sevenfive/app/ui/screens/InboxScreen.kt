@@ -59,6 +59,14 @@ fun leftOutLine(n: Int): String = when (n) {
     else -> "$n other mails left out"
 }
 
+/** One kind of college mail: its cards, or a plain line saying there are none. */
+private fun androidx.compose.foundation.lazy.LazyListScope.mailSegment(list: List<Item>, emptyTitle: String, emptyBody: String) {
+    if (list.isEmpty()) {
+        item(key = "empty-$emptyTitle") { EmptyState(Icons.Outlined.MarkEmailRead, emptyTitle, emptyBody) }
+    }
+    items(list, key = { "m-${it.id}" }) { MailCard(it, Modifier.animateItem(placementSpec = Motion.item)) }
+}
+
 /** What a college-mail card is about, as the student would say it. */
 fun categoryLabel(category: String?): String = when (category) {
     "placement" -> "Placement"
@@ -82,7 +90,18 @@ fun InboxScreen(vm: AppViewModel, onSettings: () -> Unit) {
         val mailCards = cards.opportunities.filter { it.fromMail }
         val others = cards.opportunities.filterNot { it.fromMail }.sortedByDescending { it.relevance ?: 0.0 }
         val app = LocalAppColors.current
-        val segments = listOf(Segment("Overview"), Segment("Mail", mailCards.size), Segment("Other", others.size))
+        // College mail, split the way a student thinks about it.
+        val placements = mailCards.filter { it.category == "placement" }
+        val internships = mailCards.filter { it.category == "internship" }
+        val exams = mailCards.filter { it.category == "exam_notice" }
+        val rest = mailCards.filter { it.category !in setOf("placement", "internship", "exam_notice") } + others
+        val segments = listOf(
+            Segment("Overview"),
+            Segment("Placements", placements.size),
+            Segment("Internships", internships.size),
+            Segment("Exam notices", exams.size),
+            Segment("Events & more", rest.size),
+        )
         LazyColumn(contentPadding = padding, verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item(key = "segments") { NeoSegments(segments, segment) { segment = it } }
             when (segment) {
@@ -92,23 +111,20 @@ fun InboxScreen(vm: AppViewModel, onSettings: () -> Unit) {
                     }
                     item(key = "mailbox") { MailboxCard(cards.mail, checking, Modifier.animateItem(placementSpec = Motion.item)) { vm.checkMail() } }
                 }
-                1 -> {
-                    if (mailCards.isEmpty()) {
-                        item(key = "empty-mail") {
-                            EmptyState(Icons.Outlined.MarkEmailRead, "Nothing from college mail yet",
-                                "Real placements, internships and exam notices from college mail show up here.")
-                        }
-                    }
-                    items(mailCards, key = { "m-${it.id}" }) { MailCard(it, Modifier.animateItem(placementSpec = Motion.item)) }
-                }
+                1 -> mailSegment(placements, "No placement offers yet", "Job offers and placement drives from college mail show up here.")
+                2 -> mailSegment(internships, "No internships yet", "Internship openings from college mail show up here.")
+                3 -> mailSegment(exams, "No exam notices", "Exam timetables, hall tickets and results notices show up here.")
                 else -> {
-                    if (others.isEmpty()) {
+                    if (rest.isEmpty()) {
                         item(key = "empty-other") {
                             EmptyState(Icons.Outlined.MarkEmailRead, "Nothing else worth your time",
-                                "Events and opportunities from your groups and Classroom show up here.")
+                                "Events and opportunities from mail, your groups and Classroom show up here.")
                         }
                     }
-                    items(others, key = { "o-${it.id}" }) { OpportunityCard(it, Modifier.animateItem(placementSpec = Motion.item)) }
+                    items(rest, key = { "o-${it.id}" }) { item ->
+                        if (item.fromMail) MailCard(item, Modifier.animateItem(placementSpec = Motion.item))
+                        else OpportunityCard(item, Modifier.animateItem(placementSpec = Motion.item))
+                    }
                 }
             }
         }
@@ -171,6 +187,7 @@ private fun MailboxCard(mail: MailStatus, checking: Boolean, modifier: Modifier 
 /** One college-mail card: what it is, who, when, and the way to act on it. */
 @Composable
 private fun MailCard(item: Item, modifier: Modifier = Modifier) {
+    val liveNow by com.sevenfive.app.ui.components.rememberNow(30_000L)
     val app = LocalAppColors.current
     val uri = LocalUriHandler.current
     val due = Time.parse(item.dueAt)
@@ -195,9 +212,9 @@ private fun MailCard(item: Item, modifier: Modifier = Modifier) {
                 Spacer(Modifier.height(8.dp))
                 if (due != null) {
                     val what = if (item.kind == "deadline") "Apply by" else "On"
-                    Text("$what ${Time.dayAndTime(due)} · ${Time.until(due)}", style = MaterialTheme.typography.bodySmall,
+                    Text("$what ${Time.dayAndTime(due)} · ${Time.until(due, liveNow)}", style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Medium,
-                        color = if (Time.until(due) in listOf("today", "overdue")) MaterialTheme.colorScheme.error else app.secondaryLabel)
+                        color = if (Time.until(due, liveNow) in listOf("today", "overdue")) MaterialTheme.colorScheme.error else app.secondaryLabel)
                 }
                 if (event != null) {
                     Text("Drive or test ${Time.dayAndTime(event)}", style = MaterialTheme.typography.bodySmall, color = app.secondaryLabel)
@@ -226,6 +243,7 @@ private fun MailCard(item: Item, modifier: Modifier = Modifier) {
 
 @Composable
 private fun OpportunityCard(item: Item, modifier: Modifier = Modifier) {
+    val liveNow by com.sevenfive.app.ui.components.rememberNow(30_000L)
     val due = Time.parse(item.dueAt)
     val app = LocalAppColors.current
     val color = kindColor(item.kind)
@@ -237,7 +255,7 @@ private fun OpportunityCard(item: Item, modifier: Modifier = Modifier) {
                 Column(Modifier.weight(1f)) {
                     Text(item.title ?: "Untitled", style = MaterialTheme.typography.titleMedium)
                     if (due != null) {
-                        Text("${Time.dayAndTime(due)} · ${Time.until(due)}", style = MaterialTheme.typography.bodySmall,
+                        Text("${Time.dayAndTime(due)} · ${Time.until(due, liveNow)}", style = MaterialTheme.typography.bodySmall,
                             color = app.secondaryLabel)
                     }
                 }

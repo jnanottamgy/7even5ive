@@ -92,24 +92,7 @@ fun TabScaffold(
                 LargeTopAppBar(
                     title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     actions = {
-                        val openVoice = LocalOpenVoice.current
-                        if (openVoice != null) {
-                            Box(
-                                Modifier
-                                    .padding(end = 8.dp)
-                                    .size(38.dp)
-                                    .pressable(onClick = openVoice)
-                                    .glassSurface(shape = CircleShape, strong = true),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(
-                                    Icons.Outlined.Mic,
-                                    contentDescription = "Ask 7even5ive by voice",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(20.dp),
-                                )
-                            }
-                        }
+                        // The AI's button lives in the tab bar now (the orange one in the middle).
                         val nav = LocalNav.current
                         Box(
                             Modifier
