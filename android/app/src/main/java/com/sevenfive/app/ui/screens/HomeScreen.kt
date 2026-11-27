@@ -113,6 +113,9 @@ fun HomeScreen(vm: AppViewModel, onSettings: () -> Unit) {
     }
 
     var segment by rememberSaveable { mutableIntStateOf(0) }
+    // Tapping Home brings Today back, wherever the student was.
+    val homeTaps by vm.homeTaps.collectAsStateWithLifecycle()
+    LaunchedEffect(homeTaps) { if (homeTaps > 0) segment = 0 }
     // A tile's details, pulled up over Today: "clash", "briefing" or "ontime".
     var sheet by rememberSaveable { mutableStateOf<String?>(null) }
     // The on-time record: every deadline this phone sees is noted, done or not.

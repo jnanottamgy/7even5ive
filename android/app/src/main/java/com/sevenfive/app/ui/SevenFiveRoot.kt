@@ -63,6 +63,9 @@ import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.platform.LocalUriHandler
@@ -206,7 +209,11 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
         }
     }
 
+    // Screens with their own back arrow have no tab bar; every tab screen has it.
     val showTabs = route == null || route !in pushed
+    // On a screen opened from a tab (Grades from Attendance), that tab stays lit.
+    var lastTab by rememberSaveable { mutableStateOf(Routes.HOME) }
+    LaunchedEffect(route) { if (route != null && tabs.any { it.route == route }) lastTab = route }
     val tour by vm.tour.collectAsStateWithLifecycle()
     // Each demo step opens the tab it talks about.
     LaunchedEffect(tour?.index, tour != null) {
@@ -258,7 +265,7 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
                     }
                     GlassTabBar(
                         haze = haze,
-                        selected = tabs.indexOfFirst { it.route == route }.coerceAtLeast(0),
+                        selected = tabs.indexOfFirst { it.route == (if (tabs.any { t -> t.route == route }) route else lastTab) }.coerceAtLeast(0),
                         badge = { tab ->
                             when (tab.route) {
                                 Routes.HOME -> state.cards?.approvals?.size ?: 0
@@ -266,7 +273,14 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
                             }
                         },
                         onAi = { nav.navigate(Routes.VOICE) { launchSingleTop = true } },
-                        onSelect = { nav.goToTab(it.route) },
+                        onSelect = { tab ->
+                            if (tab.route == Routes.HOME) {
+                                nav.goHome()
+                                vm.homeTapped()
+                            } else {
+                                nav.goToTab(tab.route)
+                            }
+                        },
                     )
                 }
             }
@@ -275,7 +289,7 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
         CompositionLocalProvider(
             LocalBottomInset provides inner.calculateBottomPadding(),
             LocalOpenVoice provides { nav.navigate(Routes.VOICE) { launchSingleTop = true } },
-            LocalNav provides { r: String -> nav.navigate(r) { launchSingleTop = true } },
+            LocalNav provides { r: String -> if (tabs.any { it.route == r }) nav.goToTab(r) else nav.navigate(r) { launchSingleTop = true } },
         ) {
             Box(Modifier.fillMaxSize().hazeSource(haze)) {
                 NavHost(
@@ -487,6 +501,16 @@ private const val AI_SLOT = 2
 
 /** The square every tab's icon (and the AI's circle) sits in, so all of them line up. */
 private val ICON_AREA = 34.dp
+
+/** Home, its root, from anywhere: everything above it closes, nothing saved is brought back. */
+private fun NavHostController.goHome() {
+    if (!popBackStack(Routes.HOME, inclusive = false)) {
+        navigate(Routes.HOME) {
+            popUpTo(graph.findStartDestination().id) { inclusive = false }
+            launchSingleTop = true
+        }
+    }
+}
 
 private fun NavHostController.goToTab(route: String) = navigate(route) {
     popUpTo(graph.findStartDestination().id) { saveState = true }

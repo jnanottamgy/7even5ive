@@ -119,7 +119,11 @@ fun PushScaffold(title: String, onBack: () -> Unit, content: @Composable (Paddin
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val haze = rememberHazeState()
     val app = LocalAppColors.current
-    val bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    // Above the tab bar where it shows, else above the system's navigation bar.
+    val bottom = maxOf(
+        WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
+        com.sevenfive.app.ui.theme.LocalBottomInset.current,
+    )
     Scaffold(
         modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
         containerColor = MaterialTheme.colorScheme.background,

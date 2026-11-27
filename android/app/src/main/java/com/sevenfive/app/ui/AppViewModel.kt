@@ -60,6 +60,11 @@ data class ConnectionsState(
 
 class AppViewModel(val container: AppContainer) : ViewModel() {
     val cards: StateFlow<CardsState> = container.cards.state
+
+    /** Counts taps on the Home tab: Home goes back to its first segment (Today) on each. */
+    private val _homeTaps = kotlinx.coroutines.flow.MutableStateFlow(0)
+    val homeTaps: StateFlow<Int> = _homeTaps
+    fun homeTapped() { _homeTaps.value += 1 }
     val portal: StateFlow<PortalStatus> = container.portalStore.status
     val servers: StateFlow<ServerConfig> = container.servers.config
 
