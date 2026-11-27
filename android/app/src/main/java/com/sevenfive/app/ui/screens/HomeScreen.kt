@@ -49,6 +49,7 @@ import androidx.compose.material3.Text
 import androidx.compose.foundation.layout.fillMaxSize
 import com.sevenfive.app.ui.components.segmentSlide
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -632,73 +633,60 @@ private fun NeedsReviewCard(item: Item, modifier: Modifier = Modifier) {
 
 // --- Today, on one screen ---------------------------------------------------------------------
 
-/** Today's tiles: a short headline each, the details one tap away. */
+/** Today as a bento: tiles of different weights, each with its own picture; the details one tap away. */
 @Composable
 private fun TodayDashboard(vm: AppViewModel, cards: Cards, month: com.sevenfive.app.data.LocalLog.Month, onSheet: (String) -> Unit) {
     val nav = LocalNav.current
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         HomeHero(cards, withAttendance = false)
 
-        // Attendance and the busy stretch.
-        val subjects = cards.attendance.subjects
-        val above = subjects.count { it.percent >= it.minimumPercent }
-        val worst = subjects.minByOrNull { it.percent }
-        val low = worst != null && worst.percent < worst.minimumPercent
+        // A tall attendance tile beside a wide busy-stretch one.
         val clash = findClash(cards.dueThisWeek)
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Tile(
-                "Attendance",
-                if (subjects.isEmpty()) "—" else "$above/${subjects.size}",
-                if (low) "${worst!!.code} below ${pct(worst.minimumPercent)}%" else "above ${pct(worst?.minimumPercent ?: 75.0)}%",
-                Modifier.weight(1f),
-                dot = low,
-            ) { nav(Routes.ATTENDANCE) }
-            Tile(
-                "Busy stretch",
-                if (clash == null) "Clear" else "${clash.items.size} things",
-                clash?.title?.substringBefore(':') ?: "no clashes this week",
-                Modifier.weight(1f),
-                dot = clash != null,
-            ) { if (clash != null) onSheet("clash") }
+        Row(Modifier.height(164.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            AttendanceBento(cards.attendance.subjects, Modifier.weight(0.42f).fillMaxHeight()) { nav(Routes.ATTENDANCE) }
+            ClashBento(clash, Modifier.weight(0.58f).fillMaxHeight()) { if (clash != null) onSheet("clash") }
         }
 
-        // Reminders and the morning briefing.
+        // The one dark strip: your day, read aloud.
+        val hour = java.time.LocalTime.now().hour
+        val first = cards.student?.name?.substringBefore(' ')?.takeIf { it.isNotBlank() }
+        val greeting = (if (hour < 12) "Good morning" else if (hour < 17) "Good afternoon" else "Good evening") +
+            (first?.let { ", $it." } ?: ".")
+        YourDayStrip(greeting) { onSheet("briefing") }
+
+        // Three small chips.
         val now by com.sevenfive.app.ui.components.rememberNow(30_000L)
         val nextReminder = cards.reminders
             .mapNotNull { r -> Time.parse(r.firesAt)?.let { r to it } }
             .filter { it.second.toInstant().isAfter(now) }
             .minByOrNull { it.second }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Tile(
-                "Reminders",
-                "${cards.reminders.size}",
-                nextReminder?.let { "next ${Time.until(it.second, now)}" } ?: "none set",
-                Modifier.weight(1f),
-            ) { nav(Routes.REMINDERS) }
-            Tile("Your day", "Listen", "the briefing, read aloud", Modifier.weight(1f), icon = Icons.Filled.PlayArrow) { onSheet("briefing") }
-        }
-
-        // Classes and the on-time record.
         val today = java.time.LocalTime.now()
         val left = if (cards.timetable.connected) Week.on(cards.timetable.data, java.time.LocalDate.now().dayOfWeek)
             .filter { slot -> Week.time(slot.end)?.isAfter(today) ?: true } else emptyList()
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Tile(
+            MiniBento(
+                "Reminders",
+                if (cards.reminders.isEmpty()) "None" else "${cards.reminders.size}",
+                nextReminder?.let { "next ${Time.until(it.second, now)}" } ?: "tap to see",
+                Modifier.weight(1f),
+            ) { nav(Routes.REMINDERS) }
+            MiniBento(
                 "Classes",
                 when {
                     !cards.timetable.connected -> "—"
-                    left.isEmpty() -> "Done"
+                    left.isEmpty() -> "Free"
                     else -> "${left.size} left"
                 },
-                left.firstOrNull()?.let { "next ${Time.hourMinute(it.start.take(5))} · ${cards.subjectName(it.code)}" }
-                    ?: if (cards.timetable.connected) "no more today" else "connect the portal",
+                left.firstOrNull()?.let { "next ${Time.hourMinute(it.start.take(5))}" }
+                    ?: if (cards.timetable.connected) "done for today" else "connect portal",
                 Modifier.weight(1f),
             ) { nav(Routes.TIMETABLE) }
-            Tile(
+            MiniBento(
                 "On time",
                 if (month.total > 0) "${month.onTime}/${month.total}" else "—",
-                if (month.total > 0) "deadlines this month" else "counts as you mark done",
+                "this month",
                 Modifier.weight(1f),
+                ring = if (month.total > 0) month.onTime.toFloat() / month.total else null,
             ) { onSheet("ontime") }
         }
 

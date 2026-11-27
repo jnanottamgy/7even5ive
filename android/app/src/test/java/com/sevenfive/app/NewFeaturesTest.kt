@@ -6,6 +6,7 @@ import com.sevenfive.app.ui.screens.eligible
 import com.sevenfive.app.ui.screens.finalNeeded
 import com.sevenfive.app.ui.screens.findClash
 import com.sevenfive.app.ui.screens.internalOutOf50
+import com.sevenfive.app.ui.screens.shortName
 import com.sevenfive.app.util.Time
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -86,5 +87,13 @@ class NewFeaturesTest {
         assertEquals("07:22:19", Time.countdown(OffsetDateTime.parse("2026-11-27T16:22:19+05:30"), now))
         assertEquals("2d 01:00:00", Time.countdown(OffsetDateTime.parse("2026-11-29T10:00:00+05:30"), now))
         assertEquals("now", Time.countdown(OffsetDateTime.parse("2026-11-27T08:00:00+05:30"), now))
+    }
+
+    @Test fun `subjects get the short names students use`() {
+        assertEquals("DBMS", shortName("Database Management Systems", "CS52"))
+        assertEquals("DAA", shortName("Design and Analysis of Algorithms", "CS53"))
+        assertEquals("CN", shortName("Computer Networks", "CS51"))
+        assertEquals("Physics", shortName("Physics", "PH1"))
+        assertEquals("CS9", shortName("", "CS9"))
     }
 }
