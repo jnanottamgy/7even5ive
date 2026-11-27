@@ -293,7 +293,7 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
             LocalOpenVoice provides { nav.navigate(Routes.VOICE) { launchSingleTop = true } },
             LocalNav provides { r: String -> if (tabs.any { it.route == r }) nav.goToTab(r) else nav.navigate(r) { launchSingleTop = true } },
         ) {
-            Box(Modifier.fillMaxSize().hazeSource(haze)) {
+            Box(Modifier.fillMaxSize()) {
                 NavHost(
                     nav,
                     startDestination = Routes.HOME,

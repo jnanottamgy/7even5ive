@@ -33,6 +33,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -85,10 +86,9 @@ fun TabScaffold(
         containerColor = Color.Transparent,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            Column(Modifier.hazeEffect(state = haze, style = frostedStyle()) {
-                alpha = scroll.state.overlappedFraction
-                inputScale = HazeInputScale.Auto
-            }) {
+            // Solid once content slides under it; clear at the top. No blur: nothing to re-process.
+            val barColor = MaterialTheme.colorScheme.background
+            Column(Modifier.drawBehind { drawRect(barColor.copy(alpha = scroll.state.overlappedFraction)) }) {
                 TopAppBar(
                     title = { Text(title, style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     actions = {
@@ -143,7 +143,7 @@ fun TabScaffold(
             }
         },
     ) { inner ->
-        Box(Modifier.fillMaxSize().hazeSource(haze)) {
+        Box(Modifier.fillMaxSize()) {
             AuroraBackground()
             // No pull-to-refresh: the cards refresh on their own, and a first load shows a
             // skeleton of the screen instead of a spinner.

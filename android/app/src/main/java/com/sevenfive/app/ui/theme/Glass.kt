@@ -43,27 +43,26 @@ fun AuroraBackground(modifier: Modifier = Modifier) {
             context.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f,
         ) == 0f
     }
-    val turn = androidx.compose.animation.core.rememberInfiniteTransition(label = "rings")
-    // The contours' clock: their wobble turns once every 40 seconds, seamlessly.
-    val float by turn.animateFloat(
-        initialValue = 0f,
-        targetValue = if (still) 0f else 1f,
-        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-            androidx.compose.animation.core.tween(40_000, easing = androidx.compose.animation.core.LinearEasing),
-        ),
-        label = "contours",
-    )
-    // The glow's wander: once round a slow figure-of-eight a minute.
-    val drift by turn.animateFloat(
-        initialValue = 0f,
-        targetValue = if (still) 0f else 1f,
-        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-            androidx.compose.animation.core.tween(60_000, easing = androidx.compose.animation.core.LinearEasing),
-        ),
-        label = "glow",
-    )
+    // One slow clock for the whole background, ticking 15 times a second instead of every frame:
+    // the motion is so slow it looks the same, and the phone draws it 4 to 8 times less often.
+    // It pauses by itself whenever the app isn't on screen (no frames are drawn then).
+    val clock = androidx.compose.runtime.remember { androidx.compose.runtime.mutableLongStateOf(0L) }
+    androidx.compose.runtime.LaunchedEffect(still) {
+        if (still) return@LaunchedEffect
+        val start = androidx.compose.runtime.withFrameMillis { it }
+        while (true) {
+            kotlinx.coroutines.delay(66)
+            clock.longValue = androidx.compose.runtime.withFrameMillis { it } - start
+        }
+    }
+    // The contour paths are made once and reshaped in place, so drawing makes no garbage.
+    val paths = androidx.compose.runtime.remember { List(8) { androidx.compose.ui.graphics.Path() } }
     Box(
-        modifier.fillMaxSize().drawBehind {
+        // Its own layer: redrawing the background never redraws what sits on top of it.
+        modifier.fillMaxSize().graphicsLayer().drawBehind {
+            val ms = clock.longValue
+            val drift = (ms % 60_000L) / 60_000f
+            val float = (ms % 40_000L) / 40_000f
             drawRect(base)
             // A soft warm glow drifting across, like light moving over paper. Barely there.
             val phase = drift * 2f * Math.PI.toFloat()
@@ -89,8 +88,9 @@ fun AuroraBackground(modifier: Modifier = Modifier) {
             val line = 1.dp.toPx()
             for (n in 0 until 8) {
                 val base = size.width * 0.22f + n * step
-                val path = androidx.compose.ui.graphics.Path()
-                val points = 144
+                val path = paths[n]
+                path.reset()
+                val points = 96
                 for (k in 0..points) {
                     val a = k / points.toFloat() * 2f * Math.PI.toFloat()
                     val r = base +
@@ -153,13 +153,17 @@ fun Modifier.glassSurface(
  * Real frosted glass for things that float over content (the tab bar, the demo guide): what is
  * behind is blurred and tinted, with the same bright rim as [glassSurface].
  */
-@OptIn(ExperimentalHazeApi::class)
+/**
+ * What floats over content (the demo guide). Neo-minimal: a plain solid surface. No blur, so
+ * nothing behind it has to be recorded and re-processed on every frame.
+ */
 @Composable
+@Suppress("UNUSED_PARAMETER")
 fun Modifier.frosted(state: HazeState, shape: Shape, edgeWidth: Dp = 0.8.dp): Modifier {
     val app = LocalAppColors.current
     return this
         .clip(shape)
-        .hazeEffect(state = state, style = frostedStyle()) { inputScale = HazeInputScale.Auto }
+        .background(app.glassTint)
         .then(if (app.glassEdge.alpha > 0f) Modifier.border(BorderStroke(edgeWidth, app.glassEdge), shape) else Modifier)
 }
 
