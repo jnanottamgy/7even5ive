@@ -107,19 +107,9 @@ fun VoiceScreen(vm: AppViewModel, onBack: () -> Unit) {
                 else mic.launch(Manifest.permission.RECORD_AUDIO)
             }
         }
+        // Thumb-first: what was said (or what to try) on top, the mic at the bottom where the
+        // thumb already is.
         Column(Modifier.fillMaxSize().padding(padding)) {
-            Orb(state.phase, active = state.active, onClick = ::toggle)
-            Text(
-                statusLine(state),
-                style = MaterialTheme.typography.titleLarge,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-            )
-            state.working?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = app.secondaryLabel,
-                    textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-            }
-            Spacer(Modifier.height(12.dp))
             LazyColumn(
                 state = list,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -130,12 +120,23 @@ fun VoiceScreen(vm: AppViewModel, onBack: () -> Unit) {
                 }
                 items(state.lines, key = { it.id }) { line -> Bubble(line) }
             }
+            state.working?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = app.secondaryLabel,
+                    textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+            }
+            Text(
+                statusLine(state),
+                style = MaterialTheme.typography.titleMedium,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+            )
+            Orb(state.phase, active = state.active, onClick = ::toggle)
             Text(
                 "Nothing you say is stored by 7even5ive. Adding to your calendar still waits for your tap.",
                 style = MaterialTheme.typography.labelSmall,
                 color = app.tertiaryLabel,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                modifier = Modifier.fillMaxWidth(),
             )
         }
     }
@@ -167,7 +168,7 @@ private fun Orb(phase: VoiceAssistant.Phase, active: Boolean, onClick: () -> Uni
         animationSpec = infiniteRepeatable(tween(if (speaking) 900 else 1600), RepeatMode.Restart),
         label = "orb wave",
     )
-    Box(Modifier.fillMaxWidth().height(176.dp), contentAlignment = Alignment.Center) {
+    Box(Modifier.fillMaxWidth().height(170.dp), contentAlignment = Alignment.Center) {
         if (live) {
             Box(
                 Modifier
