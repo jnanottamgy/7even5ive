@@ -69,6 +69,19 @@ android {
     }
     sourceSets.getByName("demo").res.srcDirs("src/debug/res")
 
+    // The app is in English: the libraries' translations into 80+ languages are never shown.
+    androidResources {
+        localeFilters += listOf("en")
+    }
+
+    packaging {
+        resources {
+            // Metadata only kotlin-reflect reads (the app doesn't use it) and the coroutines
+            // debugger's probes. The libraries' licence files stay.
+            excludes += listOf("kotlin/**.kotlin_builtins", "DebugProbesKt.bin")
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

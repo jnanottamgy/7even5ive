@@ -33,10 +33,15 @@ import kotlin.math.max
 fun AuroraBackground(modifier: Modifier = Modifier) {
     val base = MaterialTheme.colorScheme.background
     val context = androidx.compose.ui.platform.LocalContext.current
+    // Still when the phone's animations are off, and under Battery Saver: a moving background
+    // is a nicety, never worth the battery the student asked to save.
     val still = androidx.compose.runtime.remember {
-        android.provider.Settings.Global.getFloat(
+        val noAnimations = android.provider.Settings.Global.getFloat(
             context.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f,
         ) == 0f
+        val saving = (context.getSystemService(android.content.Context.POWER_SERVICE) as? android.os.PowerManager)
+            ?.isPowerSaveMode == true
+        noAnimations || saving
     }
     // One slow clock for the whole background, ticking 10 times a second instead of every frame:
     // the motion is so slow (at most a pixel or two per tick) it looks the same, and the phone

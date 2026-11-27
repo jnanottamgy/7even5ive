@@ -61,7 +61,7 @@ class CardsRepository(private val core: CoreApi, private val cacheFile: File? = 
     }
 
     /** Approvals already run or refused here: never shown again, whatever the next poll says. */
-    private val hiddenApprovals = mutableSetOf<String>()
+    private val hiddenApprovals: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
 
     /**
      * Overlapping background polls collapse into one request. A pull to refresh passes

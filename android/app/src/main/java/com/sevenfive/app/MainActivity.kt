@@ -110,6 +110,9 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(Unit) {
                     if (opened) return@LaunchedEffect
                     snapshotFlow { sequenceDone }.first { it }
+                    // The sequence has ended and its last frame stands still: the one moment a
+                    // main-thread pause can't be seen. The portal's browser engine starts here.
+                    sync.warmUp()
                     withTimeoutOrNull(OPENING_EXTRA_MILLIS) {
                         container.accounts.state.first { it !is AccountState.Starting }
                     }
@@ -140,8 +143,9 @@ class MainActivity : ComponentActivity() {
     private enum class Gate { START, CHECK, OUT, PROFILE, APP }
 
     private companion object {
-        /** The portal refresh builds a WebView on the main thread (a few hundred ms the first time):
-         * it waits until the opening sequence (3 to 5 s) is over and the first screen has settled. */
+        /** The portal refresh builds a WebView on the main thread. The browser engine behind it is
+         * started at the opening's still last frame ([ForegroundSync.warmUp]), so this one is cheap;
+         * it still waits until the first screen has settled. */
         const val PORTAL_AFTER_MILLIS = 6_500L
         /** After the 3 s opening sequence, how much longer it may wait for the account check. */
         const val OPENING_EXTRA_MILLIS = 2_000L

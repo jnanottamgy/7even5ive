@@ -33,6 +33,20 @@ class ForegroundSync(
     private val servers: ServerSettings,
 ) {
     private var web: WebView? = null
+    private var warmed = false
+
+    /**
+     * The first WebView in the app's life starts the browser engine: a few hundred milliseconds
+     * on the main thread, a visible stutter if anything is moving. The caller picks a moment where
+     * nothing moves (the opening sequence's last, still frame) and the engine starts then; every
+     * later WebView (one per sync) is cheap. Only on a phone that will sync a portal at all.
+     */
+    fun warmUp() {
+        val status = store.status.value
+        if (warmed || !status.everConnected || status.needsLogin) return
+        warmed = true
+        runCatching { WebView(context).destroy() }
+    }
     private val bridge = PortalBridge()
     @Volatile private var pageLoaded: CompletableDeferred<Unit>? = null
 
