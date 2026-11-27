@@ -6,7 +6,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -27,31 +30,62 @@ import dev.chrisbanes.haze.hazeEffect
 import kotlin.math.max
 
 /**
- * The room under the glass: the theme's base colour with three soft pools of light (brand warm,
- * peach, a cool accent). Static on purpose: a moving backdrop would make every frosted bar
- * re-blur on every frame, and scrolling must stay smooth on mid-range phones.
+ * The room under everything: the flat neo ground, and the brand's open ring drawn very large and
+ * faint, turning slowly. One thin orange arc off the top-right corner, one fainter ink arc off the
+ * bottom-left; a turn takes a minute and a half to two and a half, so it reads as a clock face
+ * breathing, not as motion. Still when the phone's animations are off. Seen only between cards.
  */
 @Composable
 fun AuroraBackground(modifier: Modifier = Modifier) {
     val base = MaterialTheme.colorScheme.background
-    val app = LocalAppColors.current
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val still = androidx.compose.runtime.remember {
+        android.provider.Settings.Global.getFloat(
+            context.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f,
+        ) == 0f
+    }
+    val turn = androidx.compose.animation.core.rememberInfiniteTransition(label = "rings")
+    val slow by turn.animateFloat(
+        initialValue = 0f,
+        targetValue = if (still) 0f else 360f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            androidx.compose.animation.core.tween(90_000, easing = androidx.compose.animation.core.LinearEasing),
+        ),
+        label = "ring one",
+    )
+    val slower by turn.animateFloat(
+        initialValue = 0f,
+        targetValue = if (still) 0f else -360f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            androidx.compose.animation.core.tween(150_000, easing = androidx.compose.animation.core.LinearEasing),
+        ),
+        label = "ring two",
+    )
     Box(
-        // Its own layer: drawn once and reused, not redrawn as lists scroll over it.
-        modifier.fillMaxSize().graphicsLayer().drawBehind {
+        modifier.fillMaxSize().drawBehind {
             drawRect(base)
-            val r = max(size.width, size.height)
-            fun pool(color: Color, x: Float, y: Float, radius: Float) {
-                val center = Offset(size.width * x, size.height * y)
-                drawCircle(
-                    Brush.radialGradient(listOf(color, Color.Transparent), center = center, radius = r * radius),
-                    radius = r * radius,
-                    center = center,
-                )
+            fun ring(center: Offset, radius: Float, angle: Float, sweep: Float, color: Color, width: Float) {
+                rotate(angle, pivot = center) {
+                    drawArc(
+                        color = color,
+                        startAngle = -90f,
+                        sweepAngle = sweep,
+                        useCenter = false,
+                        topLeft = Offset(center.x - radius, center.y - radius),
+                        size = androidx.compose.ui.geometry.Size(radius * 2, radius * 2),
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(
+                            width = width, cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                        ),
+                    )
+                }
             }
-            // Neo-minimal: a flat ground. The pools only draw if a theme gives them colour.
-            if (app.auroraWarm.alpha > 0f) pool(app.auroraWarm, 0.05f, 0.0f, 0.62f)
-            if (app.auroraPeach.alpha > 0f) pool(app.auroraPeach, 1.0f, 0.22f, 0.55f)
-            if (app.auroraCool.alpha > 0f) pool(app.auroraCool, 0.15f, 1.0f, 0.65f)
+            val w = size.width
+            // The brand ring, huge and faint, off the top-right corner.
+            ring(Offset(w * 0.98f, size.height * 0.10f), w * 0.62f, slow, 270f, Orange.copy(alpha = 0.10f), w * 0.028f)
+            // A fine ink echo around it.
+            ring(Offset(w * 0.98f, size.height * 0.10f), w * 0.80f, slower, 200f, NeoInk.copy(alpha = 0.05f), 1.2.dp.toPx())
+            // And one off the bottom-left, fainter still.
+            ring(Offset(w * 0.04f, size.height * 0.94f), w * 0.55f, slower * 0.8f, 240f, NeoInk.copy(alpha = 0.04f), w * 0.02f)
         },
     )
 }
@@ -63,7 +97,9 @@ fun frostedStyle(): HazeStyle {
     return HazeStyle(
         backgroundColor = MaterialTheme.colorScheme.background,
         tint = HazeTint(app.glassTint),
-        blurRadius = 22.dp,
+        // A solid bar (the neo theme) needs no blur: and none means the slowly turning rings
+        // behind it never make the bar re-blur on every frame.
+        blurRadius = if (app.glassTint.alpha >= 1f) 0.dp else 22.dp,
         noiseFactor = 0f,
         fallbackTint = HazeTint(app.glassFallback.copy(alpha = 0.97f)),
     )
