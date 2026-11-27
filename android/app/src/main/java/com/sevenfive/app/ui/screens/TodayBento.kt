@@ -65,7 +65,7 @@ internal fun shortName(name: String, code: String): String {
 
 private val dayShort = DateTimeFormatter.ofPattern("EEE d", Locale.ENGLISH)
 
-/** The tall tile: how many subjects are above the line, the bars, and who needs you. */
+/** The attendance tile: how many subjects are above the line, the bars, and who needs you. */
 @Composable
 internal fun AttendanceBento(subjects: List<SubjectAttendance>, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val app = LocalAppColors.current
@@ -76,29 +76,30 @@ internal fun AttendanceBento(subjects: List<SubjectAttendance>, modifier: Modifi
         modifier
             .pressable(scaleTo = 0.97f, onClick = onClick)
             .glassSurface(shape = RoundedCornerShape(28.dp))
-            .padding(18.dp),
-        verticalArrangement = Arrangement.SpaceBetween,
+            .padding(horizontal = 18.dp, vertical = 16.dp),
     ) {
         NeoLabel("Attendance", dot = if (low) Orange else null)
+        Spacer(Modifier.weight(1f))
         Row(verticalAlignment = Alignment.Bottom) {
-            Text(if (subjects.isEmpty()) "—" else "$above", style = MaterialTheme.typography.displaySmall)
-            Text(if (subjects.isEmpty()) "" else "/${subjects.size}", style = MaterialTheme.typography.titleLarge,
-                color = app.secondaryLabel, modifier = Modifier.padding(bottom = 6.dp))
-        }
-        if (subjects.isNotEmpty()) {
-            val minimum = subjects.first().minimumPercent
-            Bars(subjects, minimum, Modifier.fillMaxWidth().height(44.dp))
+            Text(if (subjects.isEmpty()) "—" else "$above", style = MaterialTheme.typography.headlineLarge)
+            if (subjects.isNotEmpty()) {
+                Text("/${subjects.size}", style = MaterialTheme.typography.titleMedium,
+                    color = app.secondaryLabel, modifier = Modifier.padding(bottom = 4.dp))
+                Spacer(Modifier.width(12.dp))
+                Bars(subjects, subjects.first().minimumPercent, Modifier.weight(1f).height(30.dp))
+            }
         }
         Text(
             when {
                 worst == null -> "connect the portal"
-                low && worst.mustAttend > 0 -> "${shortName(worst.name, worst.code)} needs ${worst.mustAttend} more"
-                low -> "${shortName(worst.name, worst.code)} is under ${pct(worst.minimumPercent)}%"
+                low -> "${shortName(worst.name, worst.code)} needs you"
                 else -> "all above ${pct(worst.minimumPercent)}%"
             },
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodySmall,
             color = if (low) com.sevenfive.app.ui.theme.LocalStatusColors.current.short else app.secondaryLabel,
-            maxLines = 2,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 8.dp),
         )
     }
 }
@@ -125,7 +126,7 @@ private fun Bars(subjects: List<SubjectAttendance>, minimum: Double, modifier: M
     }
 }
 
-/** The wide tile: the busy stretch as a little timeline, or a calm "clear". */
+/** The busy-stretch tile: one line, a little timeline, how many of each kind; names in the sheet. */
 @Composable
 internal fun ClashBento(clash: Clash?, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val app = LocalAppColors.current
@@ -133,23 +134,30 @@ internal fun ClashBento(clash: Clash?, modifier: Modifier = Modifier, onClick: (
         modifier
             .pressable(scaleTo = 0.97f, onClick = onClick)
             .glassSurface(shape = RoundedCornerShape(28.dp))
-            .padding(18.dp),
-        verticalArrangement = Arrangement.SpaceBetween,
+            .padding(horizontal = 18.dp, vertical = 16.dp),
     ) {
         NeoLabel(if (clash == null) "This week" else "Busy stretch", dot = if (clash != null) Orange else null)
+        Spacer(Modifier.weight(1f))
         if (clash == null) {
-            Text("Nothing\nbunched up", style = MaterialTheme.typography.headlineSmall)
-            Text("deadlines are spread out", style = MaterialTheme.typography.bodyMedium, color = app.secondaryLabel)
+            Text("Spread out", style = MaterialTheme.typography.titleLarge, maxLines = 1)
+            Text("nothing bunched up", style = MaterialTheme.typography.bodySmall, color = app.secondaryLabel,
+                modifier = Modifier.padding(top = 8.dp))
             return@Column
         }
-        Text("${clash.items.size} things in ${days(clash)}", style = MaterialTheme.typography.headlineSmall, maxLines = 2)
-        Timeline(clash, Modifier.fillMaxWidth().height(34.dp))
+        Text("${clash.items.size} in ${days(clash)}", style = MaterialTheme.typography.titleLarge, maxLines = 1)
+        Timeline(clash, Modifier.fillMaxWidth().padding(top = 10.dp).height(14.dp))
+        val exams = clash.items.count { it.first.kind == "exam" }
+        val rest = clash.items.size - exams
         Text(
-            clash.items.joinToString(" · ") { (item, _) -> (item.title ?: "").substringBefore(" (").take(14) },
+            listOfNotNull(
+                exams.takeIf { it > 0 }?.let { if (it == 1) "1 exam" else "$it exams" },
+                rest.takeIf { it > 0 }?.let { if (it == 1) "1 deadline" else "$it deadlines" },
+            ).joinToString(" · ") + " · " + dayShort.format(clash.items.first().second),
             style = MaterialTheme.typography.bodySmall,
             color = app.secondaryLabel,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 8.dp),
         )
     }
 }
@@ -158,32 +166,23 @@ private fun days(clash: Clash): String {
     val first = clash.items.first().second.toLocalDate()
     val last = clash.items.last().second.toLocalDate()
     val n = java.time.temporal.ChronoUnit.DAYS.between(first, last) + 1
-    return if (n <= 1) "a day" else "$n days"
+    return if (n <= 1) "one day" else "$n days"
 }
 
-/** Dots on a line from the first to the last: exams orange, the rest ink; the days at the ends. */
+/** Dots on a line from the first to the last: exams orange, the rest ink. */
 @Composable
 private fun Timeline(clash: Clash, modifier: Modifier) {
     val app = LocalAppColors.current
     val start = clash.items.first().second
     val end = clash.items.last().second
     val span = Duration.between(start, end).toMinutes().coerceAtLeast(1).toFloat()
-    BoxWithConstraints(modifier) {
-        Canvas(Modifier.fillMaxWidth().height(14.dp)) {
-            val y = size.height / 2
-            drawLine(app.hairline, Offset(0f, y), Offset(size.width, y), strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round)
-            clash.items.forEach { (item, at) ->
-                val f = Duration.between(start, at).toMinutes() / span
-                val x = 6.dp.toPx() + f * (size.width - 12.dp.toPx())
-                drawCircle(if (item.kind == "exam") Orange else NeoInk, radius = 6.dp.toPx(), center = Offset(x, y))
-            }
-        }
-        Row(Modifier.fillMaxWidth().padding(top = 18.dp)) {
-            Text(dayShort.format(start), style = MaterialTheme.typography.labelSmall, color = app.secondaryLabel,
-                modifier = Modifier.weight(1f))
-            if (end.toLocalDate() != start.toLocalDate()) {
-                Text(dayShort.format(end), style = MaterialTheme.typography.labelSmall, color = app.secondaryLabel)
-            }
+    Canvas(modifier) {
+        val y = size.height / 2
+        drawLine(app.hairline, Offset(0f, y), Offset(size.width, y), strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round)
+        clash.items.forEach { (item, at) ->
+            val f = Duration.between(start, at).toMinutes() / span
+            val x = 5.dp.toPx() + f * (size.width - 10.dp.toPx())
+            drawCircle(if (item.kind == "exam") Orange else NeoInk, radius = 5.dp.toPx(), center = Offset(x, y))
         }
     }
 }
@@ -194,15 +193,15 @@ internal fun YourDayStrip(greeting: String, modifier: Modifier = Modifier, onCli
     Row(
         modifier
             .fillMaxWidth()
-            .height(76.dp)
+            .height(64.dp)
             .pressable(scaleTo = 0.98f, haptic = true, onClick = onClick)
-            .clip(RoundedCornerShape(38.dp))
+            .clip(RoundedCornerShape(32.dp))
             .background(NeoInk)
-            .padding(start = 10.dp, end = 22.dp),
+            .padding(start = 9.dp, end = 22.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(56.dp).clip(CircleShape).background(Orange), contentAlignment = Alignment.Center) {
-            Icon(Icons.Filled.PlayArrow, contentDescription = "Play your day", tint = NeoInk, modifier = Modifier.size(28.dp))
+        Box(Modifier.size(46.dp).clip(CircleShape).background(Orange), contentAlignment = Alignment.Center) {
+            Icon(Icons.Filled.PlayArrow, contentDescription = "Play your day", tint = NeoInk, modifier = Modifier.size(24.dp))
         }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
@@ -246,5 +245,27 @@ private fun Ring(share: Float, size: Dp) {
         val tl = Offset(stroke / 2, stroke / 2)
         drawArc(track, 0f, 360f, false, tl, box, style = Stroke(stroke))
         drawArc(NeoInk, -90f, 360f * share.coerceIn(0f, 1f), false, tl, box, style = Stroke(stroke, cap = StrokeCap.Round))
+    }
+}
+
+
+/** One quiet stat in a row of three: no box, just a small label over a value. */
+@Composable
+internal fun QuietStat(label: String, value: String, modifier: Modifier = Modifier, ring: Float? = null, onClick: () -> Unit) {
+    val app = LocalAppColors.current
+    Column(
+        modifier
+            .clip(RoundedCornerShape(16.dp))
+            .pressable(scaleTo = 0.96f, onClick = onClick)
+            .padding(vertical = 8.dp, horizontal = 4.dp),
+    ) {
+        Text(label.uppercase(), style = MaterialTheme.typography.labelSmall, color = app.secondaryLabel, maxLines = 1)
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+            Text(value, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (ring != null) {
+                Spacer(Modifier.width(6.dp))
+                Ring(ring, 14.dp)
+            }
+        }
     }
 }

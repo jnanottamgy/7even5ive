@@ -1,5 +1,6 @@
 package com.sevenfive.app.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -633,64 +634,53 @@ private fun NeedsReviewCard(item: Item, modifier: Modifier = Modifier) {
 
 // --- Today, on one screen ---------------------------------------------------------------------
 
-/** Today as a bento: tiles of different weights, each with its own picture; the details one tap away. */
+/** Today, with room to breathe: the countdown, two tiles, your day, three quiet numbers. */
 @Composable
 private fun TodayDashboard(vm: AppViewModel, cards: Cards, month: com.sevenfive.app.data.LocalLog.Month, onSheet: (String) -> Unit) {
     val nav = LocalNav.current
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    val app = LocalAppColors.current
+    Column {
         HomeHero(cards, withAttendance = false)
 
-        // A tall attendance tile beside a wide busy-stretch one.
         val clash = findClash(cards.dueThisWeek)
-        Row(Modifier.height(164.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            AttendanceBento(cards.attendance.subjects, Modifier.weight(0.42f).fillMaxHeight()) { nav(Routes.ATTENDANCE) }
-            ClashBento(clash, Modifier.weight(0.58f).fillMaxHeight()) { if (clash != null) onSheet("clash") }
+        Row(Modifier.padding(top = 18.dp).height(138.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            AttendanceBento(cards.attendance.subjects, Modifier.weight(1f).fillMaxHeight()) { nav(Routes.ATTENDANCE) }
+            ClashBento(clash, Modifier.weight(1f).fillMaxHeight()) { if (clash != null) onSheet("clash") }
         }
 
-        // The one dark strip: your day, read aloud.
         val hour = java.time.LocalTime.now().hour
         val first = cards.student?.name?.substringBefore(' ')?.takeIf { it.isNotBlank() }
         val greeting = (if (hour < 12) "Good morning" else if (hour < 17) "Good afternoon" else "Good evening") +
             (first?.let { ", $it." } ?: ".")
-        YourDayStrip(greeting) { onSheet("briefing") }
+        YourDayStrip(greeting, Modifier.padding(top = 18.dp)) { onSheet("briefing") }
 
-        // Three small chips.
+        // Three quiet numbers, no boxes.
         val now by com.sevenfive.app.ui.components.rememberNow(30_000L)
-        val nextReminder = cards.reminders
-            .mapNotNull { r -> Time.parse(r.firesAt)?.let { r to it } }
-            .filter { it.second.toInstant().isAfter(now) }
-            .minByOrNull { it.second }
         val today = java.time.LocalTime.now()
         val left = if (cards.timetable.connected) Week.on(cards.timetable.data, java.time.LocalDate.now().dayOfWeek)
             .filter { slot -> Week.time(slot.end)?.isAfter(today) ?: true } else emptyList()
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            MiniBento(
-                "Reminders",
-                if (cards.reminders.isEmpty()) "None" else "${cards.reminders.size}",
-                nextReminder?.let { "next ${Time.until(it.second, now)}" } ?: "tap to see",
-                Modifier.weight(1f),
-            ) { nav(Routes.REMINDERS) }
-            MiniBento(
+        Row(Modifier.padding(top = 20.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            QuietStat("Reminders", if (cards.reminders.isEmpty()) "None" else "${cards.reminders.size} set", Modifier.weight(1f)) {
+                nav(Routes.REMINDERS)
+            }
+            Box(Modifier.width(1.dp).height(28.dp).background(app.hairline))
+            QuietStat(
                 "Classes",
                 when {
                     !cards.timetable.connected -> "—"
                     left.isEmpty() -> "Free"
                     else -> "${left.size} left"
                 },
-                left.firstOrNull()?.let { "next ${Time.hourMinute(it.start.take(5))}" }
-                    ?: if (cards.timetable.connected) "done for today" else "connect portal",
-                Modifier.weight(1f),
+                Modifier.weight(1f).padding(start = 14.dp),
             ) { nav(Routes.TIMETABLE) }
-            MiniBento(
+            Box(Modifier.width(1.dp).height(28.dp).background(app.hairline))
+            QuietStat(
                 "On time",
                 if (month.total > 0) "${month.onTime}/${month.total}" else "—",
-                "this month",
-                Modifier.weight(1f),
+                Modifier.weight(1f).padding(start = 14.dp),
                 ring = if (month.total > 0) month.onTime.toFloat() / month.total else null,
             ) { onSheet("ontime") }
         }
-
-        AskBar()
     }
 }
 
