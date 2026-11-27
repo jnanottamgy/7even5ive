@@ -139,8 +139,8 @@ class MainActivity : ComponentActivity() {
         /** The portal refresh (its upload goes to the server) waits a moment after the outbox pull. */
         const val PORTAL_AFTER_MILLIS = 2_000L
         /** The opening screen stays at least this long (the ring's draw), then up to EXTRA more. */
-        const val OPENING_MIN_MILLIS = 1_500L
-        const val OPENING_EXTRA_MILLIS = 1_500L
+        const val OPENING_MIN_MILLIS = 3_000L
+        const val OPENING_EXTRA_MILLIS = 2_000L
     }
 
     private fun gate(state: AccountState): Gate = when (state) {
