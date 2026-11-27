@@ -364,7 +364,7 @@ private fun GlassTabBar(haze: HazeState, selected: Int, badge: (Tab) -> Int, onS
             .height(64.dp)
             .frosted(haze, CircleShape),
     ) {
-        // Neo-minimal: words only. The current tab is ink with one orange dot above it.
+        // Neo-minimal: an icon and a word per tab; the current one in ink with an orange dot.
         val itemWidth = maxWidth / tabs.size
         Row(Modifier.fillMaxSize()) {
             tabs.forEachIndexed { index, tab ->
@@ -386,21 +386,13 @@ private fun GlassTabBar(haze: HazeState, selected: Int, badge: (Tab) -> Int, onS
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    Box(
-                        Modifier
-                            .size(5.dp)
-                            .graphicsLayer { alpha = lift; scaleX = lift; scaleY = lift }
-                            .background(com.sevenfive.app.ui.theme.Orange, CircleShape),
-                    )
-                    Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.Top) {
-                        Text(
-                            tab.label,
-                            color = tint,
-                            fontSize = 12.5.sp,
-                            lineHeight = 15.sp,
-                            fontFamily = com.sevenfive.app.ui.theme.Neo,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 1,
+                    // An icon over a word: filled and ink when current, outlined and grey when not.
+                    Box {
+                        Icon(
+                            if (on) tab.on else tab.off,
+                            contentDescription = null,
+                            tint = tint,
+                            modifier = Modifier.size(22.dp),
                         )
                         val count = badge(tab)
                         if (count > 0) {
@@ -411,13 +403,32 @@ private fun GlassTabBar(haze: HazeState, selected: Int, badge: (Tab) -> Int, onS
                                 lineHeight = 10.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 modifier = Modifier
-                                    .padding(start = 3.dp)
-                                    .defaultMinSize(minWidth = 14.dp)
+                                    .align(Alignment.TopEnd)
+                                    .offset(x = 9.dp, y = (-4).dp)
+                                    .defaultMinSize(minWidth = 15.dp)
                                     .background(com.sevenfive.app.ui.theme.Orange, CircleShape)
                                     .padding(horizontal = 3.dp, vertical = 1.dp),
                             )
                         }
                     }
+                    Text(
+                        tab.label,
+                        color = tint,
+                        fontSize = 11.5.sp,
+                        lineHeight = 14.sp,
+                        fontFamily = com.sevenfive.app.ui.theme.Neo,
+                        fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium,
+                        maxLines = 1,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                    // The one orange touch: a small dot under the current tab.
+                    Box(
+                        Modifier
+                            .padding(top = 4.dp)
+                            .size(4.dp)
+                            .graphicsLayer { alpha = lift; scaleX = lift; scaleY = lift }
+                            .background(com.sevenfive.app.ui.theme.Orange, CircleShape),
+                    )
                 }
             }
         }

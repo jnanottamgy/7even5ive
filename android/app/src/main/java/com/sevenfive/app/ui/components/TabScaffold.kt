@@ -77,9 +77,6 @@ fun TabScaffold(
     val searching by vm.searching.collectAsStateWithLifecycle()
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val haze = rememberHazeState()
-    val scope = rememberCoroutineScope()
-    val pullState = rememberPullToRefreshState()
-    var pulling by remember { mutableStateOf(false) }
     val bottomInset = LocalBottomInset.current
     val app = LocalAppColors.current
 
@@ -165,30 +162,9 @@ fun TabScaffold(
     ) { inner ->
         Box(Modifier.fillMaxSize().hazeSource(haze)) {
             AuroraBackground()
-            PullToRefreshBox(
-                isRefreshing = pulling,
-                onRefresh = {
-                    pulling = true
-                    scope.launch {
-                        val started = System.currentTimeMillis()
-                        vm.container.cards.refresh(wait = true)
-                        // A laptop or a warm Lambda answers in tens of ms: without a floor the
-                        // spinner pops up and snaps away before it can be seen turning.
-                        val shown = System.currentTimeMillis() - started
-                        if (shown < MIN_SPINNER_MILLIS) delay(MIN_SPINNER_MILLIS - shown)
-                        pulling = false
-                    }
-                },
-                state = pullState,
-                modifier = Modifier.fillMaxSize(),
-                indicator = {
-                    PullToRefreshDefaults.Indicator(
-                        state = pullState,
-                        isRefreshing = pulling,
-                        modifier = Modifier.align(Alignment.TopCenter).padding(top = inner.calculateTopPadding()),
-                    )
-                },
-            ) {
+            // No pull-to-refresh: the cards refresh on their own, and a first load shows a
+            // skeleton of the screen instead of a spinner.
+            Box(Modifier.fillMaxSize()) {
                 content(
                     PaddingValues(
                         start = 16.dp,

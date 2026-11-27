@@ -306,10 +306,13 @@ private fun GlanceTile(value: String, label: String, color: Color, modifier: Mod
 
 @Composable
 internal fun LoadingOrError(loading: Boolean, padding: PaddingValues) {
+    // Neo-minimal: a skeleton of the screen while the first cards arrive, never a spinner.
+    if (loading) {
+        com.sevenfive.app.ui.components.SkeletonScreen(padding)
+        return
+    }
     Box(Modifier.fillMaxWidth().padding(padding).padding(top = 56.dp), contentAlignment = Alignment.TopCenter) {
-        if (loading) {
-            CircularProgressIndicator(strokeWidth = 3.dp, color = MaterialTheme.colorScheme.primary)
-        } else {
+        run {
             EmptyState(
                 Icons.AutoMirrored.Outlined.HelpOutline,
                 "No cards yet",
