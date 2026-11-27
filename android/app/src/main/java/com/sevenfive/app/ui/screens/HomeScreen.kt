@@ -48,6 +48,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.foundation.layout.fillMaxSize
 import com.sevenfive.app.ui.components.segmentSlide
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -112,11 +113,16 @@ fun HomeScreen(vm: AppViewModel, onSettings: () -> Unit) {
     }
 
     var segment by rememberSaveable { mutableIntStateOf(0) }
+    // A tile's details, pulled up over Today: "clash", "briefing" or "ontime".
+    var sheet by rememberSaveable { mutableStateOf<String?>(null) }
     // The on-time record: every deadline this phone sees is noted, done or not.
     val context = LocalContext.current
     val sid = cards?.student?.id ?: 0
     LaunchedEffect(sid, due) { if (cards != null) com.sevenfive.app.data.LocalLog.noteSeen(context, sid, due) }
     val month = remember(sid, due, cards?.reminders) { com.sevenfive.app.data.LocalLog.thisMonth(context, sid) }
+    sheet?.let { which ->
+        cards?.let { c -> TodaySheet(which, vm, c) { sheet = null } }
+    }
     TabScaffold(if (name != null) "Hi, $name" else "This week", vm, onSettings) { padding ->
         if (cards == null) {
             LoadingOrError(state.loading, padding)
@@ -139,21 +145,8 @@ fun HomeScreen(vm: AppViewModel, onSettings: () -> Unit) {
                 modifier = Modifier.fillMaxSize().segmentSlide(segment),
             ) {                when (segment) {
                     0 -> {
-                        // The next thing due, huge, then the day.
-                        item(key = "hero") { HomeHero(cards, Modifier.animateItem(placementSpec = Motion.item)) }
-                    findClash(cards.dueThisWeek)?.let { clash ->
-                        item(key = "clash") { ClashCard(clash, Modifier.animateItem(placementSpec = Motion.item)) }
-                    }
-                        item(key = "ask") { AskBar(Modifier.animateItem(placementSpec = Motion.item)) }
-                        item(key = "reminders") {
-                            val nav = LocalNav.current
-                            RemindersEntry(cards.reminders, Modifier.animateItem(placementSpec = Motion.item)) { nav(Routes.REMINDERS) }
-                        }
-                        if (month.total > 0) {
-                        item(key = "done-history") { DoneHistory(month, Modifier.animateItem(placementSpec = Motion.item)) }
-                    }
-                    item(key = "briefing") { BriefingCard(vm, Modifier.animateItem(placementSpec = Motion.item)) }
-                        item(key = "today") { Today(cards, Modifier.animateItem(placementSpec = Motion.item)) }
+                        // One screen, no scrolling: the countdown, six tiles, Ask. Each tile opens the rest.
+                        item(key = "dashboard") { TodayDashboard(vm, cards, month) { sheet = it } }
                     }
                     1 -> {
                         item(key = "intro") { ScreenIntro(subtitle) }
@@ -622,6 +615,146 @@ private fun NeedsReviewCard(item: Item, modifier: Modifier = Modifier) {
                 style = MaterialTheme.typography.bodySmall,
                 color = app.secondaryLabel,
             )
+        }
+    }
+}
+
+
+// --- Today, on one screen ---------------------------------------------------------------------
+
+/** Today's tiles: a short headline each, the details one tap away. */
+@Composable
+private fun TodayDashboard(vm: AppViewModel, cards: Cards, month: com.sevenfive.app.data.LocalLog.Month, onSheet: (String) -> Unit) {
+    val nav = LocalNav.current
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        HomeHero(cards, withAttendance = false)
+
+        // Attendance and the busy stretch.
+        val subjects = cards.attendance.subjects
+        val above = subjects.count { it.percent >= it.minimumPercent }
+        val worst = subjects.minByOrNull { it.percent }
+        val low = worst != null && worst.percent < worst.minimumPercent
+        val clash = findClash(cards.dueThisWeek)
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Tile(
+                "Attendance",
+                if (subjects.isEmpty()) "—" else "$above/${subjects.size}",
+                if (low) "${worst!!.code} below ${pct(worst.minimumPercent)}%" else "above ${pct(worst?.minimumPercent ?: 75.0)}%",
+                Modifier.weight(1f),
+                dot = low,
+            ) { nav(Routes.ATTENDANCE) }
+            Tile(
+                "Busy stretch",
+                if (clash == null) "Clear" else "${clash.items.size} things",
+                clash?.title?.substringBefore(':') ?: "no clashes this week",
+                Modifier.weight(1f),
+                dot = clash != null,
+            ) { if (clash != null) onSheet("clash") }
+        }
+
+        // Reminders and the morning briefing.
+        val now by com.sevenfive.app.ui.components.rememberNow(30_000L)
+        val nextReminder = cards.reminders
+            .mapNotNull { r -> Time.parse(r.firesAt)?.let { r to it } }
+            .filter { it.second.toInstant().isAfter(now) }
+            .minByOrNull { it.second }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Tile(
+                "Reminders",
+                "${cards.reminders.size}",
+                nextReminder?.let { "next ${Time.until(it.second, now)}" } ?: "none set",
+                Modifier.weight(1f),
+            ) { nav(Routes.REMINDERS) }
+            Tile("Your day", "Listen", "the briefing, read aloud", Modifier.weight(1f), icon = Icons.Filled.PlayArrow) { onSheet("briefing") }
+        }
+
+        // Classes and the on-time record.
+        val today = java.time.LocalTime.now()
+        val left = if (cards.timetable.connected) Week.on(cards.timetable.data, java.time.LocalDate.now().dayOfWeek)
+            .filter { slot -> Week.time(slot.end)?.isAfter(today) ?: true } else emptyList()
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Tile(
+                "Classes",
+                when {
+                    !cards.timetable.connected -> "—"
+                    left.isEmpty() -> "Done"
+                    else -> "${left.size} left"
+                },
+                left.firstOrNull()?.let { "next ${Time.hourMinute(it.start.take(5))} · ${cards.subjectName(it.code)}" }
+                    ?: if (cards.timetable.connected) "no more today" else "connect the portal",
+                Modifier.weight(1f),
+            ) { nav(Routes.TIMETABLE) }
+            Tile(
+                "On time",
+                if (month.total > 0) "${month.onTime}/${month.total}" else "—",
+                if (month.total > 0) "deadlines this month" else "counts as you mark done",
+                Modifier.weight(1f),
+            ) { onSheet("ontime") }
+        }
+
+        AskBar()
+    }
+}
+
+/** One tile: a small label, one big value, one quiet line. Same size as its neighbour. */
+@Composable
+private fun Tile(
+    label: String,
+    value: String,
+    caption: String,
+    modifier: Modifier = Modifier,
+    dot: Boolean = false,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    onClick: () -> Unit,
+) {
+    val app = LocalAppColors.current
+    Column(
+        modifier
+            .height(104.dp)
+            .pressable(scaleTo = 0.97f, onClick = onClick)
+            .glassSurface(shape = MaterialTheme.shapes.large)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.SpaceBetween,
+    ) {
+        NeoLabel(label, dot = if (dot) com.sevenfive.app.ui.theme.Orange else null)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (icon != null) {
+                Icon(icon, contentDescription = null, modifier = Modifier.size(24.dp))
+                Spacer(Modifier.width(4.dp))
+            }
+            Text(value, style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Text(caption, style = MaterialTheme.typography.bodySmall, color = app.secondaryLabel, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** A tile's full details, pulled up from the bottom. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun TodaySheet(which: String, vm: AppViewModel, cards: Cards, onClose: () -> Unit) {
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onClose,
+        containerColor = MaterialTheme.colorScheme.background,
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .verticalScroll(androidx.compose.foundation.rememberScrollState())
+                .padding(start = 16.dp, end = 16.dp, bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            when (which) {
+                "clash" -> findClash(cards.dueThisWeek)?.let { ClashCard(it) }
+                "briefing" -> BriefingCard(vm)
+                "ontime" -> {
+                    NeoLabel("On time")
+                    Text(
+                        "Every deadline and exam this phone sees is counted once its time comes. It's on time if you " +
+                            "marked it done in the app before it was due. Kept on this phone only.",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
+            }
         }
     }
 }

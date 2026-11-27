@@ -17,7 +17,7 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -75,7 +75,7 @@ fun TabScaffold(
 ) {
     val state by vm.cards.collectAsStateWithLifecycle()
     val searching by vm.searching.collectAsStateWithLifecycle()
-    val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val scroll = TopAppBarDefaults.pinnedScrollBehavior()
     val haze = rememberHazeState()
     val bottomInset = LocalBottomInset.current
     val app = LocalAppColors.current
@@ -86,11 +86,11 @@ fun TabScaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             Column(Modifier.hazeEffect(state = haze, style = frostedStyle()) {
-                alpha = scroll.state.collapsedFraction
+                alpha = scroll.state.overlappedFraction
                 inputScale = HazeInputScale.Auto
             }) {
-                LargeTopAppBar(
-                    title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                TopAppBar(
+                    title = { Text(title, style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     actions = {
                         // The AI's button lives in the tab bar now (the orange one in the middle).
                         val nav = LocalNav.current
@@ -126,7 +126,7 @@ fun TabScaffold(
                         }
                     },
                     scrollBehavior = scroll,
-                    colors = TopAppBarDefaults.largeTopAppBarColors(
+                    colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = Color.Transparent,
                         scrolledContainerColor = Color.Transparent,
                     ),
@@ -137,7 +137,7 @@ fun TabScaffold(
                     Modifier
                         .fillMaxWidth()
                         .height(0.6.dp)
-                        .graphicsLayer { alpha = scroll.state.collapsedFraction }
+                        .graphicsLayer { alpha = scroll.state.overlappedFraction }
                         .background(app.hairline),
                 )
             }

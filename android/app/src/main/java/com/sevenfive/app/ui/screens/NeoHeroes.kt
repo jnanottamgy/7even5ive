@@ -83,13 +83,13 @@ private fun dayWord(date: LocalDate, today: LocalDate = LocalDate.now()): String
 
 /** Home: the next thing due, huge; then attendance in one line and five small bars. */
 @Composable
-internal fun HomeHero(cards: Cards, modifier: Modifier = Modifier) {
+internal fun HomeHero(cards: Cards, modifier: Modifier = Modifier, withAttendance: Boolean = true) {
     val app = LocalAppColors.current
     val zone = ZoneId.systemDefault()
     val next = cards.dueThisWeek
         .mapNotNull { item -> Time.parse(item.dueAt)?.let { item to it.atZoneSameInstant(zone) } }
         .minByOrNull { it.second }
-    Column(modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp)) {
+    Column(modifier.fillMaxWidth().padding(top = 6.dp, bottom = 4.dp)) {
         if (next != null) {
             val (item, at) = next
             // Real time: a countdown that ticks every second, not a fixed clock time.
@@ -97,25 +97,27 @@ internal fun HomeHero(cards: Cards, modifier: Modifier = Modifier) {
             val days = java.time.Duration.between(now, at.toInstant()).toDays()
             val countdown = Time.countdown(at.toOffsetDateTime(), now)
             NeoLabel("Next · due ${dayWord(at.toLocalDate()).lowercase(Locale.ENGLISH)}", dot = Orange)
-            com.sevenfive.app.ui.components.RollingText(
-                if (days > 0) countdown.replaceFirst(" ", "\n") else countdown,
-                style = MaterialTheme.typography.displayMedium.copy(fontFeatureSettings = "tnum"),
-                modifier = Modifier
-                    .padding(top = 10.dp)
-                    .semantics(mergeDescendants = true) { contentDescription = "Time left: $countdown" },
-            )
-            Text(
-                if (countdown == "now") "due now" else "left",
-                style = MaterialTheme.typography.titleMedium,
-                color = app.secondaryLabel,
-                modifier = Modifier.padding(top = 2.dp),
-            )
+            Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.Bottom) {
+                com.sevenfive.app.ui.components.RollingText(
+                    countdown,
+                    // Days make it longer: one size down so it still fits on one line.
+                    style = (if (days > 0) MaterialTheme.typography.displaySmall else MaterialTheme.typography.displayMedium)
+                        .copy(fontFeatureSettings = "tnum"),
+                    modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = "Time left: $countdown" },
+                )
+                Text(
+                    if (countdown == "now") " due now" else " left",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = app.secondaryLabel,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+            }
             Text(
                 item.title ?: kindStyle(item.kind).label,
                 style = MaterialTheme.typography.titleLarge,
-                maxLines = 2,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 16.dp),
+                modifier = Modifier.padding(top = 6.dp),
             )
             Text(
                 listOfNotNull(item.subject, kindStyle(item.kind).label).joinToString(" · "),
@@ -131,7 +133,7 @@ internal fun HomeHero(cards: Cards, modifier: Modifier = Modifier) {
         }
 
         val subjects = cards.attendance.subjects
-        if (subjects.isNotEmpty()) {
+        if (withAttendance && subjects.isNotEmpty()) {
             val minimum = subjects.first().minimumPercent
             val above = subjects.count { it.percent >= it.minimumPercent }
             Row(Modifier.fillMaxWidth().padding(top = 34.dp), verticalAlignment = Alignment.Bottom) {
