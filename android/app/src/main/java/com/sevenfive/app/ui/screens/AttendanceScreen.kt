@@ -28,6 +28,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -74,30 +77,41 @@ fun AttendanceScreen(vm: AppViewModel, onSettings: () -> Unit, onPortal: () -> U
     val attendance = state.cards?.attendance
 
     val nav = com.sevenfive.app.ui.LocalNav.current
+    var segment by rememberSaveable { mutableIntStateOf(0) }
     TabScaffold("Attendance", vm, onSettings) { padding ->
         if (attendance == null) {
             LoadingOrError(state.loading, padding)
             return@TabScaffold
         }
         val subjects = worstFirst(attendance.subjects)
+        val segments = listOf(Segment("Overview"), Segment("Subjects", subjects.size), Segment("Portal"))
         LazyColumn(contentPadding = padding, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            subjects.firstOrNull()?.let { worst ->
-                item(key = "hero") { AttendanceHero(worst, Modifier.animateItem(placementSpec = Motion.item)) }
-            }
-            item(key = "tiles") { CollegeTiles(nav, Modifier.animateItem(placementSpec = Motion.item)) }
-            item(key = "portal") { PortalCard(attendance, portal, onPortal, Modifier.animateItem(placementSpec = Motion.item)) }
-            if (subjects.isNotEmpty()) {
-                val short = subjects.count { it.status == "short" || it.status == "unrecoverable" }
-                item(key = "header") {
-                    SectionHeader(
-                        if (short == 0) "All subjects" else "$short below ${minimumOf(subjects)}%",
-                        Modifier.animateItem(placementSpec = Motion.item),
-                    )
+            item(key = "segments") { NeoSegments(segments, segment) { segment = it } }
+            when (segment) {
+                0 -> {
+                    subjects.firstOrNull()?.let { worst ->
+                        item(key = "hero") { AttendanceHero(worst, Modifier.animateItem(placementSpec = Motion.item)) }
+                    }
+                    item(key = "tiles") { CollegeTiles(nav, Modifier.animateItem(placementSpec = Motion.item)) }
                 }
-                // A code can repeat (a theory and a lab paper, or a portal page with no codes).
-                val keys = uniqueKeys(subjects) { it.code }
-                itemsIndexed(subjects, key = { i, _ -> keys[i] }) { _, subject ->
-                    SubjectCard(subject, Modifier.animateItem(placementSpec = Motion.item))
+                1 -> {
+                    if (subjects.isNotEmpty()) {
+                        val short = subjects.count { it.status == "short" || it.status == "unrecoverable" }
+                        item(key = "header") {
+                            SectionHeader(
+                                if (short == 0) "All subjects" else "$short below ${minimumOf(subjects)}%",
+                                Modifier.animateItem(placementSpec = Motion.item),
+                            )
+                        }
+                        // A code can repeat (a theory and a lab paper, or a portal page with no codes).
+                        val keys = uniqueKeys(subjects) { it.code }
+                        itemsIndexed(subjects, key = { i, _ -> keys[i] }) { _, subject ->
+                            SubjectCard(subject, Modifier.animateItem(placementSpec = Motion.item))
+                        }
+                    }
+                }
+                else -> {
+                    item(key = "portal") { PortalCard(attendance, portal, onPortal, Modifier.animateItem(placementSpec = Motion.item)) }
                 }
             }
         }

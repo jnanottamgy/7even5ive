@@ -18,6 +18,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
@@ -70,6 +73,7 @@ fun InboxScreen(vm: AppViewModel, onSettings: () -> Unit) {
     val checking by vm.checkingMail.collectAsStateWithLifecycle()
     val cards = state.cards
 
+    var segment by rememberSaveable { mutableIntStateOf(0) }
     TabScaffold("Inbox", vm, onSettings) { padding ->
         if (cards == null) {
             LoadingOrError(state.loading, padding)
@@ -78,19 +82,35 @@ fun InboxScreen(vm: AppViewModel, onSettings: () -> Unit) {
         val mailCards = cards.opportunities.filter { it.fromMail }
         val others = cards.opportunities.filterNot { it.fromMail }.sortedByDescending { it.relevance ?: 0.0 }
         val app = LocalAppColors.current
+        val segments = listOf(Segment("Overview"), Segment("Mail", mailCards.size), Segment("Other", others.size))
         LazyColumn(contentPadding = padding, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            item(key = "hero") {
-                InboxHero(mailCards.size + others.size, cards.filtered, Modifier.animateItem(placementSpec = Motion.item))
-            }
-            item(key = "mailbox") { MailboxCard(cards.mail, checking, Modifier.animateItem(placementSpec = Motion.item)) { vm.checkMail() } }
-            if (mailCards.isEmpty() && others.isEmpty()) {
-                item(key = "empty") {
-                    EmptyState(Icons.Outlined.MarkEmailRead, "Nothing worth your time yet",
-                        "Real placements, internships and exam notices from college mail show up here.")
+            item(key = "segments") { NeoSegments(segments, segment) { segment = it } }
+            when (segment) {
+                0 -> {
+                    item(key = "hero") {
+                        InboxHero(mailCards.size + others.size, cards.filtered, Modifier.animateItem(placementSpec = Motion.item))
+                    }
+                    item(key = "mailbox") { MailboxCard(cards.mail, checking, Modifier.animateItem(placementSpec = Motion.item)) { vm.checkMail() } }
+                }
+                1 -> {
+                    if (mailCards.isEmpty()) {
+                        item(key = "empty-mail") {
+                            EmptyState(Icons.Outlined.MarkEmailRead, "Nothing from college mail yet",
+                                "Real placements, internships and exam notices from college mail show up here.")
+                        }
+                    }
+                    items(mailCards, key = { "m-${it.id}" }) { MailCard(it, Modifier.animateItem(placementSpec = Motion.item)) }
+                }
+                else -> {
+                    if (others.isEmpty()) {
+                        item(key = "empty-other") {
+                            EmptyState(Icons.Outlined.MarkEmailRead, "Nothing else worth your time",
+                                "Events and opportunities from your groups and Classroom show up here.")
+                        }
+                    }
+                    items(others, key = { "o-${it.id}" }) { OpportunityCard(it, Modifier.animateItem(placementSpec = Motion.item)) }
                 }
             }
-            items(mailCards, key = { "m-${it.id}" }) { MailCard(it, Modifier.animateItem(placementSpec = Motion.item)) }
-            items(others, key = { "o-${it.id}" }) { OpportunityCard(it, Modifier.animateItem(placementSpec = Motion.item)) }
         }
     }
 }

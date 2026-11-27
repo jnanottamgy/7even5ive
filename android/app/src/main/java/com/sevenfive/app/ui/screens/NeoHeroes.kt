@@ -1,6 +1,7 @@
 package com.sevenfive.app.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -25,6 +26,8 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -229,5 +232,61 @@ internal fun InboxHero(worth: Int, filtered: Int, modifier: Modifier = Modifier)
             color = app.secondaryLabel,
             modifier = Modifier.padding(top = 4.dp),
         )
+    }
+}
+
+/** One segment of a tab: its name and, when it has any, how many things are in it. */
+internal data class Segment(val label: String, val count: Int = 0)
+
+/**
+ * The segmented control that organises a tab into a few short pages instead of one long scroll.
+ * The current segment is an ink pill; the rest are quiet words.
+ */
+@Composable
+internal fun NeoSegments(segments: List<Segment>, selected: Int, modifier: Modifier = Modifier, onSelect: (Int) -> Unit) {
+    val app = LocalAppColors.current
+    Row(
+        modifier
+            .fillMaxWidth()
+            .padding(top = 2.dp, bottom = 6.dp)
+            .clip(CircleShape)
+            .background(app.glassFill)
+            .padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        segments.forEachIndexed { i, seg ->
+            val on = i == selected
+            Row(
+                Modifier
+                    .weight(1f)
+                    .height(40.dp)
+                    .clip(CircleShape)
+                    .background(if (on) NeoInk else Color.Transparent)
+                    .semantics(mergeDescendants = true) {
+                        this.selected = on
+                        role = androidx.compose.ui.semantics.Role.Tab
+                    }
+                    .clickable { onSelect(i) },
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    seg.label,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = if (on) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Medium,
+                    color = if (on) com.sevenfive.app.ui.theme.NeoGround else NeoInk,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (seg.count > 0) {
+                    Spacer(Modifier.width(5.dp))
+                    Text(
+                        if (seg.count > 99) "99+" else "${seg.count}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (on) Orange else app.secondaryLabel,
+                    )
+                }
+            }
+        }
     }
 }

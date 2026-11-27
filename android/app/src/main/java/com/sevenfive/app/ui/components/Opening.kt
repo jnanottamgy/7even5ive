@@ -3,6 +3,7 @@ package com.sevenfive.app.ui.components
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -24,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -48,14 +50,18 @@ private const val LETTER_STEP = 80f
 private const val LETTER_MS = 240f
 private const val SENTENCE = "Your semester, sorted."
 private const val ORANGE_FROM = 15 // "sorted." is the orange part
+/** "sorted." swipes in from the right edge once the letters before it are in. */
+private const val SORTED_AT = 2_200f
+private const val SORTED_MS = 650f
 
 /** 0 before [start], 1 after [start] + [length], eased in between. */
 private fun phase(t: Float, start: Float, length: Float): Float =
     FastOutSlowInEasing.transform(((t - start) / length).coerceIn(0f, 1f))
 
 /**
- * The opening screen, neo-minimal: the brand's ring draws itself in orange, the wordmark rises,
- * then "Your semester, sorted." arrives one letter at a time, "sorted." in orange. The whole
+ * The opening screen, neo-minimal: the brand's ring draws itself in orange, the wordmark slides in
+ * from the left, "Your semester," arrives left to right one letter at a time, and "sorted.", in
+ * orange, swipes in from the right edge of the screen. The whole
  * sequence takes [OPENING_SEQUENCE_MILLIS]; [onFinished] is called the moment it ends.
  */
 @Composable
@@ -101,29 +107,41 @@ fun OpeningScreen(modifier: Modifier = Modifier, onFinished: () -> Unit = {}) {
                     .padding(top = 28.dp)
                     .graphicsLayer {
                         alpha = words
-                        translationY = (1f - words) * 18.dp.toPx()
+                        translationX = -(1f - words) * 28.dp.toPx()
                     },
             )
-            // One letter at a time. Read out once, as the whole sentence.
+            // Left to right, one letter at a time; then "sorted." swipes in from the right edge
+            // of the screen. Read out once, as the whole sentence.
+            val screenWidth = LocalConfiguration.current.screenWidthDp.dp
             Row(
                 Modifier
                     .padding(top = 8.dp)
                     .clearAndSetSemantics { contentDescription = SENTENCE },
             ) {
-                SENTENCE.forEachIndexed { i, ch ->
+                SENTENCE.substring(0, ORANGE_FROM).forEachIndexed { i, ch ->
                     val a = phase(t, LETTERS_AT + i * LETTER_STEP, LETTER_MS)
                     Text(
                         ch.toString(),
                         style = MaterialTheme.typography.titleLarge,
-                        fontWeight = if (i >= ORANGE_FROM) FontWeight.SemiBold else FontWeight.Medium,
-                        // A deeper orange than the ring, so the word stays readable on the light ground.
-                        color = if (i >= ORANGE_FROM) Color(0xFFE0670A) else app.secondaryLabel,
+                        color = app.secondaryLabel,
                         modifier = Modifier.graphicsLayer {
                             alpha = a
-                            translationY = (1f - a) * 10.dp.toPx()
+                            translationX = -(1f - a) * 12.dp.toPx()
                         },
                     )
                 }
+                val swipe = LinearOutSlowInEasing.transform(((t - SORTED_AT) / SORTED_MS).coerceIn(0f, 1f))
+                Text(
+                    SENTENCE.substring(ORANGE_FROM),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    // A deeper orange than the ring, so the word stays readable on the light ground.
+                    color = Color(0xFFE0670A),
+                    modifier = Modifier.graphicsLayer {
+                        alpha = if (t < SORTED_AT) 0f else 1f
+                        translationX = (1f - swipe) * screenWidth.toPx()
+                    },
+                )
             }
         }
         Text(
