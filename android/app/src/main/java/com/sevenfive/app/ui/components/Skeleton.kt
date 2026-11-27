@@ -85,7 +85,6 @@ fun SkeletonScreen(padding: PaddingValues, modifier: Modifier = Modifier) {
         modifier
             .fillMaxWidth()
             .padding(padding)
-            .padding(horizontal = 4.dp)
             .semantics { contentDescription = "Loading" },
     ) {
         Spacer(Modifier.height(14.dp))

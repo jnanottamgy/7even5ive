@@ -130,6 +130,10 @@ fun HomeScreen(vm: AppViewModel, onSettings: () -> Unit) {
                     // The next thing due, huge, then the day.
                     item(key = "hero") { HomeHero(cards, Modifier.animateItem(placementSpec = Motion.item)) }
                     item(key = "ask") { AskBar(Modifier.animateItem(placementSpec = Motion.item)) }
+                    item(key = "reminders") {
+                        val nav = LocalNav.current
+                        RemindersEntry(cards.reminders, Modifier.animateItem(placementSpec = Motion.item)) { nav(Routes.REMINDERS) }
+                    }
                     item(key = "briefing") { BriefingCard(vm, Modifier.animateItem(placementSpec = Motion.item)) }
                     item(key = "today") { Today(cards, Modifier.animateItem(placementSpec = Motion.item)) }
                 }

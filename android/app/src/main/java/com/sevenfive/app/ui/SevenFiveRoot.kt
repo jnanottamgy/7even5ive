@@ -72,6 +72,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -154,13 +156,12 @@ private val tabs = listOf(
     Tab(Routes.ATTENDANCE, "Attendance", Icons.Filled.PieChart, Icons.Outlined.PieChart),
     Tab(Routes.MATERIALS, "Files", Icons.AutoMirrored.Filled.LibraryBooks, Icons.AutoMirrored.Outlined.LibraryBooks),
     Tab(Routes.INBOX, "Inbox", Icons.Filled.Inbox, Icons.Outlined.Inbox),
-    Tab(Routes.REMINDERS, "Reminders", Icons.Filled.Alarm, Icons.Outlined.Alarm),
 )
 
 /** Screens pushed on top of the tabs: they slide in from the right, like an iOS navigation stack. */
 private val pushed = setOf(
     Routes.SETTINGS, Routes.PORTAL, Routes.PORTAL_CHECK, Routes.VOICE, Routes.PROFILE, Routes.SEARCH, Routes.ASK,
-    Routes.AI_LOG, Routes.PLANNER, Routes.TIMETABLE, Routes.GRADES,
+    Routes.AI_LOG, Routes.PLANNER, Routes.TIMETABLE, Routes.GRADES, Routes.REMINDERS,
 )
 
 @Composable
@@ -232,7 +233,10 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
                 exit = slideOutVertically(spring(stiffness = Spring.StiffnessMedium)) { it } + fadeOut(),
             ) {
                 Column(
-                    Modifier.navigationBarsPadding().padding(start = 14.dp, end = 14.dp, bottom = 8.dp),
+                    Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.background)
+                        .navigationBarsPadding(),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     AnimatedVisibility(
@@ -248,6 +252,7 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
                                 onNext = { vm.tourNext() },
                                 onAct = { vm.tourAct() },
                                 onClose = { vm.endTour() },
+                                modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 8.dp),
                             )
                         }
                     }
@@ -257,7 +262,6 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
                         badge = { tab ->
                             when (tab.route) {
                                 Routes.HOME -> state.cards?.approvals?.size ?: 0
-                                Routes.REMINDERS -> state.cards?.reminders?.size ?: 0
                                 else -> 0
                             }
                         },
@@ -287,7 +291,7 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
                     composable(Routes.ATTENDANCE) { AttendanceScreen(vm, settings, onPortal = { nav.navigate(Routes.PORTAL) }) }
                     composable(Routes.MATERIALS) { FilesScreen(vm, settings) }
                     composable(Routes.INBOX) { InboxScreen(vm, settings) }
-                    composable(Routes.REMINDERS) { RemindersScreen(vm, settings) }
+                    composable(Routes.REMINDERS) { RemindersScreen(vm, onBack = { nav.popBackStack() }) }
                     composable(Routes.PORTAL) { PortalScreen(vm, onDone = { nav.popBackStack() }) }
                     composable(Routes.SETTINGS) {
                         SettingsScreen(
@@ -363,8 +367,10 @@ private fun GlassTabBar(haze: HazeState, selected: Int, badge: (Tab) -> Int, onA
     BoxWithConstraints(
         Modifier
             .fillMaxWidth()
-            .height(64.dp)
-            .frosted(haze, CircleShape),
+            .height(68.dp)
+            .drawBehind {
+                drawLine(app.hairline, androidx.compose.ui.geometry.Offset(0f, 0f), androidx.compose.ui.geometry.Offset(size.width, 0f), strokeWidth = 1.dp.toPx())
+            },
     ) {
         // Neo-minimal: an icon and a word per tab; the current one in ink with an orange dot.
         // In the middle, the AI: one orange button that opens the voice assistant.
@@ -372,27 +378,41 @@ private fun GlassTabBar(haze: HazeState, selected: Int, badge: (Tab) -> Int, onA
         Row(Modifier.fillMaxSize()) {
             tabs.forEachIndexed { index, tab ->
                 if (index == AI_SLOT) {
-                    Box(
+                    Column(
                         Modifier
                             .width(itemWidth)
                             .fillMaxHeight()
                             .semantics { contentDescription = "Talk to your AI" }
                             .pressable(scaleTo = 0.9f, haptic = true, role = Role.Button, onClick = onAi),
-                        contentAlignment = Alignment.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
                     ) {
-                        Box(
-                            Modifier
-                                .size(46.dp)
-                                .background(com.sevenfive.app.ui.theme.Orange, CircleShape),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                Icons.Filled.Mic,
-                                contentDescription = null,
-                                tint = com.sevenfive.app.ui.theme.NeoInk,
-                                modifier = Modifier.size(22.dp),
-                            )
+                        Box(Modifier.size(ICON_AREA), contentAlignment = Alignment.Center) {
+                            Box(
+                                Modifier
+                                    .size(ICON_AREA)
+                                    .background(com.sevenfive.app.ui.theme.Orange, CircleShape),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    Icons.Filled.Mic,
+                                    contentDescription = null,
+                                    tint = com.sevenfive.app.ui.theme.NeoInk,
+                                    modifier = Modifier.size(19.dp),
+                                )
+                            }
                         }
+                        Text(
+                            "Ask AI",
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 10.5.sp,
+                            lineHeight = 13.sp,
+                            fontFamily = com.sevenfive.app.ui.theme.Neo,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                        Spacer(Modifier.padding(top = 4.dp).size(4.dp))
                     }
                 }
                 val on = index == selected
@@ -414,7 +434,7 @@ private fun GlassTabBar(haze: HazeState, selected: Int, badge: (Tab) -> Int, onA
                     verticalArrangement = Arrangement.Center,
                 ) {
                     // An icon over a word: filled and ink when current, outlined and grey when not.
-                    Box {
+                    Box(Modifier.size(ICON_AREA), contentAlignment = Alignment.Center) {
                         Icon(
                             if (on) tab.on else tab.off,
                             contentDescription = null,
@@ -431,7 +451,7 @@ private fun GlassTabBar(haze: HazeState, selected: Int, badge: (Tab) -> Int, onA
                                 fontWeight = FontWeight.SemiBold,
                                 modifier = Modifier
                                     .align(Alignment.TopEnd)
-                                    .offset(x = 9.dp, y = (-4).dp)
+                                    .offset(x = 2.dp, y = 0.dp)
                                     .defaultMinSize(minWidth = 15.dp)
                                     .background(com.sevenfive.app.ui.theme.Orange, CircleShape)
                                     .padding(horizontal = 3.dp, vertical = 1.dp),
@@ -464,6 +484,9 @@ private fun GlassTabBar(haze: HazeState, selected: Int, badge: (Tab) -> Int, onA
 
 /** Where the AI button sits in the tab bar: after the first two tabs, in the middle. */
 private const val AI_SLOT = 2
+
+/** The square every tab's icon (and the AI's circle) sits in, so all of them line up. */
+private val ICON_AREA = 34.dp
 
 private fun NavHostController.goToTab(route: String) = navigate(route) {
     popUpTo(graph.findStartDestination().id) { saveState = true }

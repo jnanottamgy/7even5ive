@@ -1,6 +1,8 @@
 package com.sevenfive.app.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.Alarm
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -87,7 +89,7 @@ internal fun HomeHero(cards: Cards, modifier: Modifier = Modifier) {
     val next = cards.dueThisWeek
         .mapNotNull { item -> Time.parse(item.dueAt)?.let { item to it.atZoneSameInstant(zone) } }
         .minByOrNull { it.second }
-    Column(modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 12.dp, bottom = 8.dp)) {
+    Column(modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp)) {
         if (next != null) {
             val (item, at) = next
             // Real time: a countdown that ticks every second, not a fixed clock time.
@@ -161,7 +163,7 @@ private fun MiniBars(subjects: List<SubjectAttendance>, minimum: Double) {
             .semantics { contentDescription = label }
             .drawBehind {
                 val y = size.height - lineFromBottom.dp.toPx()
-                drawLine(line.copy(alpha = 0.5f), Offset(-6.dp.toPx(), y), Offset(size.width + 6.dp.toPx(), y), strokeWidth = 1.dp.toPx())
+                drawLine(line.copy(alpha = 0.5f), Offset(0f, y), Offset(size.width, y), strokeWidth = 1.dp.toPx())
             },
         horizontalArrangement = Arrangement.spacedBy(7.dp),
         verticalAlignment = Alignment.Bottom,
@@ -184,7 +186,7 @@ private fun MiniBars(subjects: List<SubjectAttendance>, minimum: Double) {
 internal fun AttendanceHero(s: SubjectAttendance, modifier: Modifier = Modifier) {
     val app = LocalAppColors.current
     val low = s.percent < s.minimumPercent
-    Column(modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 12.dp, bottom = 8.dp)) {
+    Column(modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp)) {
         NeoLabel(if (low) "Needs you · ${s.code}" else "Lowest · ${s.code}", dot = if (low) Orange else NeoInk)
         Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.Bottom) {
             Text(String.format(Locale.ENGLISH, "%.1f", s.percent), style = MaterialTheme.typography.displayLarge)
@@ -234,7 +236,7 @@ private fun LineWithMark(percent: Double, minimum: Double, color: Color, modifie
 @Composable
 internal fun InboxHero(worth: Int, filtered: Int, modifier: Modifier = Modifier) {
     val app = LocalAppColors.current
-    Column(modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 12.dp, bottom = 8.dp)) {
+    Column(modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp)) {
         NeoLabel("College mail", dot = if (filtered > 0) Orange else null)
         Text("$worth", style = MaterialTheme.typography.displayLarge, modifier = Modifier.padding(top = 8.dp))
         Text(
@@ -261,8 +263,8 @@ internal data class Segment(val label: String, val count: Int = 0)
 @Composable
 internal fun NeoSegments(segments: List<Segment>, selected: Int, modifier: Modifier = Modifier, onSelect: (Int) -> Unit) {
     val app = LocalAppColors.current
-    // Three or fewer share the width; more scroll sideways, each as wide as its words.
-    val many = segments.size > 3
+    // Up to four share the width evenly; more scroll sideways, each as wide as its words.
+    val many = segments.size > 4
     Row(
         modifier
             .fillMaxWidth()
@@ -308,5 +310,71 @@ internal fun NeoSegments(segments: List<Segment>, selected: Int, modifier: Modif
                 }
             }
         }
+    }
+}
+
+/**
+ * Reminders, folded into Home: one row that says how many are set and which fires next, and
+ * opens the full list. Keeps the tab bar to what's used every day.
+ */
+@Composable
+internal fun RemindersEntry(reminders: List<com.sevenfive.app.data.Reminder>, modifier: Modifier = Modifier, onOpen: () -> Unit) {
+    val app = LocalAppColors.current
+    val now by rememberNow(30_000L)
+    val next = reminders
+        .mapNotNull { r -> Time.parse(r.firesAt)?.let { r to it } }
+        .filter { it.second.toInstant().isAfter(now) }
+        .minByOrNull { it.second }
+    val line = when {
+        next != null -> "Next: ${next.first.title ?: "a reminder"} · ${Time.until(next.second, now)}"
+        reminders.isEmpty() -> "None set. Tap Remind me on anything due."
+        else -> "${reminders.size} set"
+    }
+    Row(
+        modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.large)
+            .background(app.glassFill)
+            .semantics(mergeDescendants = true) { role = androidx.compose.ui.semantics.Role.Button }
+            .clickable(onClick = onOpen)
+            .padding(horizontal = 18.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        androidx.compose.material3.Icon(
+            androidx.compose.material.icons.Icons.Outlined.Alarm,
+            contentDescription = null,
+            tint = NeoInk,
+            modifier = Modifier.size(22.dp),
+        )
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text("Reminders", style = MaterialTheme.typography.titleMedium)
+            Text(
+                line,
+                style = MaterialTheme.typography.bodySmall,
+                color = app.secondaryLabel,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (reminders.isNotEmpty()) {
+            Spacer(Modifier.width(10.dp))
+            Box(
+                Modifier.size(26.dp).clip(CircleShape).background(Orange),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    if (reminders.size > 9) "9+" else "${reminders.size}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = NeoInk,
+                )
+            }
+        }
+        Spacer(Modifier.width(6.dp))
+        androidx.compose.material3.Icon(
+            androidx.compose.material.icons.Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+            contentDescription = null,
+            tint = app.secondaryLabel,
+        )
     }
 }

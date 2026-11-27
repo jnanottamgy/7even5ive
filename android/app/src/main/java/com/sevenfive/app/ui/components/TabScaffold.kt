@@ -169,7 +169,7 @@ fun ScreenIntro(text: String?) {
         text,
         style = MaterialTheme.typography.bodyLarge,
         color = LocalAppColors.current.secondaryLabel,
-        modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 6.dp),
+        modifier = Modifier.padding(bottom = 6.dp),
     )
 }
 

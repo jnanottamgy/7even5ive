@@ -135,7 +135,7 @@ fun RouteBadge(route: String?, modifier: Modifier = Modifier) {
 @Composable
 fun SectionHeader(text: String, modifier: Modifier = Modifier, trailing: @Composable (() -> Unit)? = null) {
     Row(
-        modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 26.dp, bottom = 4.dp),
+        modifier.fillMaxWidth().padding(top = 26.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
