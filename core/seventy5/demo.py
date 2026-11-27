@@ -18,7 +18,7 @@ import time
 from datetime import timedelta
 from typing import Any
 
-from . import clock
+from . import clock, files
 from .config import settings
 from .db import token_hash
 from .jev import Decisions, Likely, Picked
@@ -195,7 +195,8 @@ def seed_portal() -> None:
 
     golden = files("portmax.connectors.mockcollege") / "golden"
     answers = {tool: json.loads((golden / f"{tool}.json").read_text(encoding="utf-8"))
-               for tool in ("get_attendance", "get_timetable")}
+               for tool in ("get_attendance", "get_timetable", "get_marks", "get_results",
+                            "get_profile")}
     portal_store().save_answers(PORTAL_ID, "mockcollege", "1.0.0", clock.now(), answers)
 
 
@@ -212,6 +213,7 @@ def play(app: Any, client: Any, sid: int) -> list[str]:
             # No decision = the bot was unsure, so 7even5ive's own cascade decides.
             body = json.dumps({"from": PHONE, "message_id": f"wamid.demo{i}", "text": m["text"],
                                "attachment": m.get("attachment"),
+                               "file": files.demo_file_b64(m["attachment"]) if m.get("attachment") else None,
                                "decision": m.get("decision")}).encode()
             ts = int(time.time())
             r = client.post("/bot/webhook", content=body,

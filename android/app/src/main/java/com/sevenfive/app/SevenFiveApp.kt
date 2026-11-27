@@ -25,11 +25,14 @@ import com.sevenfive.app.portal.KeepAliveSettings
 import com.sevenfive.app.portal.PortalEngine
 import com.sevenfive.app.portal.PortalKeepAliveWorker
 import com.sevenfive.app.portal.PortalStore
+import com.sevenfive.app.notify.Alerts
 import com.sevenfive.app.ui.BriefingPlayer
 import com.sevenfive.app.util.Diagnostics
 import com.sevenfive.app.voice.VoiceAssistant
+import com.sevenfive.app.widget.WeekWidget
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.File
 
 class SevenFiveApp : Application() {
     lateinit var container: AppContainer
@@ -69,7 +72,31 @@ class AppContainer(context: Context) {
     private val http = Http(accounts)
     val core = CoreApi(http) { servers.config.value.coreUrl }
     val portmax = PortMaxApi(http) { servers.config.value.portmaxUrl }
-    val cards = CardsRepository(core)
+    val cards = CardsRepository(core, File(context.filesDir, "cards.json")).also { repo ->
+        // After each good poll: phone alarms for the reminders, and the widget. Only when what
+        // they show changed, not on every 7-second poll.
+        var lastReminders: Any? = null
+        var lastWidget: Any? = null
+        repo.onCards = { c ->
+            val reminders = c.reminders.map { Triple(it.id, it.firesAt, it.channel) }
+            if (reminders != lastReminders) {
+                Alerts.syncReminders(appContext, c.reminders)
+                lastReminders = reminders
+            }
+            val widget = c.dueThisWeek.map { it.id to it.dueAt } to c.attendance.subjects.map { it.percent }
+            if (widget != lastWidget) {
+                WeekWidget.refresh(appContext)
+                lastWidget = widget
+            }
+        }
+        // The cards are gone: so are the alarms made from them, and the widget empties.
+        repo.onReset = {
+            lastReminders = null
+            lastWidget = null
+            Alerts.cancelReminders(appContext)
+            WeekWidget.refresh(appContext)
+        }
+    }
     val portalStore = PortalStore(context)
     val portal = PortalEngine(portmax, cards, portalStore, BuildConfig.COLLEGE)
     val finder = ServerFinder(servers, cards, portmax, mayMove = { accounts.session == null })
@@ -99,17 +126,22 @@ class AppContainer(context: Context) {
 
     /**
      * Someone else uses the app now: nothing of the last person's may stay on this phone. Their
-     * cards, the outbox position, the portal login and everything the portal's WebView stored,
-     * shown notifications, the briefing's audio. Each step on its own: one failing (a WebView
-     * being updated) never stops the rest.
+     * cards (and the copy kept on disk), the alarms set for their reminders and their 8 am digest,
+     * the widget, the outbox position, the portal login and everything the portal's WebView
+     * stored, shown notifications, the briefing's audio, the materials they opened. Each step on
+     * its own: one failing (a WebView being updated) never stops the rest.
      */
     private suspend fun forget() {
-        cards.reset()
+        // First: once it returns, no answer of theirs still in flight can set an alarm.
+        runCatching { cards.reset() }
+        runCatching { Alerts.forget(appContext) }
         outbox.forget()
         portmax.forget()
         runCatching {
             appContext.cacheDir.listFiles { f -> f.name.startsWith("briefing-") }?.forEach { it.delete() }
         }
+        // Materials they opened (Opener keeps the downloaded copies here).
+        runCatching { File(appContext.cacheDir, "opened").deleteRecursively() }
         withContext(Dispatchers.Main) {
             runCatching { briefingPlayer.stop() }
             runCatching { voice.stop() }

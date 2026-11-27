@@ -32,7 +32,18 @@ data class Cards(
     @SerialName("classes_today") val classesToday: List<ClassSlot> = emptyList(),
     /** The college mailbox: demo or Gmail, when it was checked, how many mails were left out. */
     val mail: MailStatus = MailStatus(),
+    /** The gateway's recent decisions for this student, newest first: the AI activity log. */
+    val audit: List<AuditRow> = emptyList(),
+    /** The student's own subject list, offered when they file something themselves. */
+    val subjects: List<String> = emptyList(),
+    val timetable: Timetable = Timetable(),
+    val marks: Marks = Marks(),
+    val results: Results = Results(),
 ) {
+    /** Subject code to name, from the portal's attendance (timetable and marks use codes). */
+    fun subjectName(code: String): String =
+        attendance.subjects.firstOrNull { it.code == code }?.name ?: code
+
     /** Approvals only carry `item_id`; the title comes from the cards we already have. */
     fun itemById(id: Int?): Item? =
         if (id == null) null
@@ -72,6 +83,8 @@ data class Item(
     val summary: String? = null,
     /** The drive, test or exam itself, when [dueAt] is the deadline to register. */
     @SerialName("event_at") val eventAt: String? = null,
+    /** A material whose file the server kept: the phone can open it. */
+    @SerialName("has_file") val hasFile: Boolean = false,
 ) {
     val fromMail: Boolean get() = route == "mail"
 }
@@ -181,3 +194,92 @@ data class ConnectorInfo(
 /** A connector's settings: the typed view plus the exact JSON to hand the runner unchanged. */
 data class Connector(val info: ConnectorInfo, val raw: String)
 
+
+/** One gateway decision: which tool, allowed / held for a tap / refused, and why. Ids only. */
+@Serializable
+data class AuditRow(
+    val id: Int = 0,
+    val tool: String = "",
+    val decision: String = "",
+    val reason: String? = null,
+    val at: String? = null,
+)
+
+@Serializable
+data class Timetable(
+    val connected: Boolean = false,
+    val stale: Boolean = false,
+    @SerialName("fetched_at") val fetchedAt: String? = null,
+    val data: List<Slot> = emptyList(),
+)
+
+/** One class in the week: "Mon", "09:00:00", "09:55:00", "CS52", "LH-204". */
+@Serializable
+data class Slot(
+    val day: String = "",
+    val start: String = "",
+    val end: String = "",
+    @SerialName("subject_code") val code: String = "",
+    val room: String? = null,
+)
+
+@Serializable
+data class Marks(
+    val connected: Boolean = false,
+    val stale: Boolean = false,
+    @SerialName("fetched_at") val fetchedAt: String? = null,
+    val data: List<MarkRow> = emptyList(),
+)
+
+@Serializable
+data class MarkRow(
+    @SerialName("subject_code") val code: String = "",
+    val component: String = "",
+    val scored: Double = 0.0,
+    val maximum: Double = 0.0,
+)
+
+@Serializable
+data class Results(
+    val connected: Boolean = false,
+    val stale: Boolean = false,
+    @SerialName("fetched_at") val fetchedAt: String? = null,
+    val data: ResultsData = ResultsData(),
+)
+
+@Serializable
+data class ResultsData(
+    val subjects: List<ResultRow> = emptyList(),
+    val semesters: List<SemesterSummary> = emptyList(),
+)
+
+@Serializable
+data class ResultRow(
+    val semester: Int = 0,
+    @SerialName("subject_code") val code: String = "",
+    val credits: Double = 0.0,
+    val grade: String = "",
+    @SerialName("grade_points") val gradePoints: Double? = null,
+)
+
+@Serializable
+data class SemesterSummary(
+    val semester: Int = 0,
+    val sgpa: Double? = null,
+    val cgpa: Double? = null,
+)
+
+/** `POST /api/ask`: the answer, which way it was answered (claude / offline), the tools used. */
+@Serializable
+data class AskAnswer(
+    val answer: String = "",
+    val route: String = "",
+    val tools: List<String> = emptyList(),
+)
+
+/** `POST /api/share`: filed, needs_review or skipped, and the card it became. */
+@Serializable
+data class ShareResult(
+    val status: String = "",
+    val item: Item? = null,
+)

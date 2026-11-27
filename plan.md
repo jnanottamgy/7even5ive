@@ -30,8 +30,9 @@ log at the bottom, and record every default chosen on the team's behalf under "D
 - Never automate a real portal login, solve CAPTCHAs, spoof the WebView or rotate IPs; never
   probe MSRIT's portal (decision 22).
 - Logs carry ids and counts only, never message, mail or note text, phone numbers or tokens.
-- Notifications are only the student's opt-in reminders and the opt-in urgent call
-  (decision 41). The briefing and attendance warnings live in the app, never in a notification.
+- Notifications are only the student's opt-in reminders, the opt-in urgent call (decision 41)
+  and the opt-in 8 am digest of what's due (P29). The briefing and attendance warnings live in
+  the app, never in a notification. A reminder shows once, however it reached the phone.
 
 ## How to run and test
 
@@ -187,6 +188,8 @@ Status: `[ ]` to do, `[~]` in progress, `[x]` done and tested, `[-]` decided not
 | P26 | The MCP connector: Claude Code and Codex sign in as the student with OAuth 2.1 (MCP's authorization spec: protected-resource and server metadata, dynamic registration, PKCE S256, our own sign-in page checking the password with Supabase). Access tokens last an hour, refresh tokens 90 days, both replaced at every refresh, kept as SHA-256, good for `/mcp` only; Settings lists and disconnects each app. The MCP SDK's handlers do the protocol checks. Personal tokens stay for apps that can only send a header. | One command and a browser sign-in on the laptop, nothing copied from the phone; the same sign-in is what claude.ai's and ChatGPT's connectors need, which a pasted token can't do. |
 | P27 | The serverless stack is two functions on one address: ApiFunction (the app's API, webhooks, MCP, sign-in, the tick) scales out; DemoFunction (the catch-all: the demo's mock portal, whose logins live in memory) is kept to one instance. The tick isn't retried; the functions log JSON; a key Parameter Store can't give stops the start instead of running on stand-ins. | With everything on one pinned instance, any two overlapping requests got HTTP 500 and the 1 PM mail check blocked the app. The old function keeps its name, so a stack updated in place keeps its address. |
 | P28 | The shared demo's WhatsApp number is always the invented one (DEMO_PHONE is gone); it reads only the invented library; its calls ring only DEMO_STUDENT_PHONE and its daily caps (calls, voice sessions, new briefing clips) survive a reset. On a deployed server (Lambda or Postgres) the public development secrets are refused: approvals without APPROVAL_SECRET, Connect Google without TOKEN_ENCRYPTION_KEY. | The demo token is public: tied to a real number it read that person's files and forwards and rang their phone. A forgotten key must fail closed, not quietly protect real data with a public secret. |
+| P29 | Reminders ring from two places: the phone's own alarm, set from the last cards (on time in Doze and offline), and the server's outbox (reminders set elsewhere, a missed call). Each fired outbox reminder carries its `reminder_id` and the phone keeps the ids it showed, so the second one stays quiet. Urgent-call reminders get no phone alarm. An optional 8 am digest of what's due, off by default, with no attendance in it. | Merged from the Ask/widget branch: its alarms are on time without Firebase, but beside the outbox every reminder would have shown twice, which decision 41 rules out; and attendance stays in the app. |
+| P30 | Ask your semester and Share to 7even5ive (merged from the same branch) are limited per student (30 questions and 60 shares an hour) and, for the shared demo, per address and per day. A shared or forwarded file (4 MB at most) is kept in its event's row in the database, base64. | Each question can call Claude; the demo token is public. Files in the row keep one store and dedupe with their message, but Supabase's free 500 MB holds only a few hundred: move them to object storage (S3) before real use. |
 
 ## Keys and accounts the team hands over at the end
 
@@ -286,3 +289,19 @@ email templates and your own SMTP: [`docs/supabase.md`](docs/supabase.md)); `BOT
   events a killed Lambda left queued are re-driven. Tests: core 247 on Postgres and through
   PgBouncer (244 + 3 Postgres-only on SQLite); Android 93; the Lambda zip's smoke test on SQLite
   and twice through the pooler, all 27 tables locked.
+- 27 Nov (merge into `main`, from Jnanottam's "merge it into main"): the Ask/widget branch
+  (`claude/amazing-clarke-apeyif`: Ask your semester, search, the AI activity log, the bunk
+  planner, timetable, grades, opening materials, Share to 7even5ive, the home-screen widget,
+  phone alarms and the 8 am digest) merged with this branch. Resolved: the two ways a reminder
+  reaches the phone show it once (P29); the permission is asked when a reminder is pending, not
+  at first launch; the digest carries no attendance (decision 41); the app's file download goes
+  through the retrying, token-refreshing HTTP path; the two "today's classes" cards became one.
+  Found in the merged code and fixed: a cards answer landing after a sign-out wrote the last
+  person's cards to disk and set alarms for their reminders; an unreadable cards answer crashed
+  the poll; Ask your semester kept the last person's chat, and a late answer could land in the
+  next person's; materials opened by the last person stayed in the cache; sharing a big file of
+  unknown size read it whole into memory (and on the main thread); Ask and Share had no limits
+  (P30); the file download now says `nosniff`. Tests: core 255 on Postgres and through PgBouncer
+  (252 + 3 Postgres-only on SQLite), PortMax 100; Android 104; debug and demo APKs build; lint
+  only the 2 known errors; the Lambda zip's smoke test on SQLite and twice through the pooler,
+  and an older Postgres gains the outbox's new column.

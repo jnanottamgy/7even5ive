@@ -27,7 +27,7 @@ Never commit a key, never put one in the template, the APK or a chat.
 | 2 | `TOKEN_ENCRYPTION_KEY` | Encrypts stored Google refresh tokens | A public development key: on a deployed server Connect Google is refused |
 | 3 | `BOT_WEBHOOK_SECRET` | The WhatsApp bot's signed events reach 7even5ive; students can link WhatsApp | A public development secret: only the demo student's events are accepted, and WhatsApp can't be linked |
 | 4 | `LIBRARY_URL`, `LIBRARY_SERVICE_TOKEN` | Files shows each linked student's library from the bot; their deadlines are pulled in when they link | Real accounts: "the bot isn't connected"; the demo always shows its invented library |
-| 6 | `ANTHROPIC_API_KEY` *or* `BEDROCK_MODEL_ID` | Claude for the cascade and for judging real college mail | Recorded demo answers; real mail can't be read |
+| 6 | `ANTHROPIC_API_KEY` *or* `BEDROCK_MODEL_ID` | Claude for the cascade, for judging real college mail, and for Ask your semester | Recorded demo answers; real mail can't be read; Ask answers a few kinds of question by code |
 | 7 | `JEV_API_KEY` | Jev's cheap first look (type, subject, spam) | Everything goes to Claude |
 | 8 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Connect Google: real Gmail, Calendar, Classroom | Demo mailbox; the calendar stays in 7even5ive |
 | 9 | `ELEVENLABS_API_KEY` | Briefing voice; needed by 10 and 11 | The phone reads the briefing itself |

@@ -3,8 +3,9 @@
 This is the whole brief for building the 7even5ive Android app. It is the prototype's **only**
 app. You should not need to read anything else, but the links say where each piece lives.
 
-Contract changes (any field, endpoint or rule below) go through Kartik first, because the
-backend, the MCP server and the WhatsApp bot all depend on the same contracts.
+Contract changes (any field, endpoint or rule below) must keep the backend, the MCP server and
+the WhatsApp bot in step, because they all depend on the same contracts: change all three
+together and say so in the pull request.
 
 ---
 
@@ -31,7 +32,7 @@ from the AI or from this app, goes through one gateway with one set of rules.
 
 What the app does **not** do: plan study time, send mail, write to the portal, pay anything,
 or notify about a deadline the student just forwarded. Notifications are only reminders the
-student asked for.
+student asked for, a missed urgent call, and the 8 am digest of what's due if they turn it on.
 
 ## 3. Decisions that bind the app
 
@@ -226,7 +227,7 @@ drive or exam itself when `due_at` is the deadline to register). Reminders add `
 
 | Endpoint | What |
 |---|---|
-| `GET /api/notifications?after=<id>` | The outbox: `{notifications: [{id, kind (reminder\|call), title, body, item_id, created_at}], latest_id}`. `after=-1` returns only `latest_id` (a first start). |
+| `GET /api/notifications?after=<id>` | The outbox: `{notifications: [{id, kind (reminder\|call\|google), title, body, item_id, reminder_id, created_at}], latest_id}`. `reminder_id` is set when a reminder fired. `after=-1` returns only `latest_id` (a first start). |
 | `POST /api/devices` `{token, platform}` · `POST /api/devices/remove` `{token}` | Firebase wake-up tokens |
 | `GET /api/settings` | `{calls: {enabled, consent_at, quiet_start, quiet_end, phone (masked), live, max_per_day, lead_minutes, max_seconds}, push: {wakeups}, google: {configured, connected, email, gmail, calendar, classroom}, voice: {assistant, briefing_audio}}` |
 | `POST /api/settings/calls` `{enabled?, quiet_start?, quiet_end?}` | Consent on/off (off keeps call reminders as notifications) and quiet hours, `HH:MM` |
@@ -302,7 +303,20 @@ Base: `http://<laptop-ip>:8002`. The college for the demo is `mockcollege`.
 - 7even5ive stores the reminder and fires it into the outbox; the app pulls the outbox every
   20 s on screen and every 15 minutes in the background (WorkManager), and at once when
   Firebase wakes it (`notify/`). The push carries no content. Android 13's permission is asked
-  at the first reminder. Only reminders and a missed urgent call ever become notifications.
+  at the first reminder. Only reminders, a missed urgent call and the opt-in digest ever become
+  notifications.
+- The phone also sets its own alarm for every reminder in the last cards it saw (`Alerts`), so
+  a reminder rings on time with the app closed, in Doze or offline. Urgent-call reminders get
+  no alarm: the server rings for those. The outbox message for a fired reminder carries its
+  `reminder_id`, and `ReminderLog` keeps the ids already shown: whichever way arrives second
+  stays quiet, so a reminder shows once. A reminder set elsewhere (WhatsApp, an AI) after the
+  last cards still comes through the outbox.
+- An answer to `/api/cards` asked for before a change of person is dropped (`CardsRepository`
+  counts resets): the last person's cards never reach the screen, the copy on disk, the alarms
+  or the widget. A change of person also cancels the alarms, turns the digest off and clears
+  `ReminderLog`.
+- **Morning digest** (Settings, off by default): at 8 am on the phone's clock, what's due this
+  week. Never an attendance figure (decision 41).
 
 ## 9. Approvals
 

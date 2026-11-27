@@ -36,6 +36,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BugReport
+import androidx.compose.material.icons.outlined.Alarm
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.WbSunny
+import com.sevenfive.app.notify.Alerts
 import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DeleteOutline
@@ -140,6 +146,17 @@ fun SettingsScreen(
                 GroupField(host, { host = it.trim() }, "Online address or laptop IP", "https://… or 192.168.1.20")
                 GroupDivider(inset = false)
                 GroupAction("Connect", onClick = { vm.connectTo(host); onBack() }, enabled = host.isNotBlank())
+            }
+
+            Group(header = "Your AI", footer = "Every request your AI (or this app) made through " +
+                "the gateway: what ran, what waited for your tap, what was refused.") {
+                val nav = com.sevenfive.app.ui.LocalNav.current
+                GroupRow("AI activity", icon = Icons.Outlined.Shield, iconColor = status.safe, chevron = true) {
+                    nav(com.sevenfive.app.ui.Routes.AI_LOG)
+                }
+                GroupDivider()
+                GroupRow("Ask your semester", icon = Icons.Outlined.AutoAwesome, iconColor = MaterialTheme.colorScheme.primary,
+                    chevron = true) { nav(com.sevenfive.app.ui.Routes.ASK) }
             }
 
             if (demo) Group(header = "Demo tour", footer = "Runs the whole demo from this phone, step by step: each step opens " +
@@ -367,33 +384,61 @@ private fun NotificationsSection(vm: AppViewModel) {
     val app = LocalAppColors.current
     // Read again whenever Settings comes back to the front (after the prompt or system settings).
     val permitted = rememberNotificationsPermitted()
-    // Without Firebase a closed app is checked every 15 minutes, and Android holds those checks
-    // back while the phone is idle (Doze): say so rather than promise a time.
+    var digest by remember { mutableStateOf(Alerts.digestOn(context)) }
+    fun turnOn() = turnOnNotifications(activity, context) { vm.askForNotifications() }
+    // Reminders this phone knows ring from its own alarm. Anything else (a reminder set from
+    // Claude or WhatsApp while the app was closed, a missed call) comes from the outbox: without
+    // Firebase a closed app checks it every 15 minutes, held back while the phone is idle (Doze).
     val instant = Push.configured && settings?.push?.wakeups == true
     Group(
         header = "Notifications and background",
-        footer = "Notifications are only your own reminders and a missed urgent call. The briefing and " +
-            "attendance stay in the app." +
-            if (instant) "" else " Without Firebase a reminder can arrive late while the phone is idle: " +
-                "the team turns on instant delivery with the setup guide's Firebase step.",
+        footer = "Notifications are only your own reminders, a missed urgent call and, if you turn it on, " +
+            "an 8 am digest of what's due. The briefing and attendance stay in the app." +
+            if (instant) "" else " Without Firebase, a reminder set from somewhere else while the app is " +
+                "closed can arrive late: the team turns on instant delivery with the setup guide's Firebase step.",
     ) {
         GroupRow(
             if (permitted) "Notifications are on" else "Notifications are off",
             icon = if (permitted) Icons.Outlined.Notifications else Icons.Outlined.NotificationsOff,
             iconColor = if (permitted) LocalStatusColors.current.safe else MaterialTheme.colorScheme.error,
             titleColor = if (permitted) Color.Unspecified else MaterialTheme.colorScheme.error,
-            detail = when {
-                !permitted -> "Your reminders can't reach you while the app is closed. Tap to turn them on."
-                instant -> "Reminders reach you even when the app is closed"
-                else -> "Reminders reach you when the app is closed, but can be late while the phone is idle"
-            },
+            detail = if (permitted) "Your reminders ring at their time, even with the app closed"
+            else "Your reminders can't reach you while the app is closed. Tap to turn them on.",
             chevron = !permitted,
-        ) { turnOnNotifications(activity, context) { vm.askForNotifications() } }
+        ) { turnOn() }
         GroupDivider()
         GroupRow("Delivery", icon = Icons.Outlined.Sync, iconColor = app.material,
-            detail = if (instant) "At once (Firebase wakes the phone; no content passes through it)"
-            else "At once while the app is open. When it's closed, about every 15 minutes, and later " +
-                "while the phone is idle")
+            detail = "Reminders this phone knows: its own alarm, on time, even offline. Anything else: " +
+                if (instant) "at once (Firebase wakes the phone; no content passes through it)"
+                else "at once while the app is open; when it's closed, about every 15 minutes, later while the phone is idle")
+        GroupDivider()
+        GroupSwitchRow(
+            "Morning digest",
+            checked = digest,
+            onChange = { on ->
+                digest = on
+                Alerts.setDigest(context, on)
+                if (on && !permitted) turnOn()
+            },
+            icon = Icons.Outlined.WbSunny,
+            iconColor = app.deadline,
+            detail = "At 8 am, what's due this week. Off unless you turn it on.",
+        )
+        GroupDivider()
+        GroupRow("Send today's digest now", icon = Icons.Outlined.NotificationsActive, iconColor = app.notice) {
+            val cards = vm.container.cards.cached()
+            when {
+                !permitted -> turnOn()
+                cards == null -> vm.say("No cards yet: connect to the server first.")
+                else -> Alerts.showDigest(context, cards)
+            }
+        }
+        GroupDivider()
+        GroupRow("Try a reminder notification", icon = Icons.Outlined.Alarm, iconColor = app.exam) {
+            val first = vm.container.cards.cached()?.dueThisWeek?.firstOrNull()
+            if (!permitted) turnOn()
+            else Alerts.showTest(context, first?.title ?: "DBMS Assignment 3", first?.subject, first?.dueAt)
+        }
         GroupDivider()
         GroupSwitchRow(
             "Keep the portal logged in",

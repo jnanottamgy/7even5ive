@@ -32,6 +32,11 @@ def make_app(tmp_path, monkeypatch):
     monkeypatch.setattr(mail, "_store", MailStore(f"sqlite:///{tmp_path.as_posix()}/mail.db"))
     monkeypatch.setattr(mail, "_demo", {})
     monkeypatch.setattr(google, "_tokens", google._Tokens())
+    from seventy5 import api as api_module
+
+    for name in ("_ask_by_student", "_share_by_student", "_demo_ask_by_ip", "_demo_share_by_ip",
+                 "_demo_voice_by_ip", "_demo_audio_by_ip"):
+        monkeypatch.setattr(getattr(api_module, name), "_hits", {})  # each test starts counting at 0
     url = os.environ.get("PG_TEST_URL") or str(tmp_path / "t.db")
     if url.startswith("postgres"):
         import psycopg

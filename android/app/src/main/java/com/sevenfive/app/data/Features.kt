@@ -168,6 +168,8 @@ data class OutboxMessage(
     val title: String = "",
     val body: String = "",
     @SerialName("item_id") val itemId: Int? = null,
+    /** The reminder that fired (kind reminder): its alarm on this phone may have shown it already. */
+    @SerialName("reminder_id") val reminderId: Int? = null,
     @SerialName("created_at") val createdAt: String? = null,
 )
 

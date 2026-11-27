@@ -17,7 +17,8 @@ from typing import Any, AsyncIterator
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 
-from . import accounts, auth, briefing, calls, clock, google, mail, notify, tools, voice
+from . import (accounts, ask, auth, briefing, calls, clock, files, google, mail, notify, tools,
+               voice)
 from .app import App, build
 from .config import settings
 from .db import BadInput
@@ -46,6 +47,14 @@ _demo_voice_by_ip = auth.Limiter(3, 3600)
 _demo_audio_by_ip = auth.Limiter(10, 3600)
 DEMO_VOICE_PER_DAY = 20
 DEMO_AUDIO_PER_DAY = 40
+# Ask and Share can call Claude (and Share stores up to 4 MB): bounded for everyone, tighter for
+# the shared demo. Per instance for a student; the demo's day is counted in its audit log.
+_ask_by_student = auth.Limiter(30, 3600)
+_share_by_student = auth.Limiter(60, 3600)
+_demo_ask_by_ip = auth.Limiter(20, 3600)
+_demo_share_by_ip = auth.Limiter(10, 3600)
+DEMO_ASK_PER_DAY = 60
+DEMO_SHARE_PER_DAY = 60
 
 WEB = Path(__file__).parent / "web"
 
@@ -155,8 +164,16 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
                               str(event["event_id"]), payload)
             background.add_task(state.work)
             return {"ok": True, "duplicate": event_id is None}
-        payload = {k: event.get(k) for k in ("text", "attachment", "file_id", "group", "decision")
-                   if event.get(k)}
+        payload = {k: event.get(k) for k in ("text", "attachment", "file_id", "group", "decision",
+                                             "file") if event.get(k)}
+        if payload.get("file"):
+            # A file comes with its name or not at all; a bad one is dropped, the message kept.
+            try:
+                files.check(str(payload["file"]))
+                if not payload.get("attachment"):
+                    raise files.BadFile("file without a name")
+            except files.BadFile:
+                payload.pop("file")
         event_id = accept(state.db, state.queue, student["id"], "whatsapp",
                           str(event["message_id"]), payload)
         background.add_task(state.work)
@@ -183,8 +200,82 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
             "reminders": notify.list_reminders(db, sid),
             "classes_today": tools.timetable_today(db, sid)["classes"],
             "mail": mail.status(db, sid),
-            "audit": [dict(r) for r in db.audit_log(sid)][:12],
+            # The AI activity log: the latest gateway decisions (ids and names, never words).
+            "audit": [dict(r) for r in db.audit_log(sid)][:40],
+            # The student's subject list: what the phone offers when they file something.
+            "subjects": db.subjects(sid),
+            "timetable": tools.timetable(db, sid),
+            "marks": tools.marks(db, sid),
+            "results": tools.results(db, sid),
         }
+
+    @api.get("/api/files/{item_id}")
+    def file(item_id: int, authorization: str | None = Header(None)) -> Response:
+        # Only the student's own items; another student's id is simply not found.
+        sid = student_from(authorization)
+        found = files.file_of(state.db, sid, item_id)
+        if found is None:
+            raise HTTPException(404, "no file kept for this item")
+        name, mime, raw = found
+        safe = "".join(ch if ch.isalnum() or ch in "._- " else "_" for ch in name)
+        # nosniff: the type comes from the name's extension, and a browser must not guess another.
+        return Response(raw, media_type=mime,
+                        headers={"Content-Disposition": f'inline; filename="{safe}"',
+                                 "X-Content-Type-Options": "nosniff"})
+
+    @api.post("/api/ask")
+    def ask_semester(body: dict[str, Any], request: Request,
+                     authorization: str | None = Header(None)) -> dict[str, Any]:
+        """A question in plain words, answered from the student's own data through the
+        gateway: the same tools and rules as an MCP client."""
+        sid = student_from(authorization)
+        question = str(body.get("question", "")).strip()
+        if not question:
+            raise HTTPException(400, "ask a question")
+        if len(question) > 500:
+            raise HTTPException(400, "keep the question under 500 characters")
+        if not _ask_by_student.allow(str(sid)) or not demo_allows(
+                sid, request, "demo_ask", _demo_ask_by_ip, DEMO_ASK_PER_DAY):
+            raise HTTPException(429, "That's a lot of questions for now. Try again later.")
+        return ask.answer(state.gateway, sid, question)
+
+    @api.post("/api/share")
+    def share(body: dict[str, Any], request: Request,
+              authorization: str | None = Header(None)) -> dict[str, Any]:
+        """Something the student shared into the app from another app (a WhatsApp message,
+        a PDF). If they said what it is, it is filed as they said, after the same checks as
+        a bot decision; if not, the cascade decides as for any message."""
+        import uuid
+
+        sid = student_from(authorization)
+        if not _share_by_student.allow(str(sid)) or not demo_allows(
+                sid, request, "demo_share", _demo_share_by_ip, DEMO_SHARE_PER_DAY):
+            raise HTTPException(429, "That's a lot to file at once. Try again later.")
+        text = str(body.get("text") or "").strip()[:4000]
+        name = str(body.get("file_name") or "").strip()[:120] or None
+        payload: dict[str, Any] = {"text": text} if text else {}
+        if body.get("file_b64"):
+            if not name:
+                raise HTTPException(400, "a shared file needs its name")
+            try:
+                payload["file"] = files.check(str(body["file_b64"]))
+            except files.BadFile as err:
+                raise HTTPException(400, str(err)) from err
+        if name:
+            payload["attachment"] = name
+        if not payload:
+            raise HTTPException(400, "nothing to file")
+        if body.get("kind"):
+            payload["by"] = "student"
+            payload["decision"] = {k: body.get(k) for k in ("kind", "subject", "title", "due_at")
+                                   if body.get(k)}
+        event_id = accept(state.db, state.queue, sid, "share", uuid.uuid4().hex, payload)
+        state.work()
+        row = state.db.item_for_event(sid, event_id) if event_id is not None else None
+        if row is None:
+            return {"status": "skipped", "item": None}
+        card = {k: row[k] for k in ("id", "kind", "subject", "title", "due_at", "status", "route")}
+        return {"status": row["status"], "item": card}
 
     @api.post("/api/approve")
     def approve(body: dict[str, str], authorization: str | None = Header(None)) -> dict[str, Any]:
@@ -222,6 +313,7 @@ def create(app_state: App | None = None, run_jobs: bool = False) -> FastAPI:
         rows = state.db.notifications(sid, after, max(1, min(limit, 100)))
         return {"notifications": [{"id": r["id"], "kind": r["kind"], "title": r["title"],
                                    "body": r["body"], "item_id": r["item_id"],
+                                   "reminder_id": r["reminder_id"],
                                    "created_at": r["created_at"]} for r in rows],
                 "latest_id": latest}
 

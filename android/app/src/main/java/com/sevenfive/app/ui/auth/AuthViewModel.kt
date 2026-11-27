@@ -241,7 +241,7 @@ class AuthViewModel(
         if (input.isBlank()) return
         container.servers.save(ServerConfig.parse(input))
         container.portmax.forget()
-        container.cards.reset()
+        viewModelScope.launch { container.cards.reset() }
         reloadConfig(force = true)
     }
 

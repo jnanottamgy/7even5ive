@@ -9,7 +9,7 @@ import org.junit.Test
 class DemoTourTest {
     @Test
     fun `the tour has every step of the demo script, each on a tab`() {
-        assertEquals(13, DemoTour.steps.size)
+        assertEquals(16, DemoTour.steps.size)
         val tabs = setOf(Routes.HOME, Routes.ATTENDANCE, Routes.MATERIALS, Routes.INBOX, Routes.REMINDERS)
         assertTrue(DemoTour.steps.all { it.route in tabs && it.title.isNotBlank() && it.say.isNotBlank() })
     }
