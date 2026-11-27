@@ -6,7 +6,7 @@ name: Release APK
 
 on:
   push:
-    branches: ["claude/busy-pasteur-lake3c", "kartik"]
+    branches: ["main", "claude/busy-pasteur-lake3c", "kartik"]
     paths:
       - "android/**"
       - ".github/workflows/release-apk.yml"
