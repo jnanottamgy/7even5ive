@@ -42,6 +42,7 @@ import com.sevenfive.app.ui.components.kindStyle
 import com.sevenfive.app.ui.components.rememberNow
 import androidx.compose.runtime.getValue
 import com.sevenfive.app.ui.theme.LocalAppColors
+import com.sevenfive.app.ui.theme.glassSurface
 import com.sevenfive.app.ui.theme.NeoInk
 import com.sevenfive.app.ui.theme.Orange
 import com.sevenfive.app.util.Time
@@ -266,55 +267,83 @@ internal data class Segment(val label: String, val count: Int = 0)
 internal fun NeoSegments(segments: List<Segment>, selected: Int, modifier: Modifier = Modifier, onSelect: (Int) -> Unit) {
     val app = LocalAppColors.current
     val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
-    // Up to four share the width evenly; more scroll sideways, each as wide as its words.
+    // Up to four share the width evenly, with one ink pill that slides between them on a spring;
+    // more scroll sideways, each as wide as its words.
     val many = segments.size > 4
+    val pick: (Int) -> Unit = { i ->
+        if (i != selected) haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+        onSelect(i)
+    }
+    if (!many) {
+        androidx.compose.foundation.layout.BoxWithConstraints(
+            modifier
+                .fillMaxWidth()
+                .padding(top = 2.dp, bottom = 6.dp)
+                .glassSurface(shape = CircleShape)
+                .padding(4.dp),
+        ) {
+            val slot = maxWidth / segments.size
+            val x by androidx.compose.animation.core.animateDpAsState(
+                slot * selected,
+                androidx.compose.animation.core.spring(dampingRatio = 0.78f, stiffness = 420f),
+                label = "segment pill",
+            )
+            Box(Modifier.offset(x = x).width(slot).height(40.dp).clip(CircleShape).background(NeoInk))
+            Row(Modifier.fillMaxWidth()) {
+                segments.forEachIndexed { i, seg -> SegmentLabel(seg, i == selected, Modifier.width(slot)) { pick(i) } }
+            }
+        }
+        return
+    }
     Row(
         modifier
             .fillMaxWidth()
             .padding(top = 2.dp, bottom = 6.dp)
-            .clip(CircleShape)
-            .background(app.glassFill)
-            .then(if (many) Modifier.horizontalScroll(rememberScrollState()) else Modifier)
+            .glassSurface(shape = CircleShape)
+            .horizontalScroll(rememberScrollState())
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         segments.forEachIndexed { i, seg ->
             val on = i == selected
-            Row(
-                Modifier
-                    .then(if (many) Modifier.padding(horizontal = 0.dp) else Modifier.weight(1f))
-                    .height(40.dp)
-                    .clip(CircleShape)
-                    .background(if (on) NeoInk else Color.Transparent)
-                    .semantics(mergeDescendants = true) {
-                        this.selected = on
-                        role = androidx.compose.ui.semantics.Role.Tab
-                    }
-                    .clickable {
-                        if (i != selected) haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                        onSelect(i)
-                    }
-                    .then(if (many) Modifier.padding(horizontal = 14.dp) else Modifier),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    seg.label,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = if (on) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Medium,
-                    color = if (on) com.sevenfive.app.ui.theme.NeoGround else NeoInk,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (seg.count > 0) {
-                    Spacer(Modifier.width(5.dp))
-                    Text(
-                        if (seg.count > 99) "99+" else "${seg.count}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (on) Orange else app.secondaryLabel,
-                    )
-                }
+            val pill by androidx.compose.animation.animateColorAsState(if (on) NeoInk else Color.Transparent, label = "pill")
+            SegmentLabel(seg, on, Modifier.clip(CircleShape).background(pill).padding(horizontal = 14.dp)) { pick(i) }
+        }
+    }
+}
+
+/** One segment's words; their colour eases between ink and light as the pill arrives. */
+@Composable
+private fun SegmentLabel(seg: Segment, on: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val app = LocalAppColors.current
+    val ink by androidx.compose.animation.animateColorAsState(if (on) com.sevenfive.app.ui.theme.NeoGround else NeoInk, label = "segment ink")
+    Row(
+        modifier
+            .height(40.dp)
+            .clip(CircleShape)
+            .semantics(mergeDescendants = true) {
+                this.selected = on
+                role = androidx.compose.ui.semantics.Role.Tab
             }
+            .clickable(onClick = onClick),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            seg.label,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = if (on) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Medium,
+            color = ink,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (seg.count > 0) {
+            Spacer(Modifier.width(5.dp))
+            Text(
+                if (seg.count > 99) "99+" else "${seg.count}",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (on) Orange else app.secondaryLabel,
+            )
         }
     }
 }
@@ -339,8 +368,7 @@ internal fun RemindersEntry(reminders: List<com.sevenfive.app.data.Reminder>, mo
     Row(
         modifier
             .fillMaxWidth()
-            .clip(MaterialTheme.shapes.large)
-            .background(app.glassFill)
+            .glassSurface(shape = MaterialTheme.shapes.large)
             .semantics(mergeDescendants = true) { role = androidx.compose.ui.semantics.Role.Button }
             .clickable(onClick = onOpen)
             .padding(horizontal = 18.dp, vertical = 16.dp),
@@ -430,8 +458,7 @@ internal fun ClashCard(clash: Clash, modifier: Modifier = Modifier) {
     Column(
         modifier
             .fillMaxWidth()
-            .clip(MaterialTheme.shapes.large)
-            .background(app.glassFill)
+            .glassSurface(shape = MaterialTheme.shapes.large)
             .padding(18.dp),
     ) {
         NeoLabel("Busy stretch", dot = Orange)

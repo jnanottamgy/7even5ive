@@ -14,6 +14,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -139,20 +140,32 @@ fun Modifier.glassSurface(
     edgeWidth: Dp = 0.8.dp,
 ): Modifier {
     val app = LocalAppColors.current
-    // Neo-minimal: a flat, quiet fill and no rim. [strong] is a touch darker for controls.
-    val fill = if (strong) MaterialTheme.colorScheme.surfaceContainerHigh else app.glassFill
-    val edge = app.glassEdge
+    // Frosted glass, without a live blur (that would redraw every frame): translucent white,
+    // a little brighter at the top; a soft sheen in the top-left corner; and a rim that catches
+    // the light, bright white along the top fading to a fine dark line at the bottom.
+    val top = if (strong) 0.82f else app.glassFill.alpha + 0.12f
+    val bottom = if (strong) 0.66f else app.glassFill.alpha - 0.08f
+    val fill = Brush.verticalGradient(listOf(Color.White.copy(alpha = top), Color.White.copy(alpha = bottom)))
+    val rim = Brush.verticalGradient(
+        0f to app.glassEdge,
+        0.45f to Color.White.copy(alpha = 0.35f),
+        1f to NeoInk.copy(alpha = 0.07f),
+    )
     return this
         .clip(shape)
         .background(fill)
+        .drawWithCache {
+            val sheen = Brush.radialGradient(
+                listOf(Color.White.copy(alpha = 0.55f), Color.Transparent),
+                center = Offset(size.width * 0.12f, 0f),
+                radius = size.maxDimension * 0.7f,
+            )
+            onDrawBehind { drawRect(sheen) }
+        }
         .then(if (tint != Color.Unspecified) Modifier.background(tint) else Modifier)
-        .then(if (edge.alpha > 0f) Modifier.border(BorderStroke(edgeWidth, edge), shape) else Modifier)
+        .border(BorderStroke(edgeWidth.coerceAtLeast(1.dp), rim), shape)
 }
 
-/**
- * Real frosted glass for things that float over content (the tab bar, the demo guide): what is
- * behind is blurred and tinted, with the same bright rim as [glassSurface].
- */
 /**
  * What floats over content (the demo guide). Neo-minimal: a plain solid surface. No blur, so
  * nothing behind it has to be recorded and re-processed on every frame.

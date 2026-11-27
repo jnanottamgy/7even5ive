@@ -81,10 +81,11 @@ data class AppColors(
 
 private val LightApp = AppColors(
     dark = false,
+    // Frosted glass: translucent white over the soft background, a bright rim on top.
     glassTint = NeoGround,
-    glassFill = NeoFill,
+    glassFill = Color.White.copy(alpha = 0.58f),
     glassFallback = NeoGround,
-    glassEdge = Color.Transparent,
+    glassEdge = Color.White.copy(alpha = 0.95f),
     hairline = NeoLine,
     secondaryLabel = NeoGrey,
     tertiaryLabel = Color(0xFF8C8C85),
