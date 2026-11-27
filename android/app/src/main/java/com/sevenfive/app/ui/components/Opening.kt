@@ -2,11 +2,13 @@ package com.sevenfive.app.ui.components
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -18,41 +20,59 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.sevenfive.app.ui.theme.LocalAppColors
 import com.sevenfive.app.ui.theme.NeoGround
 import com.sevenfive.app.ui.theme.NeoInk
 import com.sevenfive.app.ui.theme.Orange
-import kotlinx.coroutines.launch
+
+/** The whole opening sequence, start to finish; the app opens right after it. */
+const val OPENING_SEQUENCE_MILLIS = 3_000
+
+private const val RING_MS = 900f
+private const val WORDS_AT = 380f
+private const val WORDS_MS = 520f
+private const val LETTERS_AT = 1_000f
+private const val LETTER_STEP = 80f
+private const val LETTER_MS = 240f
+private const val SENTENCE = "Your semester, sorted."
+private const val ORANGE_FROM = 15 // "sorted." is the orange part
+
+/** 0 before [start], 1 after [start] + [length], eased in between. */
+private fun phase(t: Float, start: Float, length: Float): Float =
+    FastOutSlowInEasing.transform(((t - start) / length).coerceIn(0f, 1f))
 
 /**
- * The opening screen, neo-minimal: the brand's ring draws itself in orange, then the wordmark and
- * one line rise into place. It sits over the app while it starts and fades away on its own.
+ * The opening screen, neo-minimal: the brand's ring draws itself in orange, the wordmark rises,
+ * then "Your semester, sorted." arrives one letter at a time, "sorted." in orange. The whole
+ * sequence takes [OPENING_SEQUENCE_MILLIS]; [onFinished] is called the moment it ends.
  */
 @Composable
-fun OpeningScreen(modifier: Modifier = Modifier) {
-    val ring = remember { Animatable(0f) }
-    val words = remember { Animatable(0f) }
-    val line = remember { Animatable(0f) }
+fun OpeningScreen(modifier: Modifier = Modifier, onFinished: () -> Unit = {}) {
+    val clock = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
-        launch { ring.animateTo(1f, tween(900, easing = FastOutSlowInEasing)) }
-        launch { words.animateTo(1f, tween(520, delayMillis = 380, easing = FastOutSlowInEasing)) }
-        launch { line.animateTo(1f, tween(520, delayMillis = 620, easing = FastOutSlowInEasing)) }
+        clock.animateTo(OPENING_SEQUENCE_MILLIS.toFloat(), tween(OPENING_SEQUENCE_MILLIS, easing = LinearEasing))
+        onFinished()
     }
+    val t = clock.value
+    val ring = phase(t, 0f, RING_MS)
+    val words = phase(t, WORDS_AT, WORDS_MS)
     val app = LocalAppColors.current
     Box(
         modifier
             .fillMaxSize()
-            .background(NeoGround)
-            .semantics { contentDescription = "7even5ive is opening" },
+            .background(NeoGround),
     ) {
         Column(Modifier.align(Alignment.CenterStart).padding(horizontal = 32.dp)) {
             Canvas(Modifier.size(64.dp)) {
@@ -62,7 +82,7 @@ fun OpeningScreen(modifier: Modifier = Modifier) {
                 drawArc(
                     color = Orange,
                     startAngle = -90f,
-                    sweepAngle = 270f * ring.value,
+                    sweepAngle = 270f * ring,
                     useCenter = false,
                     topLeft = androidx.compose.ui.geometry.Offset(inset, inset),
                     size = androidx.compose.ui.geometry.Size(size.width - stroke, size.height - stroke),
@@ -80,21 +100,31 @@ fun OpeningScreen(modifier: Modifier = Modifier) {
                 modifier = Modifier
                     .padding(top = 28.dp)
                     .graphicsLayer {
-                        alpha = words.value
-                        translationY = (1f - words.value) * 18.dp.toPx()
+                        alpha = words
+                        translationY = (1f - words) * 18.dp.toPx()
                     },
             )
-            Text(
-                "Your semester, sorted.",
-                style = MaterialTheme.typography.titleLarge,
-                color = app.secondaryLabel,
-                modifier = Modifier
-                    .padding(top = 6.dp)
-                    .graphicsLayer {
-                        alpha = line.value
-                        translationY = (1f - line.value) * 14.dp.toPx()
-                    },
-            )
+            // One letter at a time. Read out once, as the whole sentence.
+            Row(
+                Modifier
+                    .padding(top = 8.dp)
+                    .clearAndSetSemantics { contentDescription = SENTENCE },
+            ) {
+                SENTENCE.forEachIndexed { i, ch ->
+                    val a = phase(t, LETTERS_AT + i * LETTER_STEP, LETTER_MS)
+                    Text(
+                        ch.toString(),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = if (i >= ORANGE_FROM) FontWeight.SemiBold else FontWeight.Medium,
+                        // A deeper orange than the ring, so the word stays readable on the light ground.
+                        color = if (i >= ORANGE_FROM) Color(0xFFE0670A) else app.secondaryLabel,
+                        modifier = Modifier.graphicsLayer {
+                            alpha = a
+                            translationY = (1f - a) * 10.dp.toPx()
+                        },
+                    )
+                }
+            }
         }
         Text(
             "Deadlines · attendance · college mail",
@@ -104,7 +134,7 @@ fun OpeningScreen(modifier: Modifier = Modifier) {
                 .align(Alignment.BottomStart)
                 .navigationBarsPadding()
                 .padding(start = 32.dp, bottom = 28.dp)
-                .graphicsLayer { alpha = line.value },
+                .graphicsLayer { alpha = words },
         )
     }
 }

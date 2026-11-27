@@ -25,6 +25,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -100,12 +102,14 @@ class MainActivity : ComponentActivity() {
         setContent {
             SevenFiveTheme {
                 val account by container.accounts.state.collectAsStateWithLifecycle()
-                // The opening screen: shown once per launch (not again on rotation), long enough
-                // for the ring to draw, and at most a moment longer while the account is checked.
+                // The opening screen: once per launch (not again on rotation). The app opens the
+                // moment its sequence ends (3 s), or up to 2 s later if the account is still
+                // being checked.
                 var opened by rememberSaveable { mutableStateOf(false) }
+                var sequenceDone by remember { mutableStateOf(false) }
                 LaunchedEffect(Unit) {
                     if (opened) return@LaunchedEffect
-                    delay(OPENING_MIN_MILLIS)
+                    snapshotFlow { sequenceDone }.first { it }
                     withTimeoutOrNull(OPENING_EXTRA_MILLIS) {
                         container.accounts.state.first { it !is AccountState.Starting }
                     }
@@ -124,9 +128,9 @@ class MainActivity : ComponentActivity() {
                     AnimatedVisibility(
                         visible = !opened,
                         enter = EnterTransition.None,
-                        exit = fadeOut(tween(450)),
+                        exit = fadeOut(tween(220)),
                     ) {
-                        OpeningScreen()
+                        OpeningScreen(onFinished = { sequenceDone = true })
                     }
                 }
             }
@@ -138,8 +142,7 @@ class MainActivity : ComponentActivity() {
     private companion object {
         /** The portal refresh (its upload goes to the server) waits a moment after the outbox pull. */
         const val PORTAL_AFTER_MILLIS = 2_000L
-        /** The opening screen stays at least this long (the ring's draw), then up to EXTRA more. */
-        const val OPENING_MIN_MILLIS = 3_000L
+        /** After the 3 s opening sequence, how much longer it may wait for the account check. */
         const val OPENING_EXTRA_MILLIS = 2_000L
     }
 
