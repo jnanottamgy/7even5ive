@@ -269,3 +269,64 @@ internal fun QuietStat(label: String, value: String, modifier: Modifier = Modifi
         }
     }
 }
+
+/**
+ * One row of Today's list: a quiet outline icon (or a small orange play button), a title over a
+ * detail line, and the value on the right. Every row the same shape; hairlines between them.
+ */
+@Composable
+internal fun TodayRow(
+    title: String,
+    detail: String,
+    modifier: Modifier = Modifier,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    leading: (@Composable () -> Unit)? = null,
+    trailing: @Composable () -> Unit = {},
+    onClick: () -> Unit,
+) {
+    val app = LocalAppColors.current
+    Row(
+        modifier
+            .fillMaxWidth()
+            .height(62.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .pressable(scaleTo = 0.985f, onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.width(40.dp), contentAlignment = Alignment.CenterStart) {
+            when {
+                leading != null -> leading()
+                icon != null -> Icon(icon, contentDescription = null, tint = NeoInk, modifier = Modifier.size(22.dp))
+            }
+        }
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = app.secondaryLabel, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Spacer(Modifier.width(12.dp))
+        trailing()
+    }
+}
+
+/** The hairline between Today's rows, starting under the text, not the icon. */
+@Composable
+internal fun RowDivider() {
+    Box(Modifier.fillMaxWidth().padding(start = 40.dp).height(1.dp).background(LocalAppColors.current.hairline))
+}
+
+/** The mini bars for a row's right side. */
+@Composable
+internal fun RowBars(subjects: List<SubjectAttendance>) {
+    if (subjects.isEmpty()) return
+    Bars(subjects, subjects.first().minimumPercent, Modifier.width(56.dp).height(22.dp))
+}
+
+/** Three dots on a short line for a row's right side: the busy stretch at a glance. */
+@Composable
+internal fun RowDots(clash: Clash) {
+    Timeline(clash, Modifier.width(52.dp).height(12.dp))
+}
+
+/** A small ring for a row's right side. */
+@Composable
+internal fun RowRing(share: Float) = Ring(share, 16.dp)
