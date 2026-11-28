@@ -17,10 +17,10 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.sevenfive.app.portal.AppVisibility
 import com.sevenfive.app.portal.ForegroundSync
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.LaunchedEffect
@@ -119,7 +119,18 @@ class MainActivity : ComponentActivity() {
                     opened = true
                 }
                 Box(Modifier.fillMaxSize()) {
-                    Crossfade(targetState = gate(account), label = "account") { screen ->
+                    // The app's one backdrop: drawn once, behind every screen, so changing screens
+                    // never moves or restarts it. Every screen over it is see-through.
+                    com.sevenfive.app.ui.theme.AuroraBackground()
+                    androidx.compose.animation.AnimatedContent(
+                        targetState = gate(account),
+                        // Fade through: the sign-in screens are gone before the app comes in.
+                        transitionSpec = {
+                            androidx.compose.animation.fadeIn(com.sevenfive.app.ui.theme.Motion.arrive) togetherWith
+                                fadeOut(com.sevenfive.app.ui.theme.Motion.leave)
+                        },
+                        label = "account",
+                    ) { screen ->
                         when (screen) {
                             Gate.START -> StartingScreen()
                             Gate.CHECK -> CheckingScreen(auth, account as? AccountState.Checking ?: AccountState.Checking())

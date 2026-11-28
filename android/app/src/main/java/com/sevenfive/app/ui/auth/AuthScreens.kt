@@ -70,8 +70,8 @@ import com.sevenfive.app.data.AccountState
 import com.sevenfive.app.data.AuthConfig
 import com.sevenfive.app.ui.components.GlassPill
 import com.sevenfive.app.ui.components.PrimaryPill
-import com.sevenfive.app.ui.theme.AuroraBackground
 import com.sevenfive.app.ui.theme.LocalAppColors
+import com.sevenfive.app.ui.theme.Motion
 import com.sevenfive.app.ui.theme.glassSurface
 import com.sevenfive.app.ui.theme.pressable
 import kotlinx.coroutines.delay
@@ -87,9 +87,10 @@ fun AuthFlow(vm: AuthViewModel) {
     AnimatedContent(
         targetState = step,
         transitionSpec = {
+            // Fade through, like every screen change: the last step is gone before the next comes.
             val forward = initialState is AuthStep.Login
-            (slideInHorizontally { if (forward) it / 5 else -it / 5 } + fadeIn()) togetherWith
-                (slideOutHorizontally { if (forward) -it / 5 else it / 5 } + fadeOut())
+            (slideInHorizontally(Motion.travel) { if (forward) Motion.nudge(it) else -Motion.nudge(it) } + fadeIn(Motion.arrive)) togetherWith
+                (slideOutHorizontally(Motion.travel) { if (forward) -Motion.nudge(it) else Motion.nudge(it) } + fadeOut(Motion.leave))
         },
         label = "auth step",
     ) { current ->
@@ -365,8 +366,8 @@ private fun ResetScreen(vm: AuthViewModel, email: String) {
 // --- pieces ---------------------------------------------------------------------------------------
 @Composable
 fun AuthScaffold(bottom: (@Composable ColumnScope.() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
+    // See-through: over the app's one backdrop (MainActivity), so steps fade through over it.
     Box(Modifier.fillMaxSize()) {
-        AuroraBackground()
         Column(Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {
             Column(
                 Modifier

@@ -49,7 +49,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.sevenfive.app.ui.theme.AuroraBackground
 import com.sevenfive.app.ui.theme.LocalAppColors
 import com.sevenfive.app.ui.theme.glassSurface
 import com.sevenfive.app.ui.theme.pressable
@@ -113,14 +112,14 @@ fun PushTopBar(
 fun PushScaffold(title: String, onBack: () -> Unit, content: @Composable (PaddingValues) -> Unit) {
     val scroll = TopAppBarDefaults.pinnedScrollBehavior()
     val app = LocalAppColors.current
-    // Above the tab bar where it shows, else above the system's navigation bar.
-    val bottom = maxOf(
-        WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
-        com.sevenfive.app.ui.theme.LocalBottomInset.current,
-    )
+    // Above the system's navigation bar: a pushed screen never has the tab bar (it leaves as the
+    // screen opens), so nothing here moves when the bar goes.
+    val bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     Scaffold(
         modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
-        containerColor = MaterialTheme.colorScheme.background,
+        // See-through: the one backdrop behind every screen (SevenFiveRoot) shows, still, while
+        // screens fade through over it.
+        containerColor = Color.Transparent,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             // Solid once content slides under it; clear at the top. No blur: nothing to re-process.
@@ -146,7 +145,6 @@ fun PushScaffold(title: String, onBack: () -> Unit, content: @Composable (Paddin
         },
     ) { inner ->
         Box(Modifier.fillMaxSize()) {
-            AuroraBackground()
             content(
                 PaddingValues(
                     start = 16.dp,

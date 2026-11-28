@@ -9,7 +9,10 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import com.github.takahirom.roborazzi.captureRoboImage
+import java.util.TimeZone
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -21,7 +24,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import java.util.TimeZone
 
 /**
  * Taps that change the screen at once, against a server that takes its time (or says no): the
@@ -122,6 +124,32 @@ class SeamlessUiTest {
         rule.onNode(hasContentDescription("Back")).performClick()
         rule.waitForIdle()
         rule.tab("This week").assertIsSelected() // one Back, and the tabs are back
+    }
+
+    @Test
+    fun `a screen change never shows two screens at once`() {
+        rule.segment("Today").performClick()
+        rule.waitForIdle()
+        // Frames of a tab switch, a pushed screen and Back, every 30 ms (build/outputs/roborazzi/frames).
+        rule.mainClock.autoAdvance = false
+        rule.tab("Inbox").performClick()
+        film("1-tab")
+        rule.onNodeWithContentDescription("Settings").performClick()
+        film("2-push")
+        rule.onNode(hasContentDescription("Back")).performClick()
+        film("3-back")
+        rule.mainClock.autoAdvance = true
+        rule.waitForIdle()
+        rule.tab("Inbox").assertIsSelected()
+    }
+
+    private fun film(name: String) {
+        var at = 0L
+        for (t in listOf(0L, 30L, 60L, 90L, 120L, 150L, 210L, 300L, 400L)) {
+            rule.mainClock.advanceTimeBy(t - at)
+            at = t
+            rule.onRoot().captureRoboImage("build/outputs/roborazzi/frames/$name-${"%03d".format(t)}ms.png")
+        }
     }
 
     @Test

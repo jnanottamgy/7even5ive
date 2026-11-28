@@ -8,6 +8,8 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -223,7 +225,8 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
     }
     Scaffold(
         // Each screen draws its own bar under the status bar; content runs under the floating tabs.
-        containerColor = MaterialTheme.colorScheme.background,
+        // See-through: the app's one backdrop is drawn once, behind everything (MainActivity).
+        containerColor = androidx.compose.ui.graphics.Color.Transparent,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = {
             SnackbarHost(snackbar) { data ->
@@ -238,9 +241,9 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
         bottomBar = {
             AnimatedVisibility(
                 visible = showTabs,
-                // On the push's own spring, so the bar and the screen move as one and settle together.
-                enter = slideInVertically(Motion.screen) { it } + fadeIn(Motion.fade),
-                exit = slideOutVertically(Motion.screen) { it } + fadeOut(Motion.fade),
+                // Part of the tab screens' motion: gone with the one leaving, back with the one arriving.
+                enter = barIn,
+                exit = barOut,
             ) {
                 Column(
                     Modifier
@@ -295,9 +298,6 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
             LocalNav provides { r: String -> if (tabs.any { it.route == r }) nav.goToTab(r) else nav.navigate(r) { launchSingleTop = true } },
         ) {
             Box(Modifier.fillMaxSize()) {
-                // The one backdrop: drawn once, behind every tab, and never part of a transition.
-                // Pushed screens bring their own sheet over it, on the same clock.
-                com.sevenfive.app.ui.theme.AuroraBackground()
                 NavHost(
                     nav,
                     startDestination = Routes.HOME,
@@ -349,32 +349,35 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
     }
 }
 
-// Navigation motion. A pushed screen slides in over the one below, which drifts a quarter of the
-// way left and dims, and the reverse on back (also driven by the predictive back gesture).
-// Switching tabs is a quick cross-fade with a hint of depth, as tabs aren't a stack.
+// Navigation motion, "fade through": the screen you leave is gone (90 ms) before the one you open
+// comes in (210 ms), so no screen ever shows through another, and the one backdrop under both
+// stays still. A screen opened from a tab also travels a little from the side it comes from (in
+// from the right, back out to the right), and so does the predictive back gesture, which runs
+// the same motion under the finger. Tabs aren't a stack: they only fade.
 
 private typealias Nav = AnimatedContentTransitionScope<NavBackStackEntry>
 
 private val NavBackStackEntry.isPushed get() = destination.route in pushed
 
-private val tabFadeIn = tween<Float>(durationMillis = 180, easing = FastOutSlowInEasing)
-private val tabFadeOut = tween<Float>(durationMillis = 120, easing = FastOutSlowInEasing)
-
 private fun Nav.enter(): EnterTransition =
-    if (targetState.isPushed) slideInHorizontally(Motion.screen) { it }
-    else fadeIn(tabFadeIn)
+    if (targetState.isPushed) slideInHorizontally(Motion.travel) { Motion.nudge(it) } + fadeIn(Motion.arrive)
+    else fadeIn(Motion.arrive)
 
 private fun Nav.exit(): ExitTransition =
-    if (targetState.isPushed) slideOutHorizontally(Motion.screen) { -it / 4 } + fadeOut(Motion.fade, targetAlpha = 0.7f)
-    else fadeOut(tabFadeOut)
+    if (targetState.isPushed) slideOutHorizontally(Motion.travel) { -Motion.nudge(it) } + fadeOut(Motion.leave)
+    else fadeOut(Motion.leave)
 
 private fun Nav.popEnter(): EnterTransition =
-    if (initialState.isPushed) slideInHorizontally(Motion.screen) { -it / 4 } + fadeIn(Motion.fade, initialAlpha = 0.7f)
-    else fadeIn(tabFadeIn)
+    if (initialState.isPushed) slideInHorizontally(Motion.travel) { -Motion.nudge(it) } + fadeIn(Motion.arrive)
+    else fadeIn(Motion.arrive)
 
 private fun Nav.popExit(): ExitTransition =
-    if (initialState.isPushed) slideOutHorizontally(Motion.screen) { it }
-    else fadeOut(tabFadeOut)
+    if (initialState.isPushed) slideOutHorizontally(Motion.travel) { Motion.nudge(it) } + fadeOut(Motion.leave)
+    else fadeOut(Motion.leave)
+
+/** The tab bar comes and goes with the tab screens: out as they leave, in as they arrive. */
+private val barIn = fadeIn(Motion.arrive)
+private val barOut = fadeOut(Motion.leave)
 
 /**
  * The tab bar, iOS style: a frosted capsule floating over the content, with a soft selection

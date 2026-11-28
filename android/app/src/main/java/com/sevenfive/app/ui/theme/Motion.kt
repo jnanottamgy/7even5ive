@@ -1,7 +1,10 @@
 package com.sevenfive.app.ui.theme
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -25,6 +28,24 @@ object Motion {
     val screen = spring<IntOffset>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
     val fade = spring<Float>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
     val item = spring<IntOffset>(dampingRatio = 0.86f, stiffness = Spring.StiffnessMediumLow)
+
+    // Between screens, "fade through": the one being left is gone before the one arriving comes
+    // in, so no screen ever shows through another; the one backdrop under both stays still.
+    private const val LEAVE_MS = 90
+    private const val ARRIVE_MS = 210
+
+    /** The screen being left: most of it gone on the first frames after the tap, so the tap
+     * answers at once, and all of it by 90 ms. */
+    val leave = tween<Float>(LEAVE_MS, easing = LinearOutSlowInEasing)
+
+    /** The screen arriving: only once the last has gone, settling as it comes. */
+    val arrive = tween<Float>(ARRIVE_MS, delayMillis = LEAVE_MS, easing = LinearOutSlowInEasing)
+
+    /** The little way a screen travels while it fades (where the motion has a direction). */
+    val travel = tween<IntOffset>(LEAVE_MS + ARRIVE_MS, easing = FastOutSlowInEasing)
+
+    /** About 30 dp on a phone: a hint of direction rather than a slide. */
+    fun nudge(width: Int) = width / 12
 }
 
 /**

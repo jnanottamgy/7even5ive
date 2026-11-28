@@ -42,7 +42,15 @@ internal fun ComposeContentTestRule.startDemoApp(server: RecordedServer): AppCon
     }
     val vm = AppViewModel(container)
     val auth = AuthViewModel(container, SavedStateHandle())
-    setContent { SevenFiveTheme { SevenFiveRoot(vm, auth) } }
+    // As MainActivity draws it: the one backdrop, then the app over it.
+    setContent {
+        SevenFiveTheme {
+            androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier) {
+                com.sevenfive.app.ui.theme.AuroraBackground()
+                SevenFiveRoot(vm, auth)
+            }
+        }
+    }
     waitForIdle()
     return container
 }
