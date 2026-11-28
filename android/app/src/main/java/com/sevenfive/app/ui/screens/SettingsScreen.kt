@@ -328,7 +328,7 @@ private fun CallsSection(vm: AppViewModel) {
             icon = Icons.Outlined.PhoneInTalk,
             iconColor = app.event,
             detail = calls?.phone ?: "No number on file for calls",
-            enabled = calls != null && "calls" !in busy,
+            enabled = calls != null,
         )
         GroupDivider()
         GroupRow("Quiet hours", icon = Icons.Outlined.Bedtime, iconColor = app.exam,

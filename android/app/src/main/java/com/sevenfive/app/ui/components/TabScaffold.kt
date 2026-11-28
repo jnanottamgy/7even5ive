@@ -44,7 +44,6 @@ import com.sevenfive.app.ui.AppViewModel
 import com.sevenfive.app.ui.LocalOpenVoice
 import com.sevenfive.app.ui.LocalNav
 import com.sevenfive.app.ui.Routes
-import com.sevenfive.app.ui.theme.AuroraBackground
 import com.sevenfive.app.ui.theme.LocalAppColors
 import com.sevenfive.app.ui.theme.LocalBottomInset
 import com.sevenfive.app.ui.theme.glassSurface
@@ -137,7 +136,8 @@ fun TabScaffold(
         },
     ) { inner ->
         Box(Modifier.fillMaxSize()) {
-            AuroraBackground()
+            // No background of its own: the one backdrop is behind every tab (SevenFiveRoot), so
+            // switching tabs moves only what is on it.
             // No pull-to-refresh: the cards refresh on their own, and a first load shows a
             // skeleton of the screen instead of a spinner.
             Box(Modifier.fillMaxSize()) {

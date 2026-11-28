@@ -43,17 +43,20 @@ fun AuroraBackground(modifier: Modifier = Modifier) {
             ?.isPowerSaveMode == true
         noAnimations || saving
     }
-    // One slow clock for the whole background, ticking 10 times a second instead of every frame:
-    // the motion is so slow (at most a pixel or two per tick) it looks the same, and the phone
-    // draws it 6 to 12 times less often than at full frame rate.
-    // It pauses by itself whenever the app isn't on screen (no frames are drawn then).
-    val clock = androidx.compose.runtime.remember { androidx.compose.runtime.mutableLongStateOf(0L) }
+    // A slow clock, ticking 10 times a second instead of every frame: the motion is so slow (at
+    // most a pixel or two per tick) it looks the same, and the phone draws it 6 to 12 times less
+    // often than at full frame rate. It pauses by itself when the app isn't on screen.
+    // The phone's own clock, not one started with this screen: every copy (the backdrop behind
+    // the tabs, a pushed screen's sheet, the sign-in screens) is at the same point of its motion,
+    // so moving between them never makes the lines jump or the glow start over.
+    val clock = androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableLongStateOf(if (still) 0L else System.nanoTime() / 1_000_000)
+    }
     androidx.compose.runtime.LaunchedEffect(still) {
         if (still) return@LaunchedEffect
-        val start = androidx.compose.runtime.withFrameMillis { it }
         while (true) {
+            clock.longValue = androidx.compose.runtime.withFrameMillis { it }
             kotlinx.coroutines.delay(100)
-            clock.longValue = androidx.compose.runtime.withFrameMillis { it } - start
         }
     }
     // The contour paths are made once and reshaped in place, so drawing makes no garbage.

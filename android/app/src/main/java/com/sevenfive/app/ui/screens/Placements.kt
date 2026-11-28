@@ -1,7 +1,6 @@
 package com.sevenfive.app.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,6 +46,7 @@ import com.sevenfive.app.ui.theme.LocalAppColors
 import com.sevenfive.app.ui.theme.NeoGround
 import com.sevenfive.app.ui.theme.NeoInk
 import com.sevenfive.app.ui.theme.Orange
+import com.sevenfive.app.ui.theme.pressable
 import com.sevenfive.app.util.Time
 import java.util.Locale
 
@@ -182,7 +182,7 @@ internal fun PlacementCard(item: Item, cards: Cards, modifier: Modifier = Modifi
                     color = app.secondaryLabel,
                     modifier = Modifier
                         .clip(CircleShape)
-                        .clickable { set(if (stage == LocalLog.NOT_APPLYING) 0 else LocalLog.NOT_APPLYING) }
+                        .pressable(scaleTo = 0.96f) { set(if (stage == LocalLog.NOT_APPLYING) 0 else LocalLog.NOT_APPLYING) }
                         .padding(horizontal = 8.dp, vertical = 12.dp),
                 )
             }
@@ -212,7 +212,7 @@ private fun Pipeline(stage: Int, onSet: (Int) -> Unit) {
                         selected = reached
                         contentDescription = "$name" + if (reached) ", reached" else ""
                     }
-                    .clickable { onSet(if (current) step - 1 else step) }
+                    .pressable(scaleTo = 0.96f) { onSet(if (current) step - 1 else step) }
                     .padding(vertical = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {

@@ -18,6 +18,8 @@ import com.sevenfive.app.data.CardsState
 import com.sevenfive.app.data.Item
 import com.sevenfive.app.data.Reminder
 import com.sevenfive.app.data.ServerConfig
+import com.sevenfive.app.data.libraryFiles
+import com.sevenfive.app.data.library
 import com.sevenfive.app.notify.Notifications
 import com.sevenfive.app.portal.PortalCheck
 import com.sevenfive.app.portal.PortalKeepAliveWorker
@@ -36,6 +38,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
@@ -157,6 +160,11 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     /** Moves on when the chat is cleared or the person changes: a late answer is dropped. */
     private var chatFor = 0
 
+    // Before init: its first account check runs at once, inside the constructor, and clears these.
+    private val _library = MutableStateFlow<com.sevenfive.app.data.LibraryTree?>(null)
+    val library: StateFlow<com.sevenfive.app.data.LibraryTree?> = _library.asStateFlow()
+    private val shelfPages = java.util.concurrent.ConcurrentHashMap<String, ShelfPage>()
+
     init {
         viewModelScope.launch { container.finder.messages.collect { say(it) } }
         // Someone else is using the app now: nothing of the last person's stays on screen.
@@ -180,6 +188,8 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
                     _personalToken.value = null
                     _whatsapp.value = null
                     connectionsFor++
+                    _library.value = null
+                    shelfPages.clear()
                     _connections.value = ConnectionsState()
                     clearChat()
                 }
@@ -356,67 +366,181 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
     fun titleFor(approval: Approval): String =
         cards.value.cards?.itemById(approval.itemId)?.title ?: "item #${approval.itemId ?: "?"}"
 
+    // --- taps that change the student's cards -------------------------------------------------------
+    // Each one changes the screen the moment it is tapped (CardsRepository lays the change over the
+    // server's cards) and tells the server in the background, in order for each item: a Done and
+    // its Undo arrive in the order they were tapped. If the server refuses, the change is taken back
+    // and its reason shown; if it agrees, its own cards take over without a flicker.
+
     /** Never automatic: only ever called from the Approve button. */
-    fun approve(approval: Approval) = action(approval.token) {
+    fun approve(approval: Approval) {
         val title = titleFor(approval)
-        try {
-            container.core.approve(approval.token)
-            container.cards.dropApproval(approval.token)
-            _approved.update { done -> listOf(DoneApproval(approval, title)) + done.filterNot { it.approval.token == approval.token } }
-            say("Added to Google Calendar: $title")
-        } catch (e: ApiException) {
-            // "approval already used" / "approval expired": the gateway's word, shown as it is.
-            say(e.detail)
-            if (e.status == 403) container.cards.dropApproval(approval.token)
+        container.cards.dropApproval(approval.token)
+        _approved.update { done -> listOf(DoneApproval(approval, title)) + done.filterNot { it.approval.token == approval.token } }
+        inOrder("approval:${approval.token}") {
+            try {
+                container.core.approve(approval.token)
+                say("Added to Google Calendar: $title")
+            } catch (e: ApiException) {
+                // "approval already used" / "approval expired" (403): gone for good. Anything else
+                // (the network, the server): back on screen to be tried again.
+                if (e.status != 403) {
+                    container.cards.restoreApproval(approval.token)
+                    _approved.update { done -> done.filterNot { it.approval.token == approval.token } }
+                }
+                say(e.detail)
+            }
+            container.cards.refresh()
         }
-        container.cards.refresh()
     }
 
-    /** [channel] push (a notification) or call (the urgent call; consent comes first, in the UI). */
-    fun remind(item: Item, beforeMinutes: Int, channel: String = "push") = action("item:${item.id}") {
-        try {
-            val r = container.core.setReminder(item.id, beforeMinutes, channel)
-            val at = Time.parse(r.firesAt)?.let { Time.dayAndTime(it) } ?: "later"
-            say(if (r.channel == "call") "We'll call you $at" else "Reminder set for $at")
+    /** Provisional reminders shown before the server has given them an id. */
+    private val provisionalIds = java.util.concurrent.atomic.AtomicInteger(0)
+
+    /** [channel] push (a notification) or call (the urgent call; consent comes first, in the UI).
+     * [first]: what the server must do before the reminder (calls turned on after the consent). */
+    fun remind(item: Item, beforeMinutes: Int, channel: String = "push", first: (suspend () -> Unit)? = null) {
+        val fires = Time.parse(item.dueAt)?.minusMinutes(beforeMinutes.toLong())
+        if (fires != null && !fires.toInstant().isAfter(java.time.Instant.now())) {
+            say("That reminder time has already passed")
+            return
+        }
+        val shown = fires?.let {
+            com.sevenfive.app.data.Reminder(
+                id = -provisionalIds.incrementAndGet(), firesAt = it.toString(), title = item.title,
+                subject = item.subject, dueAt = item.dueAt, itemId = item.id, channel = channel,
+            )
+        }
+        val change = shown?.let { container.cards.showReminder(it, added = true) }
+        if (fires != null) {
+            say(if (channel == "call") "We'll call you ${Time.dayAndTime(fires)}" else "Reminder set for ${Time.dayAndTime(fires)}")
             askForNotificationsIfNeeded()
-        } catch (e: ApiException) {
-            say(e.detail)
         }
-        container.cards.refresh()
-    }
-
-    /** The one-time consent screen said yes: calls on, then this call reminder. */
-    fun enableCallsAndRemind(item: Item, beforeMinutes: Int) = viewModelScope.launch {
-        try {
-            container.core.setCalls(enabled = true)
-            refreshSettings()
-            remind(item, beforeMinutes, "call")
-        } catch (e: ApiException) {
-            say(e.detail)
-        }
-    }
-
-    /** Done, with Undo: it leaves "due this week" and its reminders and calls are skipped. */
-    fun markDone(item: Item) = action("done:${item.id}") {
-        try {
-            container.core.markDone(item.id)
-            com.sevenfive.app.data.LocalLog.noteDone(container.appContext, cards.value.cards?.student?.id ?: 0, item)
+        inOrder("item:${item.id}") {
+            try {
+                first?.invoke()
+                val r = container.core.setReminder(item.id, beforeMinutes, channel)
+                change?.let { container.cards.confirm(it) }
+                if (fires == null) {
+                    // No due time to work it out from here: the server's answer says when.
+                    val at = Time.parse(r.firesAt)?.let { Time.dayAndTime(it) } ?: "later"
+                    say(if (r.channel == "call") "We'll call you $at" else "Reminder set for $at")
+                    askForNotificationsIfNeeded()
+                }
+            } catch (e: ApiException) {
+                change?.let { container.cards.takeBack(it) }
+                say(e.detail)
+            }
             container.cards.refresh(wait = true)
-            say("Marked done: ${item.title ?: "item"}", "Undo") { reopen(item) }
-        } catch (e: ApiException) {
-            say(e.detail)
         }
     }
 
-    fun reopen(item: Item) = action("done:${item.id}") {
-        try {
-            container.core.reopen(item.id)
-            com.sevenfive.app.data.LocalLog.forgetDone(container.appContext, cards.value.cards?.student?.id ?: 0, item.id)
-            say("Back on your list")
-        } catch (e: ApiException) {
-            say(e.detail)
+    /** The one-time consent screen said yes: calls on, then this call reminder, shown at once. */
+    fun enableCallsAndRemind(item: Item, beforeMinutes: Int) {
+        val before = _settings.value
+        _settings.value = before?.copy(calls = before.calls.copy(enabled = true))
+        remind(item, beforeMinutes, "call", first = {
+            try {
+                container.core.setCalls(enabled = true)
+            } catch (e: ApiException) {
+                _settings.value = before
+                throw e
+            }
+            refreshSettings()
+        })
+    }
+
+    /** Done, with Undo: it leaves the lists at once; its reminders and calls are skipped. */
+    fun markDone(item: Item) {
+        val sid = cards.value.cards?.student?.id ?: 0
+        val change = container.cards.showDone(item, done = true)
+        com.sevenfive.app.data.LocalLog.noteDone(container.appContext, sid, item)
+        say("Marked done: ${item.title ?: "item"}", "Undo") { reopen(item) }
+        inOrder("item:${item.id}") {
+            try {
+                container.core.markDone(item.id)
+                container.cards.confirm(change)
+            } catch (e: ApiException) {
+                container.cards.takeBack(change)
+                com.sevenfive.app.data.LocalLog.forgetDone(container.appContext, sid, item.id)
+                say(e.detail)
+            }
+            container.cards.refresh(wait = true)
         }
-        container.cards.refresh(wait = true)
+    }
+
+    fun reopen(item: Item) {
+        val sid = cards.value.cards?.student?.id ?: 0
+        val change = container.cards.showDone(item, done = false)
+        com.sevenfive.app.data.LocalLog.forgetDone(container.appContext, sid, item.id)
+        say("Back on your list")
+        inOrder("item:${item.id}") {
+            try {
+                container.core.reopen(item.id)
+                container.cards.confirm(change)
+            } catch (e: ApiException) {
+                container.cards.takeBack(change)
+                com.sevenfive.app.data.LocalLog.noteDone(container.appContext, sid, item)
+                say(e.detail)
+            }
+            container.cards.refresh(wait = true)
+        }
+    }
+
+    // --- Files: kept between visits -----------------------------------------------------------------
+    // The library is read once and kept, so opening Files again shows it at once and reads it again
+    // behind. Each subject's first shelf is fetched ahead, so opening a subject shows its files.
+    /** A shelf's first page as last read. */
+    data class ShelfPage(val files: List<com.sevenfive.app.data.LibraryFile>, val next: Int?)
+
+    fun shelfKey(subjectId: Int?, shelf: String?, unsorted: Boolean) = if (unsorted) "unsorted" else "$subjectId/$shelf"
+    fun keptShelf(key: String): ShelfPage? = shelfPages[key]
+    fun keepShelf(key: String, page: ShelfPage) {
+        shelfPages[key] = page
+    }
+
+    /** Reads the library again. Returns why it couldn't, or null. A good answer also fetches each
+     * subject's first shelf ahead, one after another, behind whatever is on screen. */
+    suspend fun readLibrary(): String? = try {
+        val got = container.core.library()
+        if (got.available) {
+            _library.value = got
+            viewModelScope.launch { fetchShelvesAhead(got) }
+            null
+        } else got.reason ?: "The library can't be reached right now."
+    } catch (e: ApiException) {
+        e.detail
+    }
+
+    private suspend fun fetchShelvesAhead(tree: com.sevenfive.app.data.LibraryTree) {
+        for (subject in tree.subjects) {
+            val shelf = subject.shelves.firstOrNull { it.files > 0 }?.shelf ?: continue
+            val key = shelfKey(subject.id, shelf, unsorted = false)
+            if (shelfPages.containsKey(key)) continue
+            try {
+                val page = container.core.libraryFiles(subject.id, shelf, unsorted = false, offset = 0)
+                if (page.available) shelfPages[key] = ShelfPage(page.files.distinctBy { it.id }, page.nextOffset)
+            } catch (e: ApiException) {
+                return // the network is down: each shelf is read when it is opened instead
+            }
+        }
+    }
+
+    private val queues = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.sync.Mutex>()
+
+    /** Runs [block] after every earlier one with the same [key], in the order they were asked for. */
+    private fun inOrder(key: String, block: suspend () -> Unit) = viewModelScope.launch {
+        queues.getOrPut(key) { kotlinx.coroutines.sync.Mutex() }.withLock {
+            try {
+                block()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // An answer this app can't read: say so, never crash. The next poll shows the truth.
+                say("Something went wrong. Try again.")
+                container.cards.refresh()
+            }
+        }
     }
 
     // --- settings: calls, Google, background ----------------------------------------------------
@@ -448,26 +572,37 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
         }
     }
 
-    fun setCallsEnabled(enabled: Boolean) = action("calls") {
-        try {
-            val calls = container.core.setCalls(enabled = enabled)
-            _settings.value = _settings.value?.copy(calls = calls)
-            say(if (enabled) "Urgent calls are on" else "Urgent calls are off; your call reminders stay, as notifications")
-            // A call that can't ring becomes a notification.
-            if (enabled) askForNotificationsIfNeeded()
-        } catch (e: ApiException) {
-            say(e.detail)
+    /** The switch moves at once; the server follows, in the order the switch was flipped. */
+    fun setCallsEnabled(enabled: Boolean) {
+        val before = _settings.value ?: return
+        _settings.value = before.copy(calls = before.calls.copy(enabled = enabled))
+        say(if (enabled) "Urgent calls are on" else "Urgent calls are off; your call reminders stay, as notifications")
+        // A call that can't ring becomes a notification.
+        if (enabled) askForNotificationsIfNeeded()
+        inOrder("calls") {
+            try {
+                val calls = container.core.setCalls(enabled = enabled)
+                _settings.value = _settings.value?.copy(calls = calls)
+            } catch (e: ApiException) {
+                _settings.value = _settings.value?.copy(calls = before.calls)
+                say(e.detail)
+            }
+            container.cards.refresh()
         }
-        container.cards.refresh()
     }
 
-    fun setQuietHours(start: String, end: String) = action("quiet") {
-        try {
-            val calls = container.core.setCalls(quietStart = start, quietEnd = end)
-            _settings.value = _settings.value?.copy(calls = calls)
-            say("Quiet hours: $start to $end")
-        } catch (e: ApiException) {
-            say(e.detail)
+    fun setQuietHours(start: String, end: String) {
+        val before = _settings.value ?: return
+        _settings.value = before.copy(calls = before.calls.copy(quietStart = start, quietEnd = end))
+        say("Quiet hours: $start to $end")
+        inOrder("calls") {
+            try {
+                val calls = container.core.setCalls(quietStart = start, quietEnd = end)
+                _settings.value = _settings.value?.copy(calls = calls)
+            } catch (e: ApiException) {
+                _settings.value = _settings.value?.copy(calls = before.calls)
+                say(e.detail)
+            }
         }
     }
 
@@ -589,15 +724,24 @@ class AppViewModel(val container: AppContainer) : ViewModel() {
 
     fun clearVoice() = container.voice.clear()
 
-    fun cancel(reminder: Reminder) = action("rem:${reminder.id}") {
-        try {
-            container.core.cancelReminder(reminder.id)
-            container.cards.dropReminder(reminder.id)
-            say("Reminder cancelled")
-        } catch (e: ApiException) {
-            say(e.detail)
+    /** Gone from the list at once. One set a moment ago is cancelled once the server has it. */
+    fun cancel(reminder: Reminder) {
+        val change = container.cards.showReminder(reminder, added = false)
+        say("Reminder cancelled")
+        inOrder("item:${reminder.itemId}") {
+            try {
+                // A reminder still on its way to the server has no id there yet: by now (this runs
+                // after its own request) it has, and it is the one at the same time for the item.
+                val id = if (reminder.id > 0) reminder.id
+                else container.cards.serverReminder(reminder.itemId, reminder.firesAt)?.id
+                if (id != null) container.core.cancelReminder(id)
+                container.cards.confirm(change)
+            } catch (e: ApiException) {
+                container.cards.takeBack(change)
+                say(e.detail)
+            }
+            container.cards.refresh(wait = true)
         }
-        container.cards.refresh()
     }
 
     // --- the account ----------------------------------------------------------------------------

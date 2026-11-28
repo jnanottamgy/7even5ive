@@ -5,7 +5,6 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -49,6 +48,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sevenfive.app.data.ApiException
 import com.sevenfive.app.data.LibraryFile
 import com.sevenfive.app.data.LibraryTree
@@ -57,6 +57,7 @@ import com.sevenfive.app.data.library
 import com.sevenfive.app.data.libraryFiles
 import com.sevenfive.app.data.openFile
 import com.sevenfive.app.ui.AppViewModel
+import com.sevenfive.app.ui.theme.pressable
 import com.sevenfive.app.ui.components.AppCard
 import com.sevenfive.app.ui.components.EmptyState
 import com.sevenfive.app.ui.components.TabScaffold
@@ -77,7 +78,8 @@ fun FilesScreen(vm: AppViewModel, onSettings: () -> Unit) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    var tree by remember { mutableStateOf<LibraryTree?>(null) }
+    // Kept by the view model between visits: shown at once, read again behind.
+    val tree by vm.library.collectAsStateWithLifecycle()
     var problem by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
     var subjectId by rememberSaveable { mutableStateOf<Int?>(null) }
@@ -87,44 +89,46 @@ fun FilesScreen(vm: AppViewModel, onSettings: () -> Unit) {
     var nextOffset by remember { mutableStateOf<Int?>(null) }
     var filesLoading by remember { mutableStateOf(false) }
     var note by remember { mutableStateOf<OpenedFile?>(null) }
+    // The file whose link is being fetched: its row says so until the viewer opens.
+    var opening by remember { mutableStateOf<Int?>(null) }
 
     fun loadTree() = scope.launch {
-        loading = true
+        // A kept library stays on screen while it is read again; only a first read shows the
+        // skeleton, and only a first read that fails says so.
+        loading = tree == null
         problem = null
-        try {
-            val got = core.library()
-            if (got.available) {
-                tree = got
-            } else {
-                problem = got.reason ?: "The library can't be reached right now."
-            }
-        } catch (e: ApiException) {
-            problem = e.detail
-        } finally {
-            loading = false
-        }
+        val why = vm.readLibrary()
+        if (why != null && tree == null) problem = why
+        loading = false
     }
 
     fun loadFiles(offset: Int) = scope.launch {
-        filesLoading = true
+        val key = vm.shelfKey(subjectId, shelf, unsorted)
+        // Kept files stay on screen while the shelf is read again: a spinner only when there are none.
+        filesLoading = offset > 0 || files.isEmpty()
         try {
             val page = core.libraryFiles(subjectId, shelf, unsorted, offset)
+            // The student may have moved to another shelf meanwhile: this answer isn't for it.
+            if (key != vm.shelfKey(subjectId, shelf, unsorted)) return@launch
             if (!page.available) {
-                vm.say(page.reason ?: "The library can't be reached right now.")
+                if (files.isEmpty()) vm.say(page.reason ?: "The library can't be reached right now.")
             } else {
                 // A file added or removed between pages shifts the next page: one already shown
                 // can come again, and a repeated key would close the app.
                 files = (if (offset == 0) page.files else files + page.files).distinctBy { it.id }
                 nextOffset = page.nextOffset
+                if (offset == 0) vm.keepShelf(key, AppViewModel.ShelfPage(files, nextOffset))
             }
         } catch (e: ApiException) {
-            vm.say(e.detail)
+            if (files.isEmpty()) vm.say(e.detail)
         } finally {
-            filesLoading = false
+            if (key == vm.shelfKey(subjectId, shelf, unsorted)) filesLoading = false
         }
     }
 
     fun open(file: LibraryFile) = scope.launch {
+        if (opening == file.id) return@launch
+        opening = file.id
         try {
             val opened = core.openFile(file.id)
             when {
@@ -145,13 +149,17 @@ fun FilesScreen(vm: AppViewModel, onSettings: () -> Unit) {
             }
         } catch (e: ApiException) {
             vm.say(e.detail)
+        } finally {
+            opening = null
         }
     }
 
     LaunchedEffect(Unit) { loadTree() }
     LaunchedEffect(subjectId, shelf, unsorted) {
-        files = emptyList()
-        nextOffset = null
+        // What was kept (or fetched ahead) for this shelf at once; read again behind it.
+        val kept = vm.keptShelf(vm.shelfKey(subjectId, shelf, unsorted))
+        files = kept?.files ?: emptyList()
+        nextOffset = kept?.next
         if (subjectId != null || unsorted) loadFiles(0)
     }
     BackHandler(enabled = subjectId != null || unsorted) {
@@ -219,7 +227,7 @@ fun FilesScreen(vm: AppViewModel, onSettings: () -> Unit) {
                         if (files.isEmpty() && !filesLoading) {
                             item { EmptyState(Icons.Outlined.FolderOpen, "Nothing here yet", "Forward files to the bot and they're filed here.") }
                         }
-                        items(files, key = { it.id }) { file -> FileRow(file) { open(file) } }
+                        items(files, key = { it.id }) { file -> FileRow(file, opening = opening == file.id) { open(file) } }
                         if (filesLoading) {
                             item { Centered { com.sevenfive.app.ui.components.BrandRing(size = 28.dp, spinning = true) } }
                         } else if (nextOffset != null) {
@@ -257,7 +265,7 @@ private fun topSegments(tree: LibraryTree) = listOf(Segment("Subjects", tree.sub
 
 @Composable
 private fun FolderRow(name: String, detail: String, onClick: () -> Unit) {
-    AppCard(Modifier.clickable(onClick = onClick)) {
+    AppCard(Modifier.pressable(onClick = onClick)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             com.sevenfive.app.ui.components.IconTile(Icons.Outlined.Folder, MaterialTheme.colorScheme.onSurface, size = 40.dp)
             Spacer(Modifier.width(14.dp))
@@ -270,8 +278,8 @@ private fun FolderRow(name: String, detail: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun FileRow(file: LibraryFile, onOpen: () -> Unit) {
-    AppCard(Modifier.clickable(onClick = onOpen)) {
+private fun FileRow(file: LibraryFile, opening: Boolean, onOpen: () -> Unit) {
+    AppCard(Modifier.pressable(onClick = onOpen)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             com.sevenfive.app.ui.components.IconTile(iconFor(file), MaterialTheme.colorScheme.onSurface, size = 40.dp)
             Spacer(Modifier.width(12.dp))
@@ -282,6 +290,10 @@ private fun FileRow(file: LibraryFile, onOpen: () -> Unit) {
                     Text(detail, style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
+            }
+            if (opening) {
+                Spacer(Modifier.width(10.dp))
+                com.sevenfive.app.ui.components.BrandRing(size = 20.dp, spinning = true)
             }
         }
     }

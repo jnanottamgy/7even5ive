@@ -123,6 +123,7 @@ import com.sevenfive.app.ui.theme.LocalBottomInset
 import com.sevenfive.app.ui.theme.Motion
 import com.sevenfive.app.ui.theme.frosted
 import com.sevenfive.app.ui.theme.pressable
+import kotlinx.coroutines.launch
 
 object Routes {
     const val HOME = "home"
@@ -174,13 +175,18 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
     // Everything on screen is the source the floating glass blurs.
 
     LaunchedEffect(Unit) {
+        // The newest message replaces the one showing: what was just tapped is what's said now,
+        // never ten seconds later behind an older one.
         vm.messages.collect { m ->
-            val result = snackbar.showSnackbar(
-                m.text,
-                actionLabel = m.action,
-                duration = if (m.action != null) SnackbarDuration.Long else SnackbarDuration.Short,
-            )
-            if (result == SnackbarResult.ActionPerformed) m.onAction?.invoke()
+            snackbar.currentSnackbarData?.dismiss()
+            launch {
+                val result = snackbar.showSnackbar(
+                    m.text,
+                    actionLabel = m.action,
+                    duration = if (m.action != null) SnackbarDuration.Long else SnackbarDuration.Short,
+                )
+                if (result == SnackbarResult.ActionPerformed) m.onAction?.invoke()
+            }
         }
     }
     // Google's sign-in page opens in the phone's browser; the server finishes it there.
@@ -232,8 +238,9 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
         bottomBar = {
             AnimatedVisibility(
                 visible = showTabs,
-                enter = slideInVertically(spring(stiffness = Spring.StiffnessMediumLow)) { it } + fadeIn(),
-                exit = slideOutVertically(spring(stiffness = Spring.StiffnessMedium)) { it } + fadeOut(),
+                // On the push's own spring, so the bar and the screen move as one and settle together.
+                enter = slideInVertically(Motion.screen) { it } + fadeIn(Motion.fade),
+                exit = slideOutVertically(Motion.screen) { it } + fadeOut(Motion.fade),
             ) {
                 Column(
                     Modifier
@@ -288,6 +295,9 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
             LocalNav provides { r: String -> if (tabs.any { it.route == r }) nav.goToTab(r) else nav.navigate(r) { launchSingleTop = true } },
         ) {
             Box(Modifier.fillMaxSize()) {
+                // The one backdrop: drawn once, behind every tab, and never part of a transition.
+                // Pushed screens bring their own sheet over it, on the same clock.
+                com.sevenfive.app.ui.theme.AuroraBackground()
                 NavHost(
                     nav,
                     startDestination = Routes.HOME,
@@ -296,9 +306,9 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
                     popEnterTransition = { popEnter() },
                     popExitTransition = { popExit() },
                 ) {
-                    val settings = { nav.navigate(Routes.SETTINGS) }
+                    val settings = { nav.navigate(Routes.SETTINGS) { launchSingleTop = true } }
                     composable(Routes.HOME) { HomeScreen(vm, settings) }
-                    composable(Routes.ATTENDANCE) { AttendanceScreen(vm, settings, onPortal = { nav.navigate(Routes.PORTAL) }) }
+                    composable(Routes.ATTENDANCE) { AttendanceScreen(vm, settings, onPortal = { nav.navigate(Routes.PORTAL) { launchSingleTop = true } }) }
                     composable(Routes.MATERIALS) { FilesScreen(vm, settings) }
                     composable(Routes.INBOX) { InboxScreen(vm, settings) }
                     composable(Routes.REMINDERS) { RemindersScreen(vm, onBack = { nav.popBackStack() }) }
@@ -307,8 +317,8 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
                         SettingsScreen(
                             vm,
                             onBack = { nav.popBackStack() },
-                            onPortalCheck = { nav.navigate(Routes.PORTAL_CHECK) },
-                            onEditProfile = { nav.navigate(Routes.PROFILE) },
+                            onPortalCheck = { nav.navigate(Routes.PORTAL_CHECK) { launchSingleTop = true } },
+                            onEditProfile = { nav.navigate(Routes.PROFILE) { launchSingleTop = true } },
                             // From the demo to signing up: the login flow opens on Sign up.
                             onCreateAccount = {
                                 auth.go(AuthStep.SignUp)

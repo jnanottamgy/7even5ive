@@ -1,11 +1,9 @@
 package com.sevenfive.app.ui
 
 import android.app.Application
-import android.provider.Settings
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
-import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
@@ -18,14 +16,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.SavedStateHandle
-import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
-import com.sevenfive.app.AppContainer
-import com.sevenfive.app.data.ServerConfig
-import com.sevenfive.app.ui.auth.AuthViewModel
-import com.sevenfive.app.ui.theme.SevenFiveTheme
-import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -35,7 +26,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import java.util.Locale
 import java.util.TimeZone
 
 /**
@@ -51,34 +41,12 @@ class AppUiTest {
     @get:Rule val rule = createComposeRule()
 
     private lateinit var server: RecordedServer
-    private lateinit var container: AppContainer
     private val zone = TimeZone.getDefault()
 
     @Before
     fun start() {
-        TimeZone.setDefault(TimeZone.getTimeZone("Asia/Kolkata"))
-        Locale.setDefault(Locale.ENGLISH)
-        val context = ApplicationProvider.getApplicationContext<Application>()
-        // As with "Remove animations" on: the moving background stands still, so the screen
-        // can settle between steps.
-        Settings.Global.putFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 0f)
-        server = RecordedServer(overrides = mapOf(
-            "GET /api/cards" to "cards_busy",
-            "POST /api/google/start" to "error_demo_google",
-        ))
-        container = AppContainer(context)
-        // Before anything is asked of it: the build's own server is the live one.
-        container.servers.save(ServerConfig(server.url, server.url, server.url))
-        container.accounts.onArrive = {}
-        container.accounts.start()
-        runBlocking {
-            container.accounts.useDemo()
-            container.cards.refresh(wait = true)
-        }
-        val vm = AppViewModel(container)
-        val auth = AuthViewModel(container, SavedStateHandle())
-        rule.setContent { SevenFiveTheme { SevenFiveRoot(vm, auth) } }
-        rule.waitForIdle()
+        server = demoServer()
+        rule.startDemoApp(server)
     }
 
     @After
@@ -89,14 +57,11 @@ class AppUiTest {
 
     private fun shot(name: String) = rule.onRoot().captureRoboImage("build/outputs/roborazzi/$name.png")
 
-    private fun tab(label: String) = rule.onNode(hasContentDescription(label) and hasClickAction())
+    private fun tab(label: String) = rule.tab(label)
 
-    private fun segment(label: String) =
-        rule.onNode(hasText(label, substring = true) and SemanticsMatcher.expectValue(SemanticsProperties.Role, androidx.compose.ui.semantics.Role.Tab))
+    private fun segment(label: String) = rule.segment(label)
 
-    private fun waitFor(text: String) = rule.waitUntil(10_000) {
-        rule.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty()
-    }
+    private fun waitFor(text: String) = rule.waitFor(text)
 
     @Test
     fun `every tab opens with the demo's data, and Home always comes back to Today`() {

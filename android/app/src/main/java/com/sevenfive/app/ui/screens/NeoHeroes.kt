@@ -1,7 +1,6 @@
 package com.sevenfive.app.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -51,6 +50,7 @@ import com.sevenfive.app.ui.components.rememberNow
 import com.sevenfive.app.ui.theme.LocalAppColors
 import com.sevenfive.app.ui.theme.NeoInk
 import com.sevenfive.app.ui.theme.Orange
+import com.sevenfive.app.ui.theme.pressable
 import com.sevenfive.app.ui.theme.glassSurface
 import com.sevenfive.app.util.Time
 import java.time.LocalDate
@@ -348,7 +348,7 @@ private fun SegmentLabel(seg: Segment, on: Boolean, modifier: Modifier, onClick:
                 this.selected = on
                 role = androidx.compose.ui.semantics.Role.Tab
             }
-            .clickable(onClick = onClick),
+            .pressable(scaleTo = 0.96f, role = androidx.compose.ui.semantics.Role.Tab, onClick = onClick),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -393,7 +393,7 @@ internal fun RemindersEntry(reminders: List<com.sevenfive.app.data.Reminder>, mo
             .fillMaxWidth()
             .glassSurface(shape = MaterialTheme.shapes.large)
             .semantics(mergeDescendants = true) { role = androidx.compose.ui.semantics.Role.Button }
-            .clickable(onClick = onOpen)
+            .pressable(onClick = onOpen)
             .padding(horizontal = 18.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
