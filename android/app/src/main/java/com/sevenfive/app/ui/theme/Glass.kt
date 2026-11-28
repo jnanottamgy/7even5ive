@@ -43,12 +43,8 @@ fun AuroraBackground(modifier: Modifier = Modifier) {
             ?.isPowerSaveMode == true
         noAnimations || saving
     }
-    // A slow clock, ticking 10 times a second instead of every frame: the motion is so slow (at
-    // most a pixel or two per tick) it looks the same, and the phone draws it 6 to 12 times less
-    // often than at full frame rate. It pauses by itself when the app isn't on screen.
-    // The phone's own clock, not one started with this screen: every copy (the backdrop behind
-    // the tabs, a pushed screen's sheet, the sign-in screens) is at the same point of its motion,
-    // so moving between them never makes the lines jump or the glow start over.
+    // A slow clock, ticking 10 times a second: the motion is so slow it looks the same as every
+    // frame. The phone's own clock, so every copy (here, the share sheet) is at the same point.
     val clock = androidx.compose.runtime.remember {
         androidx.compose.runtime.mutableLongStateOf(if (still) 0L else System.nanoTime() / 1_000_000)
     }
@@ -59,67 +55,80 @@ fun AuroraBackground(modifier: Modifier = Modifier) {
             kotlinx.coroutines.delay(100)
         }
     }
-    // The contour paths are made once and reshaped in place, so drawing makes no garbage.
-    val paths = androidx.compose.runtime.remember { List(8) { androidx.compose.ui.graphics.Path() } }
-    Box(
-        // Kept as a finished image (an offscreen layer the phone caches): painted again only when
-        // its clock ticks (10 times a second). Every other frame, and everything moving on top,
-        // reuses the image instead of redrawing the full-screen glow and eight long curves, which
-        // was most of each frame's cost on a 120 Hz phone.
-        modifier
-            .fillMaxSize()
-            .graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
-            .drawBehind {
-            val ms = clock.longValue
-            val drift = (ms % 60_000L) / 60_000f
-            val float = (ms % 40_000L) / 40_000f
-            drawRect(base)
-            // A soft warm glow drifting across, like light moving over paper. Barely there.
-            val phase = drift * 2f * Math.PI.toFloat()
-            val glow = Offset(
-                size.width * (0.45f + 0.30f * kotlin.math.sin(phase)),
-                size.height * (0.40f + 0.18f * kotlin.math.sin(2f * phase + 1f)),
-            )
-            val reach = size.width * 0.95f
-            drawCircle(
-                Brush.radialGradient(
-                    listOf(Orange.copy(alpha = 0.16f), Orange.copy(alpha = 0.06f), Color.Transparent),
-                    center = glow,
-                    radius = reach,
-                ),
-                radius = reach,
-                center = glow,
-            )
-            // Contour lines, like a map's or a sound's: loops spreading from the top-right corner,
-            // each gently wobbling; the wobble's phase turns slowly, so the lines breathe and flow.
-            val wobble = float * 2f * Math.PI.toFloat()
-            val center = Offset(size.width * 0.92f, size.height * 0.16f)
-            val step = size.width * 0.15f
-            val line = 1.dp.toPx()
-            for (n in 0 until 8) {
-                val base = size.width * 0.22f + n * step
-                val path = paths[n]
-                path.reset()
-                val points = 96
-                for (k in 0..points) {
-                    val a = k / points.toFloat() * 2f * Math.PI.toFloat()
-                    val r = base +
-                        step * 0.16f * kotlin.math.sin(3f * a + wobble + n * 0.55f) +
-                        step * 0.10f * kotlin.math.sin(5f * a - 2f * wobble + n * 0.9f)
-                    val x = center.x + r * kotlin.math.cos(a)
-                    val y = center.y + r * kotlin.math.sin(a)
-                    if (k == 0) path.moveTo(x, y) else path.lineTo(x, y)
-                }
-                path.close()
-                val warm = n == 2
-                drawPath(
-                    path,
-                    color = if (warm) Orange.copy(alpha = 0.30f) else NeoInk.copy(alpha = 0.10f - n * 0.005f),
-                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = if (warm) line * 1.6f else line),
+    // What it costs, measured on a 120 Hz phone: the curves are the expensive part to draw, so
+    // they are drawn once, kept as images, and moved (turned and scaled a little) instead of
+    // redrawn; moving a kept image costs the phone next to nothing. The glow is one gradient,
+    // cheap to draw, and drifts as before.
+    Box(modifier.fillMaxSize().drawBehind { drawRect(base) }) {
+        // A soft warm glow drifting across, like light moving over paper. Barely there.
+        Box(
+            Modifier.fillMaxSize().drawBehind {
+                val phase = (clock.longValue % 60_000L) / 60_000f * 2f * Math.PI.toFloat()
+                val glow = Offset(
+                    size.width * (0.45f + 0.30f * kotlin.math.sin(phase)),
+                    size.height * (0.40f + 0.18f * kotlin.math.sin(2f * phase + 1f)),
                 )
-            }
-        },
-    )
+                val reach = size.width * 0.95f
+                drawCircle(
+                    Brush.radialGradient(
+                        listOf(Orange.copy(alpha = 0.16f), Orange.copy(alpha = 0.06f), Color.Transparent),
+                        center = glow,
+                        radius = reach,
+                    ),
+                    radius = reach,
+                    center = glow,
+                )
+            },
+        )
+        // Contour lines spreading from the top-right corner, in two sets (alternate lines) that
+        // turn and swell gently in opposite directions, so the gaps between them breathe.
+        for (set in 0..1) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen
+                        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.92f, 0.16f)
+                        val turn = (clock.longValue % 40_000L) / 40_000f * 2f * Math.PI.toFloat() + set * Math.PI.toFloat()
+                        rotationZ = 2.2f * kotlin.math.sin(turn)
+                        val swell = 1f + 0.018f * kotlin.math.sin(2f * turn + 0.7f)
+                        scaleX = swell
+                        scaleY = swell
+                    }
+                    .drawWithCache {
+                        // Made once for this size: the image the phone keeps.
+                        val center = Offset(size.width * 0.92f, size.height * 0.16f)
+                        val step = size.width * 0.15f
+                        val line = 1.dp.toPx()
+                        val curves = (set until 8 step 2).map { n ->
+                            val r0 = size.width * 0.22f + n * step
+                            val path = androidx.compose.ui.graphics.Path()
+                            val points = 96
+                            for (k in 0..points) {
+                                val a = k / points.toFloat() * 2f * Math.PI.toFloat()
+                                val r = r0 + step * 0.16f * kotlin.math.sin(3f * a + n * 0.55f) +
+                                    step * 0.10f * kotlin.math.sin(5f * a + n * 0.9f)
+                                val x = center.x + r * kotlin.math.cos(a)
+                                val y = center.y + r * kotlin.math.sin(a)
+                                if (k == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                            }
+                            path.close()
+                            n to path
+                        }
+                        onDrawBehind {
+                            for ((n, path) in curves) {
+                                val warm = n == 2
+                                drawPath(
+                                    path,
+                                    color = if (warm) Orange.copy(alpha = 0.30f) else NeoInk.copy(alpha = 0.10f - n * 0.005f),
+                                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = if (warm) line * 1.6f else line),
+                                )
+                            }
+                        }
+                    },
+            )
+        }
+    }
 }
 
 /**
