@@ -1,0 +1,13 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/api/google/start",
+    "auth": "account",
+    "body": {}
+  },
+  "status": 200,
+  "response": {
+    "url": "https://accounts.google.com/o/oauth2/v2/auth?client_id=cid.apps.googleusercontent.com&redirect_uri=http%3A%2F%2Ftestserver%2Fapi%2Fgoogle%2Fcallback&response_type=code&scope=openid+email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fgmail.readonly+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcalendar.events+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fclassroom.courses.readonly+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fclassroom.coursework.me.readonly&state=contract-test-state&code_challenge=contract-test-challenge&code_challenge_method=S256&access_type=offline&prompt=consent&include_granted_scopes=true",
+    "expires_at": "2030-01-12T09:11+05:30"
+  }
+}

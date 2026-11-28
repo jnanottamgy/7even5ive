@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The widget's live countdown: Android's own Chronometer, counting down, ticks every second
+     on the home screen without the app running. -->
+<Chronometer xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_countdown"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:fontFamily="sans-serif-medium"
+    android:includeFontPadding="false"
+    android:letterSpacing="-0.03"
+    android:textColor="#FF111111"
+    android:textSize="34sp" />

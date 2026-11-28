@@ -5,7 +5,6 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -49,6 +48,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sevenfive.app.data.ApiException
 import com.sevenfive.app.data.LibraryFile
 import com.sevenfive.app.data.LibraryTree
@@ -57,6 +57,7 @@ import com.sevenfive.app.data.library
 import com.sevenfive.app.data.libraryFiles
 import com.sevenfive.app.data.openFile
 import com.sevenfive.app.ui.AppViewModel
+import com.sevenfive.app.ui.theme.pressable
 import com.sevenfive.app.ui.components.AppCard
 import com.sevenfive.app.ui.components.EmptyState
 import com.sevenfive.app.ui.components.TabScaffold
@@ -77,7 +78,8 @@ fun FilesScreen(vm: AppViewModel, onSettings: () -> Unit) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    var tree by remember { mutableStateOf<LibraryTree?>(null) }
+    // Kept by the view model between visits: shown at once, read again behind.
+    val tree by vm.library.collectAsStateWithLifecycle()
     var problem by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
     var subjectId by rememberSaveable { mutableStateOf<Int?>(null) }
@@ -87,44 +89,46 @@ fun FilesScreen(vm: AppViewModel, onSettings: () -> Unit) {
     var nextOffset by remember { mutableStateOf<Int?>(null) }
     var filesLoading by remember { mutableStateOf(false) }
     var note by remember { mutableStateOf<OpenedFile?>(null) }
+    // The file whose link is being fetched: its row says so until the viewer opens.
+    var opening by remember { mutableStateOf<Int?>(null) }
 
     fun loadTree() = scope.launch {
-        loading = true
+        // A kept library stays on screen while it is read again; only a first read shows the
+        // skeleton, and only a first read that fails says so.
+        loading = tree == null
         problem = null
-        try {
-            val got = core.library()
-            if (got.available) {
-                tree = got
-            } else {
-                problem = got.reason ?: "The library can't be reached right now."
-            }
-        } catch (e: ApiException) {
-            problem = e.detail
-        } finally {
-            loading = false
-        }
+        val why = vm.readLibrary()
+        if (why != null && tree == null) problem = why
+        loading = false
     }
 
     fun loadFiles(offset: Int) = scope.launch {
-        filesLoading = true
+        val key = vm.shelfKey(subjectId, shelf, unsorted)
+        // Kept files stay on screen while the shelf is read again: a spinner only when there are none.
+        filesLoading = offset > 0 || files.isEmpty()
         try {
             val page = core.libraryFiles(subjectId, shelf, unsorted, offset)
+            // The student may have moved to another shelf meanwhile: this answer isn't for it.
+            if (key != vm.shelfKey(subjectId, shelf, unsorted)) return@launch
             if (!page.available) {
-                vm.say(page.reason ?: "The library can't be reached right now.")
+                if (files.isEmpty()) vm.say(page.reason ?: "The library can't be reached right now.")
             } else {
                 // A file added or removed between pages shifts the next page: one already shown
                 // can come again, and a repeated key would close the app.
                 files = (if (offset == 0) page.files else files + page.files).distinctBy { it.id }
                 nextOffset = page.nextOffset
+                if (offset == 0) vm.keepShelf(key, AppViewModel.ShelfPage(files, nextOffset))
             }
         } catch (e: ApiException) {
-            vm.say(e.detail)
+            if (files.isEmpty()) vm.say(e.detail)
         } finally {
-            filesLoading = false
+            if (key == vm.shelfKey(subjectId, shelf, unsorted)) filesLoading = false
         }
     }
 
     fun open(file: LibraryFile) = scope.launch {
+        if (opening == file.id) return@launch
+        opening = file.id
         try {
             val opened = core.openFile(file.id)
             when {
@@ -145,13 +149,17 @@ fun FilesScreen(vm: AppViewModel, onSettings: () -> Unit) {
             }
         } catch (e: ApiException) {
             vm.say(e.detail)
+        } finally {
+            opening = null
         }
     }
 
     LaunchedEffect(Unit) { loadTree() }
     LaunchedEffect(subjectId, shelf, unsorted) {
-        files = emptyList()
-        nextOffset = null
+        // What was kept (or fetched ahead) for this shelf at once; read again behind it.
+        val kept = vm.keptShelf(vm.shelfKey(subjectId, shelf, unsorted))
+        files = kept?.files ?: emptyList()
+        nextOffset = kept?.next
         if (subjectId != null || unsorted) loadFiles(0)
     }
     BackHandler(enabled = subjectId != null || unsorted) {
@@ -172,7 +180,7 @@ fun FilesScreen(vm: AppViewModel, onSettings: () -> Unit) {
         val current = tree
         if (current == null) {
             if (loading) {
-                Box(Modifier.padding(padding)) { Centered { CircularProgressIndicator() } }
+                com.sevenfive.app.ui.components.SkeletonScreen(padding)
             } else {
                 Column(Modifier.fillMaxWidth().padding(padding), horizontalAlignment = Alignment.CenterHorizontally) {
                     EmptyState(Icons.Outlined.CloudOff, "Library unavailable", problem ?: "Couldn't load your files.")
@@ -190,7 +198,11 @@ fun FilesScreen(vm: AppViewModel, onSettings: () -> Unit) {
             else -> {
                 val subject = current.subjects.firstOrNull { it.id == subjectId }
                 Column(Modifier.padding(top = padding.calculateTopPadding())) {
-                    Row(Modifier.padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (unsorted) {
+                        Box(Modifier.padding(horizontal = 16.dp)) {
+                            NeoSegments(topSegments(current), 1) { if (it == 0) unsorted = false }
+                        }
+                    } else Row(Modifier.padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { subjectId = null; unsorted = false }) {
                             Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "All subjects")
                         }
@@ -199,18 +211,13 @@ fun FilesScreen(vm: AppViewModel, onSettings: () -> Unit) {
                             style = MaterialTheme.typography.titleMedium,
                         )
                     }
-                    if (!unsorted && subject != null) {
-                        Row(
-                            Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            subject.shelves.forEach { s ->
-                                FilterChip(
-                                    selected = shelf == s.shelf,
-                                    onClick = { shelf = s.shelf },
-                                    label = { Text("${s.label}  ${s.files}", maxLines = 1) },
-                                )
-                            }
+                    if (!unsorted && subject != null && subject.shelves.isNotEmpty()) {
+                        // The subject's shelves as segments: notes, past papers, info.
+                        Box(Modifier.padding(horizontal = 16.dp)) {
+                            NeoSegments(
+                                subject.shelves.map { Segment(it.label, it.files) },
+                                subject.shelves.indexOfFirst { it.shelf == shelf }.coerceAtLeast(0),
+                            ) { shelf = subject.shelves[it].shelf }
                         }
                     }
                     LazyColumn(
@@ -220,9 +227,9 @@ fun FilesScreen(vm: AppViewModel, onSettings: () -> Unit) {
                         if (files.isEmpty() && !filesLoading) {
                             item { EmptyState(Icons.Outlined.FolderOpen, "Nothing here yet", "Forward files to the bot and they're filed here.") }
                         }
-                        items(files, key = { it.id }) { file -> FileRow(file) { open(file) } }
+                        items(files, key = { it.id }) { file -> FileRow(file, opening = opening == file.id) { open(file) } }
                         if (filesLoading) {
-                            item { Centered { CircularProgressIndicator() } }
+                            item { Centered { com.sevenfive.app.ui.components.BrandRing(size = 28.dp, spinning = true) } }
                         } else if (nextOffset != null) {
                             item {
                                 TextButton(onClick = { loadFiles(nextOffset ?: 0) }, modifier = Modifier.fillMaxWidth()) {
@@ -240,6 +247,7 @@ fun FilesScreen(vm: AppViewModel, onSettings: () -> Unit) {
 @Composable
 private fun SubjectList(tree: LibraryTree, padding: PaddingValues, onSubject: (Int) -> Unit, onUnsorted: () -> Unit) {
     LazyColumn(contentPadding = padding, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        item(key = "segments") { NeoSegments(topSegments(tree), 0) { if (it == 1) onUnsorted() } }
         if (tree.subjects.isEmpty() && tree.unsorted == 0) {
             item {
                 EmptyState(Icons.Outlined.FolderOpen, "No files yet",
@@ -247,22 +255,22 @@ private fun SubjectList(tree: LibraryTree, padding: PaddingValues, onSubject: (I
             }
         }
         items(tree.subjects, key = { it.id }) { subject ->
-            FolderRow(subject.name, "${subject.total} files") { onSubject(subject.id) }
-        }
-        if (tree.unsorted > 0) {
-            item { FolderRow("Waiting for a subject", "${tree.unsorted} files") { onUnsorted() } }
+            FolderRow(subject.name, "${subject.total} ${if (subject.total == 1) "file" else "files"}") { onSubject(subject.id) }
         }
     }
 }
 
+/** Files' top segments: the subjects, and what is still waiting for one. */
+private fun topSegments(tree: LibraryTree) = listOf(Segment("Subjects", tree.subjects.size), Segment("Unsorted", tree.unsorted))
+
 @Composable
 private fun FolderRow(name: String, detail: String, onClick: () -> Unit) {
-    AppCard(Modifier.clickable(onClick = onClick)) {
+    AppCard(Modifier.pressable(onClick = onClick)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.Folder, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.width(12.dp))
+            com.sevenfive.app.ui.components.IconTile(Icons.Outlined.Folder, MaterialTheme.colorScheme.onSurface, size = 40.dp)
+            Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text(name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
@@ -270,10 +278,10 @@ private fun FolderRow(name: String, detail: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun FileRow(file: LibraryFile, onOpen: () -> Unit) {
-    AppCard(Modifier.clickable(onClick = onOpen)) {
+private fun FileRow(file: LibraryFile, opening: Boolean, onOpen: () -> Unit) {
+    AppCard(Modifier.pressable(onClick = onOpen)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(iconFor(file), contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            com.sevenfive.app.ui.components.IconTile(iconFor(file), MaterialTheme.colorScheme.onSurface, size = 40.dp)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(file.title, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -282,6 +290,10 @@ private fun FileRow(file: LibraryFile, onOpen: () -> Unit) {
                     Text(detail, style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
+            }
+            if (opening) {
+                Spacer(Modifier.width(10.dp))
+                com.sevenfive.app.ui.components.BrandRing(size = 20.dp, spinning = true)
             }
         }
     }

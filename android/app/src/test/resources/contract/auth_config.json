@@ -1,0 +1,17 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/auth/config",
+    "auth": "none"
+  },
+  "status": 200,
+  "response": {
+    "enabled": true,
+    "supabase_url": "https://abcdefghijklmnopqrst.supabase.co",
+    "publishable_key": "sb_publishable_test",
+    "username_login": true,
+    "delete_account": true,
+    "password_min_length": 8,
+    "demo": true
+  }
+}

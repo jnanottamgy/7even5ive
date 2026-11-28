@@ -1,0 +1,13 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/api/google/start",
+    "auth": "demo",
+    "body": {}
+  },
+  "status": 403,
+  "response": {
+    "detail": "The demo account can't connect Google (it is shared by everyone trying the app). Create your own account for that.",
+    "code": "demo_account"
+  }
+}

@@ -1,0 +1,639 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/cards",
+    "auth": "demo"
+  },
+  "status": 200,
+  "response": {
+    "student": {
+      "id": 1,
+      "name": "Demo Student",
+      "wa_phone": null,
+      "mcp_token": null,
+      "branch": "CSE",
+      "year": 3,
+      "interests": "hackathons, backend, AI",
+      "portal_id": "demo",
+      "call_consent_at": null,
+      "quiet_start": null,
+      "quiet_end": null,
+      "username": null,
+      "email": null,
+      "college": "mockcollege",
+      "created_at": "2030-01-07T08:30+05:30"
+    },
+    "due_this_week": [
+      {
+        "id": 3,
+        "kind": "exam",
+        "subject": "Computer Networks",
+        "title": "DCN CIE-2 (units 3 and 4)",
+        "due_at": "2030-01-07T09:00+05:30",
+        "status": "filed",
+        "source": "whatsapp",
+        "route": "jev+llm"
+      },
+      {
+        "id": 9,
+        "kind": "deadline",
+        "subject": "Miscellaneous",
+        "title": "Nimbus Systems Campus Drive",
+        "due_at": "2030-01-10T17:00+05:30",
+        "status": "filed",
+        "source": "gmail",
+        "route": "mail",
+        "category": "placement",
+        "organisation": "Nimbus Systems",
+        "role": "Graduate Engineer Trainee",
+        "link": "https://forms.gle/NimbusDrive2027",
+        "mail_link": "https://mail.google.com/mail/?authuser=student@mockcollege.edu.in#search/rfc822msgid%3Ademo-1-20300107%40mockcollege.edu.in",
+        "summary": "Placement: Nimbus Systems Campus Drive. Last date Thu 10 Jan, 5 PM. Date Sat 12 Jan, 10 AM.",
+        "event_at": "2030-01-12T10:00+05:30",
+        "details": "Eligibility: CGPA 7.0 and above, no active backlogs."
+      },
+      {
+        "id": 8,
+        "kind": "deadline",
+        "subject": "Operating Systems",
+        "title": "OS mini project (10 marks)",
+        "due_at": "2030-01-10T23:59+05:30",
+        "status": "filed",
+        "source": "classroom",
+        "route": "classroom"
+      },
+      {
+        "id": 1,
+        "kind": "deadline",
+        "subject": "Database Management Systems",
+        "title": "DBMS Assignment 3",
+        "due_at": "2030-01-11T23:59+05:30",
+        "status": "filed",
+        "source": "whatsapp",
+        "route": "bot"
+      },
+      {
+        "id": 7,
+        "kind": "event",
+        "subject": "Miscellaneous",
+        "title": "IISc open hackathon",
+        "due_at": "2030-01-12T10:00+05:30",
+        "status": "filed",
+        "source": "gmail",
+        "route": "jev+llm"
+      },
+      {
+        "id": 10,
+        "kind": "deadline",
+        "subject": "Miscellaneous",
+        "title": "Backend Engineering Internship 2027",
+        "due_at": "2030-01-13T23:59+05:30",
+        "status": "filed",
+        "source": "gmail",
+        "route": "mail",
+        "category": "internship",
+        "organisation": "Orbitly",
+        "role": "Backend Engineering Intern",
+        "link": "https://careers.orbitly.example.com/intern-2027",
+        "mail_link": "https://mail.google.com/mail/?authuser=student@mockcollege.edu.in#search/rfc822msgid%3Ademo-2-20300107%40mockcollege.edu.in",
+        "summary": "Internship: Backend Engineering Internship 2027 (Orbitly). Last date Sun 13 Jan, 11:59 PM.",
+        "event_at": null,
+        "details": "Stipend: Rs 30,000 per month for 10 weeks"
+      }
+    ],
+    "attendance": {
+      "connected": true,
+      "stale": false,
+      "fetched_at": "2030-01-07T08:30:00+00:00",
+      "subjects": [
+        {
+          "subject_code": "CS52",
+          "subject_name": "Database Management Systems",
+          "attended": 22,
+          "held": 30,
+          "percent": 73.33,
+          "minimum_percent": 75.0,
+          "status": "short",
+          "can_skip_now": 0,
+          "must_attend": 2,
+          "next_classes": [
+            "2030-01-07",
+            "2030-01-08"
+          ],
+          "semester": {
+            "planned": 52,
+            "remaining": 22,
+            "can_skip_rest_of_semester": 5,
+            "best_final_percent": 84.62
+          },
+          "message": "CS52 73.33%: attend the next 2 classes in a row, starting Mon 7 Jan, to get back to 75%."
+        },
+        {
+          "subject_code": "MA51",
+          "subject_name": "Probability and Statistics",
+          "attended": 19,
+          "held": 24,
+          "percent": 79.17,
+          "minimum_percent": 75.0,
+          "status": "at_risk",
+          "can_skip_now": 1,
+          "must_attend": 0,
+          "next_classes": [
+            "2030-01-07"
+          ],
+          "semester": {
+            "planned": 42,
+            "remaining": 18,
+            "can_skip_rest_of_semester": 5,
+            "best_final_percent": 88.1
+          },
+          "message": "MA51 79.17%: you can miss 1 class and stay at 75%. Over the rest of the semester you can miss 5 of 18."
+        },
+        {
+          "subject_code": "CS54",
+          "subject_name": "Operating Systems",
+          "attended": 25,
+          "held": 31,
+          "percent": 80.65,
+          "minimum_percent": 75.0,
+          "status": "safe",
+          "can_skip_now": 2,
+          "must_attend": 0,
+          "next_classes": [
+            "2030-01-07"
+          ],
+          "semester": {
+            "planned": 52,
+            "remaining": 21,
+            "can_skip_rest_of_semester": 7,
+            "best_final_percent": 88.46
+          },
+          "message": "CS54 80.65%: you can miss 2 classes and stay at 75%. Over the rest of the semester you can miss 7 of 21."
+        },
+        {
+          "subject_code": "CS51",
+          "subject_name": "Computer Networks",
+          "attended": 26,
+          "held": 30,
+          "percent": 86.67,
+          "minimum_percent": 75.0,
+          "status": "safe",
+          "can_skip_now": 4,
+          "must_attend": 0,
+          "next_classes": [
+            "2030-01-08"
+          ],
+          "semester": {
+            "planned": 52,
+            "remaining": 22,
+            "can_skip_rest_of_semester": 9,
+            "best_final_percent": 92.31
+          },
+          "message": "CS51 86.67%: you can miss 4 classes and stay at 75%. Over the rest of the semester you can miss 9 of 22."
+        },
+        {
+          "subject_code": "CSL57",
+          "subject_name": "DBMS Laboratory",
+          "attended": 11,
+          "held": 12,
+          "percent": 91.67,
+          "minimum_percent": 75.0,
+          "status": "safe",
+          "can_skip_now": 2,
+          "must_attend": 0,
+          "next_classes": [
+            "2030-01-07"
+          ],
+          "semester": {
+            "planned": 14,
+            "remaining": 2,
+            "can_skip_rest_of_semester": 2,
+            "best_final_percent": 92.86
+          },
+          "message": "CSL57 91.67%: you can miss 2 classes and stay at 75%. Over the rest of the semester you can miss 2 of 2."
+        },
+        {
+          "subject_code": "CS53",
+          "subject_name": "Design and Analysis of Algorithms",
+          "attended": 27,
+          "held": 29,
+          "percent": 93.1,
+          "minimum_percent": 75.0,
+          "status": "safe",
+          "can_skip_now": 7,
+          "must_attend": 0,
+          "next_classes": [
+            "2030-01-08"
+          ],
+          "semester": {
+            "planned": 48,
+            "remaining": 19,
+            "can_skip_rest_of_semester": 10,
+            "best_final_percent": 95.83
+          },
+          "message": "CS53 93.1%: you can miss 7 classes and stay at 75%. Over the rest of the semester you can miss 10 of 19."
+        }
+      ]
+    },
+    "materials": [
+      {
+        "id": 2,
+        "kind": "material",
+        "subject": "Database Management Systems",
+        "title": "DBMS_Unit3_notes.pdf",
+        "due_at": null,
+        "status": "filed",
+        "source": "whatsapp",
+        "route": "bot",
+        "has_file": true
+      },
+      {
+        "id": 4,
+        "kind": "material",
+        "subject": "Computer Networks",
+        "title": "DCN_Lab_Manual.docx",
+        "due_at": null,
+        "status": "filed",
+        "source": "whatsapp",
+        "route": "bot",
+        "has_file": true
+      }
+    ],
+    "opportunities": [
+      {
+        "id": 7,
+        "kind": "event",
+        "subject": "Miscellaneous",
+        "title": "IISc open hackathon",
+        "due_at": "2030-01-12T10:00+05:30",
+        "status": "filed",
+        "source": "gmail",
+        "route": "jev+llm",
+        "relevance": 0.88
+      },
+      {
+        "id": 9,
+        "kind": "deadline",
+        "subject": "Miscellaneous",
+        "title": "Nimbus Systems Campus Drive",
+        "due_at": "2030-01-10T17:00+05:30",
+        "status": "filed",
+        "source": "gmail",
+        "route": "mail",
+        "category": "placement",
+        "organisation": "Nimbus Systems",
+        "role": "Graduate Engineer Trainee",
+        "link": "https://forms.gle/NimbusDrive2027",
+        "mail_link": "https://mail.google.com/mail/?authuser=student@mockcollege.edu.in#search/rfc822msgid%3Ademo-1-20300107%40mockcollege.edu.in",
+        "summary": "Placement: Nimbus Systems Campus Drive. Last date Thu 10 Jan, 5 PM. Date Sat 12 Jan, 10 AM.",
+        "event_at": "2030-01-12T10:00+05:30",
+        "details": "Eligibility: CGPA 7.0 and above, no active backlogs.",
+        "relevance": null
+      },
+      {
+        "id": 10,
+        "kind": "deadline",
+        "subject": "Miscellaneous",
+        "title": "Backend Engineering Internship 2027",
+        "due_at": "2030-01-13T23:59+05:30",
+        "status": "filed",
+        "source": "gmail",
+        "route": "mail",
+        "category": "internship",
+        "organisation": "Orbitly",
+        "role": "Backend Engineering Intern",
+        "link": "https://careers.orbitly.example.com/intern-2027",
+        "mail_link": "https://mail.google.com/mail/?authuser=student@mockcollege.edu.in#search/rfc822msgid%3Ademo-2-20300107%40mockcollege.edu.in",
+        "summary": "Internship: Backend Engineering Internship 2027 (Orbitly). Last date Sun 13 Jan, 11:59 PM.",
+        "event_at": null,
+        "details": "Stipend: Rs 30,000 per month for 10 weeks",
+        "relevance": null
+      },
+      {
+        "id": 11,
+        "kind": "exam",
+        "subject": "Miscellaneous",
+        "title": "CIE-3 Schedule – 5th Semester",
+        "due_at": "2030-01-16T09:00+05:30",
+        "status": "filed",
+        "source": "gmail",
+        "route": "mail",
+        "category": "exam_notice",
+        "organisation": "Controller of Examinations",
+        "role": null,
+        "link": null,
+        "mail_link": "https://mail.google.com/mail/?authuser=student@mockcollege.edu.in#search/rfc822msgid%3Ademo-3-20300107%40mockcollege.edu.in",
+        "summary": "Exam notice: CIE-3 Schedule – 5th Semester (Controller of Examinations). No last date in the mail. Date Wed 16 Jan.",
+        "event_at": null,
+        "details": null,
+        "relevance": null
+      }
+    ],
+    "filtered": 2,
+    "needs_review": [],
+    "approvals": [],
+    "calendar": [],
+    "reminders": [],
+    "classes_today": [
+      {
+        "start": "09:00",
+        "end": "09:55",
+        "subject_code": "CS52",
+        "subject": "Database Management Systems",
+        "room": "LH-204"
+      },
+      {
+        "start": "10:00",
+        "end": "10:55",
+        "subject_code": "CS54",
+        "subject": "Operating Systems",
+        "room": "LH-204"
+      },
+      {
+        "start": "11:10",
+        "end": "12:05",
+        "subject_code": "MA51",
+        "subject": "Probability and Statistics",
+        "room": "LH-108"
+      },
+      {
+        "start": "14:00",
+        "end": "14:55",
+        "subject_code": "CSL57",
+        "subject": "DBMS Laboratory",
+        "room": "LAB-3"
+      },
+      {
+        "start": "15:00",
+        "end": "15:55",
+        "subject_code": "CSL57",
+        "subject": "DBMS Laboratory",
+        "room": "LAB-3"
+      }
+    ],
+    "mail": {
+      "mode": "demo",
+      "connected": true,
+      "status": "connected",
+      "needs_reconnect": false,
+      "address": null,
+      "checked_at": "2030-01-07T08:30+05:30",
+      "next_check_at": "2030-01-07T13:00+05:30",
+      "check_now_after": "2030-01-07T08:35+05:30",
+      "left_out": 2,
+      "live_model": false
+    },
+    "audit": [],
+    "subjects": [
+      "Computer Networks",
+      "Database Management Systems",
+      "Design and Analysis of Algorithms",
+      "Operating Systems",
+      "Probability and Statistics"
+    ],
+    "timetable": {
+      "connected": true,
+      "stale": false,
+      "fetched_at": "2030-01-07T08:30:00Z",
+      "data": [
+        {
+          "day": "Mon",
+          "start": "09:00:00",
+          "end": "09:55:00",
+          "subject_code": "CS52",
+          "room": "LH-204"
+        },
+        {
+          "day": "Mon",
+          "start": "10:00:00",
+          "end": "10:55:00",
+          "subject_code": "CS54",
+          "room": "LH-204"
+        },
+        {
+          "day": "Mon",
+          "start": "11:10:00",
+          "end": "12:05:00",
+          "subject_code": "MA51",
+          "room": "LH-108"
+        },
+        {
+          "day": "Mon",
+          "start": "14:00:00",
+          "end": "14:55:00",
+          "subject_code": "CSL57",
+          "room": "LAB-3"
+        },
+        {
+          "day": "Mon",
+          "start": "15:00:00",
+          "end": "15:55:00",
+          "subject_code": "CSL57",
+          "room": "LAB-3"
+        },
+        {
+          "day": "Tue",
+          "start": "09:00:00",
+          "end": "09:55:00",
+          "subject_code": "CS51",
+          "room": "LH-204"
+        },
+        {
+          "day": "Tue",
+          "start": "10:00:00",
+          "end": "10:55:00",
+          "subject_code": "CS53",
+          "room": "LH-204"
+        },
+        {
+          "day": "Tue",
+          "start": "12:05:00",
+          "end": "13:00:00",
+          "subject_code": "CS52",
+          "room": "LH-204"
+        },
+        {
+          "day": "Wed",
+          "start": "09:00:00",
+          "end": "09:55:00",
+          "subject_code": "CS54",
+          "room": "LH-204"
+        },
+        {
+          "day": "Wed",
+          "start": "11:10:00",
+          "end": "12:05:00",
+          "subject_code": "CS53",
+          "room": "LH-206"
+        },
+        {
+          "day": "Wed",
+          "start": "14:00:00",
+          "end": "14:55:00",
+          "subject_code": "MA51",
+          "room": "LH-108"
+        },
+        {
+          "day": "Thu",
+          "start": "10:00:00",
+          "end": "10:55:00",
+          "subject_code": "CS52",
+          "room": "LH-204"
+        },
+        {
+          "day": "Thu",
+          "start": "11:10:00",
+          "end": "12:05:00",
+          "subject_code": "CS51",
+          "room": "LH-204"
+        },
+        {
+          "day": "Fri",
+          "start": "09:00:00",
+          "end": "09:55:00",
+          "subject_code": "CS53",
+          "room": "LH-204"
+        },
+        {
+          "day": "Fri",
+          "start": "10:00:00",
+          "end": "10:55:00",
+          "subject_code": "CS54",
+          "room": "LH-204"
+        },
+        {
+          "day": "Fri",
+          "start": "12:05:00",
+          "end": "13:00:00",
+          "subject_code": "MA51",
+          "room": "LH-108"
+        },
+        {
+          "day": "Sat",
+          "start": "09:00:00",
+          "end": "09:55:00",
+          "subject_code": "CS51",
+          "room": "LH-204"
+        }
+      ]
+    },
+    "marks": {
+      "connected": true,
+      "stale": false,
+      "fetched_at": "2030-01-07T08:30:00Z",
+      "data": [
+        {
+          "subject_code": "CS51",
+          "component": "CIE-1",
+          "scored": 24.0,
+          "maximum": 30.0
+        },
+        {
+          "subject_code": "CS51",
+          "component": "Quiz-1",
+          "scored": 8.0,
+          "maximum": 10.0
+        },
+        {
+          "subject_code": "CS52",
+          "component": "CIE-1",
+          "scored": 21.5,
+          "maximum": 30.0
+        },
+        {
+          "subject_code": "CS53",
+          "component": "CIE-1",
+          "scored": 27.0,
+          "maximum": 30.0
+        },
+        {
+          "subject_code": "CS54",
+          "component": "CIE-1",
+          "scored": 18.0,
+          "maximum": 30.0
+        },
+        {
+          "subject_code": "CS54",
+          "component": "Quiz-1",
+          "scored": 9.0,
+          "maximum": 10.0
+        },
+        {
+          "subject_code": "MA51",
+          "component": "CIE-1",
+          "scored": 22.0,
+          "maximum": 30.0
+        },
+        {
+          "subject_code": "CSL57",
+          "component": "Lab record",
+          "scored": 18.0,
+          "maximum": 20.0
+        }
+      ]
+    },
+    "results": {
+      "connected": true,
+      "stale": false,
+      "fetched_at": "2030-01-07T08:30:00Z",
+      "data": {
+        "subjects": [
+          {
+            "semester": 3,
+            "subject_code": "CS31",
+            "credits": 4.0,
+            "grade": "A",
+            "grade_points": 9.0
+          },
+          {
+            "semester": 3,
+            "subject_code": "CS32",
+            "credits": 4.0,
+            "grade": "B+",
+            "grade_points": 8.0
+          },
+          {
+            "semester": 3,
+            "subject_code": "MA31",
+            "credits": 3.0,
+            "grade": "A+",
+            "grade_points": 10.0
+          },
+          {
+            "semester": 4,
+            "subject_code": "CS41",
+            "credits": 4.0,
+            "grade": "A",
+            "grade_points": 9.0
+          },
+          {
+            "semester": 4,
+            "subject_code": "CS42",
+            "credits": 4.0,
+            "grade": "A",
+            "grade_points": 9.0
+          },
+          {
+            "semester": 4,
+            "subject_code": "MA41",
+            "credits": 3.0,
+            "grade": "B",
+            "grade_points": 7.0
+          }
+        ],
+        "semesters": [
+          {
+            "semester": 3,
+            "sgpa": 8.91,
+            "cgpa": 8.62
+          },
+          {
+            "semester": 4,
+            "sgpa": 8.45,
+            "cgpa": 8.58
+          }
+        ]
+      }
+    }
+  }
+}

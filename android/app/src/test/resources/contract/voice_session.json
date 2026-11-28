@@ -1,0 +1,31 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/voice/session",
+    "auth": "demo"
+  },
+  "status": 200,
+  "response": {
+    "available": true,
+    "signed_url": "wss://api.elevenlabs.io/v1/convai/conversation?conversation_signature=s1",
+    "dynamic_variables": {
+      "student_name": "Demo",
+      "today": "Monday 7 January 2030"
+    },
+    "tools": [
+      "due_this_week",
+      "timetable_today",
+      "attendance",
+      "briefing",
+      "materials",
+      "opportunities",
+      "list_reminders",
+      "set_reminder",
+      "cancel_reminder",
+      "mark_done",
+      "reopen",
+      "add_to_calendar"
+    ],
+    "max_seconds": 300
+  }
+}

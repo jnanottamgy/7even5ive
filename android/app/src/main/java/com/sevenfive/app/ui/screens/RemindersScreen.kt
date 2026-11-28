@@ -37,7 +37,7 @@ import com.sevenfive.app.ui.theme.Motion
 import com.sevenfive.app.util.Time
 
 @Composable
-fun RemindersScreen(vm: AppViewModel, onSettings: () -> Unit) {
+fun RemindersScreen(vm: AppViewModel, onBack: () -> Unit) {
     val state by vm.cards.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
@@ -48,10 +48,10 @@ fun RemindersScreen(vm: AppViewModel, onSettings: () -> Unit) {
     // while the phone is idle.
     val instant = Push.configured && settings?.push?.wakeups == true
 
-    TabScaffold("Reminders", vm, onSettings) { padding ->
+    com.sevenfive.app.ui.components.PushScaffold("Reminders", onBack) { padding ->
         if (state.cards == null) {
             LoadingOrError(state.loading, padding)
-            return@TabScaffold
+            return@PushScaffold
         }
         LazyColumn(contentPadding = padding, verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item(key = "intro") { ScreenIntro("Only the ones you asked for.") }
@@ -63,7 +63,7 @@ fun RemindersScreen(vm: AppViewModel, onSettings: () -> Unit) {
             if (reminders.isEmpty()) {
                 item(key = "empty") {
                     EmptyState(Icons.Outlined.AlarmOff, "No reminders",
-                        "Tap \"Remind me\" on a card in This week: 1 day, 3 hours or 1 hour before it's due.")
+                        "Tap \"Remind me\" on a card in Week: 1 day, 3 hours or 1 hour before it's due.")
                 }
             }
             items(reminders, key = { it.id }) { r ->
@@ -87,6 +87,7 @@ fun RemindersScreen(vm: AppViewModel, onSettings: () -> Unit) {
 
 @Composable
 private fun ReminderCard(r: Reminder, busy: Boolean, modifier: Modifier = Modifier, onCancel: () -> Unit) {
+    val liveNow by com.sevenfive.app.ui.components.rememberNow(30_000L)
     val fires = Time.parse(r.firesAt)
     val due = Time.parse(r.dueAt)
     val app = LocalAppColors.current
@@ -96,7 +97,7 @@ private fun ReminderCard(r: Reminder, busy: Boolean, modifier: Modifier = Modifi
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    (if (r.isCall) "Call · " else "") + (fires?.let { "${Time.dayAndTime(it)} · ${Time.until(it)}" } ?: "Soon"),
+                    (if (r.isCall) "Call · " else "") + (fires?.let { "${Time.dayAndTime(it)} · ${Time.until(it, liveNow)}" } ?: "Soon"),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary,

@@ -16,7 +16,23 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.sevenfive.app.portal.AppVisibility
 import com.sevenfive.app.portal.ForegroundSync
-import androidx.compose.animation.Crossfade
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import com.sevenfive.app.ui.components.OpeningScreen
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.sevenfive.app.data.AccountState
@@ -86,13 +102,49 @@ class MainActivity : ComponentActivity() {
         setContent {
             SevenFiveTheme {
                 val account by container.accounts.state.collectAsStateWithLifecycle()
-                Crossfade(targetState = gate(account), label = "account") { screen ->
-                    when (screen) {
-                        Gate.START -> StartingScreen()
-                        Gate.CHECK -> CheckingScreen(auth, account as? AccountState.Checking ?: AccountState.Checking())
-                        Gate.OUT -> AuthFlow(auth)
-                        Gate.PROFILE -> OnboardingScreen(auth, (account as? AccountState.NeedsProfile)?.email)
-                        Gate.APP -> SevenFiveRoot(viewModel, auth)
+                // The opening screen: once per launch (not again on rotation). The app opens the
+                // moment its sequence ends (3 s), or up to 2 s later if the account is still
+                // being checked.
+                var opened by rememberSaveable { mutableStateOf(false) }
+                var sequenceDone by remember { mutableStateOf(false) }
+                LaunchedEffect(Unit) {
+                    if (opened) return@LaunchedEffect
+                    snapshotFlow { sequenceDone }.first { it }
+                    // The sequence has ended and its last frame stands still: the one moment a
+                    // main-thread pause can't be seen. The portal's browser engine starts here.
+                    sync.warmUp()
+                    withTimeoutOrNull(OPENING_EXTRA_MILLIS) {
+                        container.accounts.state.first { it !is AccountState.Starting }
+                    }
+                    opened = true
+                }
+                Box(Modifier.fillMaxSize()) {
+                    // The app's one backdrop: drawn once, behind every screen, so changing screens
+                    // never moves or restarts it. Every screen over it is see-through.
+                    com.sevenfive.app.ui.theme.AuroraBackground()
+                    androidx.compose.animation.AnimatedContent(
+                        targetState = gate(account),
+                        // Fade through: the sign-in screens are gone before the app comes in.
+                        transitionSpec = {
+                            androidx.compose.animation.fadeIn(com.sevenfive.app.ui.theme.Motion.arrive) togetherWith
+                                fadeOut(com.sevenfive.app.ui.theme.Motion.leave)
+                        },
+                        label = "account",
+                    ) { screen ->
+                        when (screen) {
+                            Gate.START -> StartingScreen()
+                            Gate.CHECK -> CheckingScreen(auth, account as? AccountState.Checking ?: AccountState.Checking())
+                            Gate.OUT -> AuthFlow(auth)
+                            Gate.PROFILE -> OnboardingScreen(auth, (account as? AccountState.NeedsProfile)?.email)
+                            Gate.APP -> SevenFiveRoot(viewModel, auth)
+                        }
+                    }
+                    AnimatedVisibility(
+                        visible = !opened,
+                        enter = EnterTransition.None,
+                        exit = fadeOut(tween(220)),
+                    ) {
+                        OpeningScreen(onFinished = { sequenceDone = true })
                     }
                 }
             }
@@ -102,8 +154,12 @@ class MainActivity : ComponentActivity() {
     private enum class Gate { START, CHECK, OUT, PROFILE, APP }
 
     private companion object {
-        /** The portal refresh (its upload goes to the server) waits a moment after the outbox pull. */
-        const val PORTAL_AFTER_MILLIS = 2_000L
+        /** The portal refresh builds a WebView on the main thread. The browser engine behind it is
+         * started at the opening's still last frame ([ForegroundSync.warmUp]), so this one is cheap;
+         * it still waits until the first screen has settled. */
+        const val PORTAL_AFTER_MILLIS = 6_500L
+        /** After the 3 s opening sequence, how much longer it may wait for the account check. */
+        const val OPENING_EXTRA_MILLIS = 2_000L
     }
 
     private fun gate(state: AccountState): Gate = when (state) {

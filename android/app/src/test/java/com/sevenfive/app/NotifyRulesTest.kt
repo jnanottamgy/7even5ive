@@ -127,4 +127,43 @@ class CardsRepositoryTest {
         assertNotNull(repo.state.value.error)
         assertFalse(cache.exists())
     }
+
+    @Test
+    fun `an unchanged poll is a 304, so nothing is read, redrawn or rewritten`() = runTest {
+        val repo = CardsRepository(api, cache)
+        var applied = 0
+        repo.onCards = { applied++ }
+        server.enqueue(MockResponse().setBody("""{"filtered": 3}""").setHeader("ETag", "\"v1\""))
+        repo.refresh()
+        server.takeRequest(5, TimeUnit.SECONDS)
+        val first = repo.state.value
+        assertEquals(3, first.cards?.filtered)
+        val written = cache.lastModified()
+
+        // The next poll sends the tag back; the server says nothing changed.
+        server.enqueue(MockResponse().setResponseCode(304).setHeader("ETag", "\"v1\""))
+        repo.refresh()
+        val asked = server.takeRequest(5, TimeUnit.SECONDS)!!
+        assertEquals("\"v1\"", asked.getHeader("If-None-Match"))
+        assertTrue("the very same state: no screen redraws", first === repo.state.value)
+        assertEquals(written, cache.lastModified())
+        assertEquals("it still notices time passing", 2, applied)
+
+        // A change comes back in full, with its new tag, and is applied.
+        server.enqueue(MockResponse().setBody("""{"filtered": 4}""").setHeader("ETag", "\"v2\""))
+        repo.refresh()
+        server.takeRequest(5, TimeUnit.SECONDS)
+        assertEquals(4, repo.state.value.cards?.filtered)
+    }
+
+    @Test
+    fun `a poll that comes back the same keeps the same objects`() = runTest {
+        val repo = CardsRepository(api, cache)
+        server.enqueue(MockResponse().setBody("""{"filtered": 1}"""))
+        repo.refresh()
+        val first = repo.state.value
+        server.enqueue(MockResponse().setBody("""{"filtered": 1}"""))
+        repo.refresh()
+        assertTrue(first === repo.state.value)
+    }
 }

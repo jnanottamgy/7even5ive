@@ -1,0 +1,22 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/api/google/disconnect",
+    "auth": "account",
+    "body": {}
+  },
+  "status": 200,
+  "response": {
+    "disconnected": true,
+    "google": {
+      "configured": true,
+      "connected": false,
+      "email": null,
+      "connected_at": null,
+      "gmail": false,
+      "calendar": false,
+      "classroom": false,
+      "needs_reconnect": false
+    }
+  }
+}

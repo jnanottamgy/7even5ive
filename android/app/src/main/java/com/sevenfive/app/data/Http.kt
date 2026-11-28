@@ -13,6 +13,7 @@ import okhttp3.Call
 import okhttp3.EventListener
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.Response
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.ResponseBody
@@ -87,8 +88,10 @@ class Http(
     /** The wait between tries (tests record it instead of waiting). */
     private val pause: suspend (Long) -> Unit = { delay(it) },
     private val random: Random = Random.Default,
+    /** The app's one base client: every caller shares its connection pool and threads. */
+    base: OkHttpClient = OkHttpClient(),
 ) {
-    val client: OkHttpClient = OkHttpClient.Builder()
+    val client: OkHttpClient = base.newBuilder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
@@ -106,38 +109,58 @@ class Http(
     /** As exactly [bearer], once: no token source, no refresh. For the one last call made for
      * someone who is leaving ([Accounts.onLeft]). */
     suspend fun postAs(url: String, json: String, bearer: String): String =
-        sendRetrying(url, json, bearer) { it.string() }
+        sendRetrying(url, json, bearer, null) { it.text() }
 
     /** A binary answer (the briefing's mp3). Same errors as [get]. */
-    suspend fun getBytes(url: String): ByteArray = exchange(url, null, true) { it.bytes() }
+    suspend fun getBytes(url: String): ByteArray = exchange(url, null, true) { it.payload().bytes() }
+
+    /**
+     * A GET the server may answer "unchanged": [etag] is what the last answer was tagged, and
+     * when nothing changed since, the server says 304 and nothing is downloaded or read
+     * ([Conditional.body] is null). The polled cards use it.
+     */
+    suspend fun getIfChanged(url: String, etag: String?): Conditional =
+        exchange(url, null, true, etag) { r ->
+            if (r.code == 304) Conditional(null, etag) else Conditional(r.text(), r.header("ETag"))
+        }
+
+    /** A conditional answer: [body] null means unchanged since [etag]. */
+    class Conditional(val body: String?, val etag: String?)
 
     private suspend fun text(url: String, json: String?, auth: Boolean): String =
-        exchange(url, json, auth) { it.string() }
+        exchange(url, json, auth) { it.text() }
 
     private suspend fun <T> exchange(
         url: String,
         json: String?,
         auth: Boolean,
-        read: (ResponseBody) -> T,
+        ifNoneMatch: String? = null,
+        read: (Response) -> T,
     ): T {
         val first = if (auth) tokens.token() ?: throw ApiException(401, "Log in first.", "signed_out") else null
         return try {
-            sendRetrying(url, json, first, read)
+            sendRetrying(url, json, first, ifNoneMatch, read)
         } catch (e: ApiException) {
             if (first == null || (e.status != 401 && e.status != 403)) throw e
             val again = tokens.rejected(first, e.status, e.code)
             if (again == null || again == first) throw e
-            sendRetrying(url, json, again, read)
+            sendRetrying(url, json, again, ifNoneMatch, read)
         }
     }
 
     /** One request, tried again while [Retry] says so. Only a GET is idempotent here: every
      * POST changes something, or might. */
-    private suspend fun <T> sendRetrying(url: String, json: String?, token: String?, read: (ResponseBody) -> T): T {
+    private suspend fun <T> sendRetrying(
+        url: String,
+        json: String?,
+        token: String?,
+        ifNoneMatch: String?,
+        read: (Response) -> T,
+    ): T {
         var retry = 0
         while (true) {
             val failed = try {
-                return send(url, json, token, read)
+                return send(url, json, token, ifNoneMatch, read)
             } catch (e: Failed) {
                 e
             }
@@ -148,7 +171,7 @@ class Http(
         }
     }
 
-    private suspend fun <T> send(url: String, json: String?, token: String?, read: (ResponseBody) -> T): T =
+    private suspend fun <T> send(url: String, json: String?, token: String?, ifNoneMatch: String?, read: (Response) -> T): T =
         withContext(Dispatchers.IO) {
             val sent = Sent()
             val builder = try {
@@ -158,20 +181,27 @@ class Http(
             }
             builder.tag(Sent::class.java, sent)
             if (token != null) builder.header("Authorization", "Bearer $token")
+            if (ifNoneMatch != null) builder.header("If-None-Match", ifNoneMatch)
             if (json != null) builder.post(json.toRequestBody(JSON_TYPE))
             val request = builder.build()
             try {
                 client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) {
+                    // 304 is an answer, not a failure, when the request asked "only if changed".
+                    val unchanged = ifNoneMatch != null && response.code == 304
+                    if (!response.isSuccessful && !unchanged) {
                         val error = errorFrom(response.code, response.body?.string().orEmpty())
                         throw Failed(error, sent = true, retryAfterMillis = Retry.afterMillis(response.header("Retry-After")))
                     }
-                    read(response.body ?: throw ApiException(response.code, "Empty answer from the server"))
+                    read(response)
                 }
             } catch (e: IOException) {
                 throw Failed(ApiException(0, "Can't reach ${request.url.host}:${request.url.port}"), sent.started, null)
             }
         }
+
+    private fun Response.payload(): ResponseBody = body ?: throw ApiException(code, "Empty answer from the server")
+
+    private fun Response.text(): String = payload().string()
 
     private fun errorFrom(status: Int, body: String): ApiException {
         val parsed = runCatching { AppJson.parseToJsonElement(body) as JsonObject }.getOrNull()

@@ -17,7 +17,7 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -33,6 +33,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -43,17 +44,10 @@ import com.sevenfive.app.ui.AppViewModel
 import com.sevenfive.app.ui.LocalOpenVoice
 import com.sevenfive.app.ui.LocalNav
 import com.sevenfive.app.ui.Routes
-import com.sevenfive.app.ui.theme.AuroraBackground
 import com.sevenfive.app.ui.theme.LocalAppColors
 import com.sevenfive.app.ui.theme.LocalBottomInset
-import com.sevenfive.app.ui.theme.frostedStyle
 import com.sevenfive.app.ui.theme.glassSurface
 import com.sevenfive.app.ui.theme.pressable
-import dev.chrisbanes.haze.ExperimentalHazeApi
-import dev.chrisbanes.haze.HazeInputScale
-import dev.chrisbanes.haze.hazeEffect
-import dev.chrisbanes.haze.hazeSource
-import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -65,7 +59,7 @@ import kotlinx.coroutines.launch
  * [content] gets the padding that keeps its first and last items clear of the bars: pass it as
  * the list's contentPadding, not as a modifier, so the content can scroll underneath.
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalHazeApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TabScaffold(
     title: String,
@@ -75,11 +69,7 @@ fun TabScaffold(
 ) {
     val state by vm.cards.collectAsStateWithLifecycle()
     val searching by vm.searching.collectAsStateWithLifecycle()
-    val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-    val haze = rememberHazeState()
-    val scope = rememberCoroutineScope()
-    val pullState = rememberPullToRefreshState()
-    var pulling by remember { mutableStateOf(false) }
+    val scroll = TopAppBarDefaults.pinnedScrollBehavior()
     val bottomInset = LocalBottomInset.current
     val app = LocalAppColors.current
 
@@ -88,31 +78,13 @@ fun TabScaffold(
         containerColor = Color.Transparent,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            Column(Modifier.hazeEffect(state = haze, style = frostedStyle()) {
-                alpha = scroll.state.collapsedFraction
-                inputScale = HazeInputScale.Auto
-            }) {
-                LargeTopAppBar(
-                    title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            // Solid once content slides under it; clear at the top. No blur: nothing to re-process.
+            val barColor = MaterialTheme.colorScheme.background
+            Column(Modifier.drawBehind { drawRect(barColor.copy(alpha = scroll.state.overlappedFraction)) }) {
+                TopAppBar(
+                    title = { Text(title, style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     actions = {
-                        val openVoice = LocalOpenVoice.current
-                        if (openVoice != null) {
-                            Box(
-                                Modifier
-                                    .padding(end = 8.dp)
-                                    .size(38.dp)
-                                    .pressable(onClick = openVoice)
-                                    .glassSurface(shape = CircleShape, strong = true),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(
-                                    Icons.Outlined.Mic,
-                                    contentDescription = "Ask 7even5ive by voice",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(20.dp),
-                                )
-                            }
-                        }
+                        // The AI's button lives in the tab bar now (the orange one in the middle).
                         val nav = LocalNav.current
                         Box(
                             Modifier
@@ -146,7 +118,7 @@ fun TabScaffold(
                         }
                     },
                     scrollBehavior = scroll,
-                    colors = TopAppBarDefaults.largeTopAppBarColors(
+                    colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = Color.Transparent,
                         scrolledContainerColor = Color.Transparent,
                     ),
@@ -157,38 +129,18 @@ fun TabScaffold(
                     Modifier
                         .fillMaxWidth()
                         .height(0.6.dp)
-                        .graphicsLayer { alpha = scroll.state.collapsedFraction }
+                        .graphicsLayer { alpha = scroll.state.overlappedFraction }
                         .background(app.hairline),
                 )
             }
         },
     ) { inner ->
-        Box(Modifier.fillMaxSize().hazeSource(haze)) {
-            AuroraBackground()
-            PullToRefreshBox(
-                isRefreshing = pulling,
-                onRefresh = {
-                    pulling = true
-                    scope.launch {
-                        val started = System.currentTimeMillis()
-                        vm.container.cards.refresh(wait = true)
-                        // A laptop or a warm Lambda answers in tens of ms: without a floor the
-                        // spinner pops up and snaps away before it can be seen turning.
-                        val shown = System.currentTimeMillis() - started
-                        if (shown < MIN_SPINNER_MILLIS) delay(MIN_SPINNER_MILLIS - shown)
-                        pulling = false
-                    }
-                },
-                state = pullState,
-                modifier = Modifier.fillMaxSize(),
-                indicator = {
-                    PullToRefreshDefaults.Indicator(
-                        state = pullState,
-                        isRefreshing = pulling,
-                        modifier = Modifier.align(Alignment.TopCenter).padding(top = inner.calculateTopPadding()),
-                    )
-                },
-            ) {
+        Box(Modifier.fillMaxSize()) {
+            // No background of its own: the one backdrop is behind every tab (SevenFiveRoot), so
+            // switching tabs moves only what is on it.
+            // No pull-to-refresh: the cards refresh on their own, and a first load shows a
+            // skeleton of the screen instead of a spinner.
+            Box(Modifier.fillMaxSize()) {
                 content(
                     PaddingValues(
                         start = 16.dp,
@@ -210,7 +162,7 @@ fun ScreenIntro(text: String?) {
         text,
         style = MaterialTheme.typography.bodyLarge,
         color = LocalAppColors.current.secondaryLabel,
-        modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 6.dp),
+        modifier = Modifier.padding(bottom = 6.dp),
     )
 }
 

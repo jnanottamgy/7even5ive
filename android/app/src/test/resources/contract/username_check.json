@@ -1,0 +1,13 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/auth/username?u=asha.k",
+    "auth": "none"
+  },
+  "status": 200,
+  "response": {
+    "username": "asha.k",
+    "available": true,
+    "message": null
+  }
+}

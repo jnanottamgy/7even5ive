@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.net.Uri
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
+import android.webkit.WebSettings
 import android.webkit.WebView
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewCompat
@@ -112,6 +113,19 @@ private const val IOS_NAVIGATOR_JS =
         "try{delete window.chrome;}catch(e){}}catch(e){}})();"
 
 /**
+ * The WebView sends its X-Requested-With header (this app's package name, a WebView fingerprint)
+ * to no site. Lint calls the feature flag library-internal: androidx.webkit 1.12 still marks it
+ * so. The call only runs where the runtime check says the WebView has the feature, and webkit is
+ * pinned, so a change can only come with a deliberate upgrade (which runs lint again).
+ */
+@SuppressLint("RestrictedApi")
+private fun WebSettings.sendRequestedWithToNoOne() {
+    if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
+        WebSettingsCompat.setRequestedWithHeaderOriginAllowList(this, emptySet())
+    }
+}
+
+/**
  * Everything that gets an Android WebView past a Contineo-style "no third-party apps" wall, shared
  * by the portal login and the portal test:
  *  - a plain Chrome User-Agent (the portal refuses the WebView "wv" token),
@@ -128,9 +142,7 @@ fun WebView.hardenPortalWebView(identity: PortalIdentity = PortalSettings.identi
     settings.setSupportMultipleWindows(false)
     CookieManager.getInstance().setAcceptCookie(true)
     CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
-    if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
-        WebSettingsCompat.setRequestedWithHeaderOriginAllowList(settings, emptySet())
-    }
+    settings.sendRequestedWithToNoOne()
     // Needs a recent System WebView; where unavailable the UA fix alone still clears the UA check.
     if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
         WebViewCompat.addDocumentStartJavaScript(this, HIDE_WEBVIEW_JS, setOf("*"))

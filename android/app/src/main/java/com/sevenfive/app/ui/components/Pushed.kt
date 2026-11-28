@@ -38,6 +38,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -48,16 +49,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.sevenfive.app.ui.theme.AuroraBackground
 import com.sevenfive.app.ui.theme.LocalAppColors
-import com.sevenfive.app.ui.theme.frostedStyle
 import com.sevenfive.app.ui.theme.glassSurface
 import com.sevenfive.app.ui.theme.pressable
-import dev.chrisbanes.haze.ExperimentalHazeApi
-import dev.chrisbanes.haze.HazeInputScale
-import dev.chrisbanes.haze.hazeEffect
-import dev.chrisbanes.haze.hazeSource
-import dev.chrisbanes.haze.rememberHazeState
 
 /** The round glass back button pushed screens share. */
 @Composable
@@ -113,27 +107,29 @@ fun PushTopBar(
  * A pushed screen with a large title that collapses into a frosted bar, over the same backdrop as
  * the tabs. [content] gets padding for its scrolling column (top bar above, gesture bar below).
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalHazeApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PushScaffold(title: String, onBack: () -> Unit, content: @Composable (PaddingValues) -> Unit) {
-    val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-    val haze = rememberHazeState()
+    val scroll = TopAppBarDefaults.pinnedScrollBehavior()
     val app = LocalAppColors.current
+    // Above the system's navigation bar: a pushed screen never has the tab bar (it leaves as the
+    // screen opens), so nothing here moves when the bar goes.
     val bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     Scaffold(
         modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
-        containerColor = MaterialTheme.colorScheme.background,
+        // See-through: the one backdrop behind every screen (SevenFiveRoot) shows, still, while
+        // screens fade through over it.
+        containerColor = Color.Transparent,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            Column(Modifier.hazeEffect(state = haze, style = frostedStyle()) {
-                alpha = scroll.state.collapsedFraction
-                inputScale = HazeInputScale.Auto
-            }) {
-                LargeTopAppBar(
-                    title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            // Solid once content slides under it; clear at the top. No blur: nothing to re-process.
+            val barColor = MaterialTheme.colorScheme.background
+            Column(Modifier.drawBehind { drawRect(barColor.copy(alpha = scroll.state.overlappedFraction)) }) {
+                TopAppBar(
+                    title = { Text(title, style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     navigationIcon = { BackButton(onBack) },
                     scrollBehavior = scroll,
-                    colors = TopAppBarDefaults.largeTopAppBarColors(
+                    colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = Color.Transparent,
                         scrolledContainerColor = Color.Transparent,
                     ),
@@ -142,14 +138,13 @@ fun PushScaffold(title: String, onBack: () -> Unit, content: @Composable (Paddin
                     Modifier
                         .fillMaxWidth()
                         .height(0.6.dp)
-                        .graphicsLayer { alpha = scroll.state.collapsedFraction }
+                        .graphicsLayer { alpha = scroll.state.overlappedFraction }
                         .background(app.hairline),
                 )
             }
         },
     ) { inner ->
-        Box(Modifier.fillMaxSize().hazeSource(haze)) {
-            AuroraBackground()
+        Box(Modifier.fillMaxSize()) {
             content(
                 PaddingValues(
                     start = 16.dp,

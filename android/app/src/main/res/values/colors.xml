@@ -2,4 +2,5 @@
 <resources>
     <color name="ink">#0B0C10</color>
     <color name="paper">#F4F1EA</color>
+    <color name="ground">#F3F3F0</color>
 </resources>

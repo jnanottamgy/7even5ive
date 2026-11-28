@@ -100,7 +100,7 @@ def test_a_changed_card_moves_its_reminder_and_done_stays_done(make_app):
     nimbus = mail_items(a, sid)["placement:Nimbus Systems"]
     a.gateway.call(sid, "set_reminder", {"item_id": nimbus["id"], "before_minutes": 60})
     fields = {k: nimbus[k] for k in ("kind", "subject", "title", "category", "organisation",
-                                     "role", "link", "mail_link", "summary", "event_at")}
+                                     "role", "link", "mail_link", "summary", "event_at", "details")}
     mail._upsert(a.db, sid, nimbus["external_id"], {**fields, "due_at": "2030-01-11T17:00+05:30"},
                  clock.now())
     assert [r["fire_at"] for r in a.db.reminders(sid)] == ["2030-01-11T16:00+05:30"]

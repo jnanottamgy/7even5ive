@@ -75,7 +75,10 @@ CREATE TABLE IF NOT EXISTS items (
   -- form and the mail itself; one plain sentence; and the event's own date when the card's
   -- due_at is the deadline to register.
   category TEXT, organisation TEXT, role TEXT, link TEXT, mail_link TEXT, summary TEXT,
-  event_at TEXT
+  event_at TEXT,
+  -- Conditions copied from the mail (eligibility, stipend, duration): the app's placement
+  -- tracker checks the student's CGPA against them.
+  details TEXT
 );
 -- Why a table of used nonces: an approval token works once, even inside its expiry.
 CREATE TABLE IF NOT EXISTS used_approvals (nonce TEXT PRIMARY KEY, used_at TEXT NOT NULL);
@@ -203,7 +206,7 @@ COLUMNS: dict[str, dict[str, str]] = {
                         "classroom_error": "TEXT"},
     "items": {"external_id": "TEXT", "external_version": "BIGINT", "category": "TEXT",
               "organisation": "TEXT", "role": "TEXT", "link": "TEXT", "mail_link": "TEXT",
-              "summary": "TEXT", "event_at": "TEXT"},
+              "summary": "TEXT", "event_at": "TEXT", "details": "TEXT"},
     "notifications": {"reminder_id": "BIGINT"},
     "reminders": {"channel": "TEXT NOT NULL DEFAULT 'push'"},
     "students": {"call_consent_at": "TEXT", "quiet_start": "TEXT", "quiet_end": "TEXT",

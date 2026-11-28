@@ -387,7 +387,7 @@ def item_fields(card: Card) -> dict[str, Any]:
     return {"kind": kind, "subject": "Miscellaneous", "title": card.title, "due_at": due,
             "category": card.kind, "organisation": card.organisation, "role": card.role,
             "link": card.form_link, "mail_link": card.gmail_link, "summary": card.summary,
-            "event_at": event if card.deadline is not None else None}
+            "event_at": event if card.deadline is not None else None, "details": card.details}
 
 
 def sync_cards(db: Database, sid: int) -> int:

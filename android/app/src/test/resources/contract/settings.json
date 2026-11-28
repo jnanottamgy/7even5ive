@@ -1,0 +1,38 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/settings",
+    "auth": "demo"
+  },
+  "status": 200,
+  "response": {
+    "calls": {
+      "enabled": false,
+      "consent_at": null,
+      "quiet_start": "22:00",
+      "quiet_end": "08:00",
+      "phone": "+91 ••••• •5678",
+      "live": false,
+      "max_per_day": 2,
+      "lead_minutes": 120,
+      "max_seconds": 90
+    },
+    "push": {
+      "wakeups": false
+    },
+    "google": {
+      "configured": true,
+      "connected": false,
+      "email": null,
+      "connected_at": null,
+      "gmail": false,
+      "calendar": false,
+      "classroom": false,
+      "needs_reconnect": false
+    },
+    "voice": {
+      "assistant": true,
+      "briefing_audio": true
+    }
+  }
+}
