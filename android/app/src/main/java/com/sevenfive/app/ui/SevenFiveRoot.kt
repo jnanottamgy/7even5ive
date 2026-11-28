@@ -77,6 +77,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
@@ -402,30 +403,10 @@ private fun GlassTabBar(selected: Int, badge: (Tab) -> Int, onAi: () -> Unit, on
         Row(Modifier.fillMaxSize()) {
             tabs.forEachIndexed { index, tab ->
                 if (index == AI_SLOT) {
-                    Column(
-                        Modifier
-                            .width(itemWidth)
-                            .fillMaxHeight()
-                            .semantics { contentDescription = "Talk to your AI" }
-                            .pressable(scaleTo = 0.9f, haptic = true, role = Role.Button, onClick = onAi),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center,
-                    ) {
-                        Box(Modifier.size(ICON_AREA), contentAlignment = Alignment.Center) {
-                            Box(
-                                Modifier
-                                    .size(ICON_AREA)
-                                    .background(com.sevenfive.app.ui.theme.Orange, CircleShape),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(
-                                    Icons.Filled.Mic,
-                                    contentDescription = null,
-                                    tint = com.sevenfive.app.ui.theme.NeoInk,
-                                    modifier = Modifier.size(19.dp),
-                                )
-                            }
-                        }
+                    // The AI: one big orange button lifted half out of the bar, ringed in the
+                    // background colour so it sits on top of the bar, with a warm shadow.
+                    Box(Modifier.width(itemWidth).fillMaxHeight()) {
+                        AskAiButton(onAi, Modifier.align(Alignment.TopCenter).offset(y = -AI_RISE))
                         Text(
                             "Ask AI",
                             color = MaterialTheme.colorScheme.onSurface,
@@ -434,9 +415,8 @@ private fun GlassTabBar(selected: Int, badge: (Tab) -> Int, onAi: () -> Unit, on
                             fontFamily = com.sevenfive.app.ui.theme.Neo,
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
-                            modifier = Modifier.padding(top = 4.dp),
+                            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 9.dp),
                         )
-                        Spacer(Modifier.padding(top = 4.dp).size(4.dp))
                     }
                 }
                 val on = index == selected
@@ -511,6 +491,34 @@ private const val AI_SLOT = 2
 
 /** The square every tab's icon (and the AI's circle) sits in, so all of them line up. */
 private val ICON_AREA = 34.dp
+
+/** The Ask AI button: its size, and how far it rises above the tab bar's top edge. */
+private val AI_SIZE = 58.dp
+private val AI_RISE = 24.dp
+
+/** A raised orange button: a lighter top, a soft orange shadow, ringed in the page's colour. */
+@Composable
+private fun AskAiButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val ground = MaterialTheme.colorScheme.background
+    Box(
+        modifier
+            .size(AI_SIZE)
+            .shadow(10.dp, CircleShape, ambientColor = com.sevenfive.app.ui.theme.Orange, spotColor = com.sevenfive.app.ui.theme.Orange)
+            .semantics { contentDescription = "Talk to your AI" }
+            .pressable(scaleTo = 0.9f, haptic = true, role = Role.Button, onClick = onClick)
+            .background(ground, CircleShape)
+            .padding(4.dp)
+            .background(
+                androidx.compose.ui.graphics.Brush.verticalGradient(
+                    listOf(androidx.compose.ui.graphics.Color(0xFFFFA64D), com.sevenfive.app.ui.theme.Orange, androidx.compose.ui.graphics.Color(0xFFEE7410)),
+                ),
+                CircleShape,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(Icons.Filled.Mic, contentDescription = null, tint = com.sevenfive.app.ui.theme.NeoInk, modifier = Modifier.size(24.dp))
+    }
+}
 
 /** Home, its root, from anywhere: everything above it closes, nothing saved is brought back. */
 private fun NavHostController.goHome() {

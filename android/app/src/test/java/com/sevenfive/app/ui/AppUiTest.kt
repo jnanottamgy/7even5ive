@@ -15,6 +15,8 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.click
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.After
@@ -104,6 +106,13 @@ class AppUiTest {
         tab("This week").performClick()
         rule.waitForIdle()
         segment("Today").assertIsSelected()
+    }
+
+    @Test
+    fun `the raised AI button answers a tap on its top, above the bar`() {
+        tab("Talk to your AI").performTouchInput { click(androidx.compose.ui.geometry.Offset(centerX, 4f)) }
+        rule.waitForIdle()
+        rule.onNode(hasContentDescription("Start talking")).assertIsDisplayed()
     }
 
     @Test
