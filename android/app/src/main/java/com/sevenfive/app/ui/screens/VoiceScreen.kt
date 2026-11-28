@@ -41,6 +41,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -182,11 +184,40 @@ private fun Orb(phase: VoiceAssistant.Phase, active: Boolean, onClick: () -> Uni
                     .border(2.dp, orange, CircleShape),
             )
         }
+        if (!live) {
+            // A faint ring around it at rest: something to press.
+            Box(Modifier.size(146.dp).border(1.5.dp, orange.copy(alpha = 0.28f), CircleShape))
+        }
+        // A real button: lifted off the page by a soft orange shadow, a lighter top fading to a
+        // deeper orange, a glossy highlight and a bright rim. Pressed, the face sinks while the
+        // shadow stays where it was.
         Box(
             Modifier
                 .size(120.dp)
+                .shadow(20.dp, CircleShape, ambientColor = orange, spotColor = orange)
                 .pressable(scaleTo = 0.93f, haptic = true, onClick = onClick)
-                .background(orange, CircleShape),
+                .background(
+                    androidx.compose.ui.graphics.Brush.verticalGradient(
+                        listOf(androidx.compose.ui.graphics.Color(0xFFFFAA55), orange, androidx.compose.ui.graphics.Color(0xFFE96E0C)),
+                    ),
+                    CircleShape,
+                )
+                .drawBehind {
+                    drawCircle(
+                        androidx.compose.ui.graphics.Brush.radialGradient(
+                            listOf(androidx.compose.ui.graphics.Color.White.copy(alpha = 0.38f), androidx.compose.ui.graphics.Color.Transparent),
+                            center = androidx.compose.ui.geometry.Offset(size.width * 0.36f, size.height * 0.24f),
+                            radius = size.width * 0.5f,
+                        ),
+                    )
+                }
+                .border(
+                    1.5.dp,
+                    androidx.compose.ui.graphics.Brush.verticalGradient(
+                        listOf(androidx.compose.ui.graphics.Color.White.copy(alpha = 0.7f), androidx.compose.ui.graphics.Color.White.copy(alpha = 0.05f)),
+                    ),
+                    CircleShape,
+                ),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
