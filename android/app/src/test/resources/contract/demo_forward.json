@@ -1,0 +1,27 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/demo/forward/quiz",
+    "auth": "demo",
+    "body": {}
+  },
+  "status": 200,
+  "response": {
+    "kind": "quiz",
+    "webhook_status": 200,
+    "webhook_reply": {
+      "ok": true,
+      "duplicate": false
+    },
+    "filed": {
+      "id": 15,
+      "kind": "exam",
+      "subject": "Design and Analysis of Algorithms",
+      "title": "DAA Quiz 2 (greedy + DP)",
+      "due_at": "2030-01-09T10:00+05:30",
+      "status": "filed",
+      "source": "whatsapp",
+      "route": "bot"
+    }
+  }
+}

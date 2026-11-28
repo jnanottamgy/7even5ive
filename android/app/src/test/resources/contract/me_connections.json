@@ -1,0 +1,19 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/me/connections",
+    "auth": "account"
+  },
+  "status": 200,
+  "response": {
+    "mcp_url": "http://testserver/mcp",
+    "connections": [
+      {
+        "id": 1,
+        "name": "Claude Code",
+        "connected_at": "2030-01-12T09:01+05:30",
+        "last_used_at": "2030-01-12T09:01+05:30"
+      }
+    ]
+  }
+}

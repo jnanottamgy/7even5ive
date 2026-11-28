@@ -1,0 +1,25 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/api/google/finish",
+    "auth": "account",
+    "body": {
+      "code": "4/abc",
+      "state": "contract-test-state"
+    }
+  },
+  "status": 200,
+  "response": {
+    "connected": true,
+    "google": {
+      "configured": true,
+      "connected": true,
+      "email": "student@college.edu",
+      "connected_at": "2030-01-12T09:01+05:30",
+      "gmail": true,
+      "calendar": true,
+      "classroom": true,
+      "needs_reconnect": false
+    }
+  }
+}

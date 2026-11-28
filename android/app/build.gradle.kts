@@ -90,6 +90,26 @@ android {
         compose = true
         buildConfig = true
     }
+    testOptions {
+        // The UI tests (src/test/.../ui) run on the JVM under Robolectric, with the app's own
+        // resources (fonts, strings, theme).
+        unitTests.isIncludeAndroidResources = true
+    }
+}
+
+// Robolectric fetches its Android runtime (about 200 MB) from Maven Central on first use. Where
+// Maven Central refuses it (it limits downloads per address), point the tests at a copy fetched
+// once, kept under its Maven file name: -Psevenfive.robolectricDeps=DIR or ROBOLECTRIC_DEPS_DIR.
+val robolectricDeps = (findProperty("sevenfive.robolectricDeps") as String?) ?: System.getenv("ROBOLECTRIC_DEPS_DIR")
+tasks.withType<Test>().configureEach {
+    // Robolectric's Android 16 runtime reaches into the JDK's file descriptors.
+    jvmArgs("--add-opens=java.base/jdk.internal.access=ALL-UNNAMED", "--add-opens=java.base/java.io=ALL-UNNAMED")
+    // The UI tests save screenshots of what they drew (build/outputs/roborazzi), for review.
+    systemProperty("roborazzi.test.record", "true")
+    if (robolectricDeps != null) {
+        systemProperty("robolectric.offline", "true")
+        systemProperty("robolectric.dependency.dir", robolectricDeps)
+    }
 }
 
 kotlin {
@@ -131,4 +151,12 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    // UI tests without a phone: Compose's test rule under Robolectric, which also draws the
+    // screenshots (native graphics). The test manifest is debug-only: never in a release.
+    testImplementation(composeBom)
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    testImplementation("org.robolectric:robolectric:4.17")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi:1.77.0")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi-compose:1.77.0")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

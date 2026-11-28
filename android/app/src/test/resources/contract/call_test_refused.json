@@ -1,0 +1,14 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/api/calls/test",
+    "auth": "demo",
+    "body": {}
+  },
+  "status": 200,
+  "response": {
+    "call_id": 2,
+    "status": "refused",
+    "reason": "quiet_hours"
+  }
+}

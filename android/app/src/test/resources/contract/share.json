@@ -1,0 +1,27 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/api/share",
+    "auth": "demo",
+    "body": {
+      "text": "DBMS assignment 4, due Friday 11:59 pm",
+      "kind": "deadline",
+      "subject": "Database Management Systems",
+      "title": "DBMS assignment 4",
+      "due_at": "2030-01-11T23:59+05:30"
+    }
+  },
+  "status": 200,
+  "response": {
+    "status": "filed",
+    "item": {
+      "id": 12,
+      "kind": "deadline",
+      "subject": "Database Management Systems",
+      "title": "DBMS assignment 4",
+      "due_at": "2030-01-11T23:59+05:30",
+      "status": "filed",
+      "route": "you"
+    }
+  }
+}

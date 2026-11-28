@@ -1,0 +1,19 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/api/tools/cancel_reminder",
+    "auth": "demo",
+    "body": {
+      "args": {
+        "reminder_id": 1
+      }
+    }
+  },
+  "status": 200,
+  "response": {
+    "status": "ok",
+    "result": {
+      "cancelled": true
+    }
+  }
+}

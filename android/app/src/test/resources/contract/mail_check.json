@@ -1,0 +1,33 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/api/mail/check",
+    "auth": "demo",
+    "body": {}
+  },
+  "status": 200,
+  "response": {
+    "mode": "demo",
+    "listed": 3,
+    "judged": 1,
+    "new": 1,
+    "updated": 0,
+    "left_out": 0,
+    "more": false,
+    "error": null,
+    "status": "connected",
+    "cards": 4,
+    "mail": {
+      "mode": "demo",
+      "connected": true,
+      "status": "connected",
+      "needs_reconnect": false,
+      "address": null,
+      "checked_at": "2030-01-07T08:45+05:30",
+      "next_check_at": "2030-01-07T13:00+05:30",
+      "check_now_after": "2030-01-07T08:50+05:30",
+      "left_out": 2,
+      "live_model": false
+    }
+  }
+}

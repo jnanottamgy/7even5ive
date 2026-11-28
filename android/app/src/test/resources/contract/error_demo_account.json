@@ -1,0 +1,15 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/api/me",
+    "auth": "demo",
+    "body": {
+      "name": "Not the demo"
+    }
+  },
+  "status": 403,
+  "response": {
+    "detail": "The demo account can't be changed. Create your own account.",
+    "code": "demo_account"
+  }
+}

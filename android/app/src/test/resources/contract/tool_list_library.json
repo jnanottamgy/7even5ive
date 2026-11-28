@@ -1,0 +1,82 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/api/tools/list_library",
+    "auth": "demo",
+    "body": {
+      "args": {}
+    }
+  },
+  "status": 200,
+  "response": {
+    "status": "ok",
+    "result": {
+      "subjects": [
+        {
+          "id": 1,
+          "name": "Database Management Systems",
+          "shelves": [
+            {
+              "shelf": "material",
+              "label": "Material",
+              "files": 2
+            },
+            {
+              "shelf": "pyq",
+              "label": "PYQ & Questions",
+              "files": 1
+            },
+            {
+              "shelf": "info",
+              "label": "Info & Admin",
+              "files": 0
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "name": "Computer Networks",
+          "shelves": [
+            {
+              "shelf": "material",
+              "label": "Material",
+              "files": 1
+            },
+            {
+              "shelf": "pyq",
+              "label": "PYQ & Questions",
+              "files": 0
+            },
+            {
+              "shelf": "info",
+              "label": "Info & Admin",
+              "files": 1
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "name": "Operating Systems",
+          "shelves": [
+            {
+              "shelf": "material",
+              "label": "Material",
+              "files": 1
+            },
+            {
+              "shelf": "pyq",
+              "label": "PYQ & Questions",
+              "files": 0
+            },
+            {
+              "shelf": "info",
+              "label": "Info & Admin",
+              "files": 0
+            }
+          ]
+        }
+      ],
+      "unsorted": 0
+    }
+  }
+}

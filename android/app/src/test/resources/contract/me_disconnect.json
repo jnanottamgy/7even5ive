@@ -1,0 +1,12 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/api/me/connections/1/delete",
+    "auth": "account",
+    "body": {}
+  },
+  "status": 200,
+  "response": {
+    "deleted": true
+  }
+}

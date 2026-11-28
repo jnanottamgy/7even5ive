@@ -1,0 +1,12 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/voice/session",
+    "auth": "demo"
+  },
+  "status": 200,
+  "response": {
+    "available": false,
+    "reason": "The voice assistant needs ElevenLabs set up on the server."
+  }
+}

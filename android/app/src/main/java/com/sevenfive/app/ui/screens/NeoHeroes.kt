@@ -1,11 +1,8 @@
 package com.sevenfive.app.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
-import androidx.compose.material.icons.outlined.Alarm
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -18,17 +15,28 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.Alarm
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
@@ -40,11 +48,10 @@ import com.sevenfive.app.data.Cards
 import com.sevenfive.app.data.SubjectAttendance
 import com.sevenfive.app.ui.components.kindStyle
 import com.sevenfive.app.ui.components.rememberNow
-import androidx.compose.runtime.getValue
 import com.sevenfive.app.ui.theme.LocalAppColors
-import com.sevenfive.app.ui.theme.glassSurface
 import com.sevenfive.app.ui.theme.NeoInk
 import com.sevenfive.app.ui.theme.Orange
+import com.sevenfive.app.ui.theme.glassSurface
 import com.sevenfive.app.util.Time
 import java.time.LocalDate
 import java.time.ZoneId
@@ -281,19 +288,49 @@ internal fun NeoSegments(segments: List<Segment>, selected: Int, modifier: Modif
         }
         return
     }
+    val scroll = rememberScrollState()
+    // The chosen segment is always shown whole, even when it was half off the edge.
+    val inView = remember(segments.size) { List(segments.size) { BringIntoViewRequester() } }
+    LaunchedEffect(selected) { inView.getOrNull(selected)?.bringIntoView() }
     Row(
         modifier
             .fillMaxWidth()
             .padding(top = 2.dp, bottom = 6.dp)
             .glassSurface(shape = CircleShape)
-            .horizontalScroll(rememberScrollState())
+            // The words fade out at an edge with more beyond it, so the bar reads as one to
+            // swipe, not as a word cut in half. Drawn on its own layer: the glass stays whole.
+            .graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
+            .drawWithContent {
+                drawContent()
+                val edge = 32.dp.toPx()
+                if (scroll.canScrollForward) {
+                    drawRect(
+                        Brush.horizontalGradient(listOf(Color.Transparent, Color.Black), startX = size.width - edge, endX = size.width),
+                        blendMode = androidx.compose.ui.graphics.BlendMode.DstOut,
+                    )
+                }
+                if (scroll.canScrollBackward) {
+                    drawRect(
+                        Brush.horizontalGradient(listOf(Color.Black, Color.Transparent), startX = 0f, endX = edge),
+                        blendMode = androidx.compose.ui.graphics.BlendMode.DstOut,
+                    )
+                }
+            }
+            .horizontalScroll(scroll)
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         segments.forEachIndexed { i, seg ->
             val on = i == selected
             val pill by androidx.compose.animation.animateColorAsState(if (on) NeoInk else Color.Transparent, label = "pill")
-            SegmentLabel(seg, on, Modifier.clip(CircleShape).background(pill).padding(horizontal = 14.dp)) { pick(i) }
+            SegmentLabel(
+                seg, on,
+                Modifier
+                    .bringIntoViewRequester(inView[i])
+                    .clip(CircleShape)
+                    .background(pill)
+                    .padding(horizontal = 14.dp),
+            ) { pick(i) }
         }
     }
 }

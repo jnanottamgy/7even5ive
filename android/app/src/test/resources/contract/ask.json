@@ -1,0 +1,18 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/api/ask",
+    "auth": "demo",
+    "body": {
+      "question": "What's due this week?"
+    }
+  },
+  "status": 200,
+  "response": {
+    "answer": "Due this week:\n• DCN CIE-2 (units 3 and 4) (Computer Networks): Mon 7 Jan, 9:00 AM\n• Nimbus Systems Campus Drive (Miscellaneous): Thu 10 Jan, 5:00 PM\n• OS mini project (10 marks) (Operating Systems): Thu 10 Jan, 11:59 PM\n• DBMS Assignment 3 (Database Management Systems): Fri 11 Jan, 11:59 PM\n• IISc open hackathon (Miscellaneous): Sat 12 Jan, 10:00 AM\n• Backend Engineering Internship 2027 (Miscellaneous): Sun 13 Jan, 11:59 PM",
+    "route": "offline",
+    "tools": [
+      "due_this_week"
+    ]
+  }
+}

@@ -26,7 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -113,7 +113,7 @@ fun OpeningScreen(modifier: Modifier = Modifier, onFinished: () -> Unit = {}) {
             )
             // Left to right, one letter at a time; then "sorted." swipes in from the right edge
             // of the screen. Read out once, as the whole sentence.
-            val screenWidth = LocalConfiguration.current.screenWidthDp.dp
+            val window = LocalWindowInfo.current
             Row(
                 Modifier
                     .padding(top = 8.dp)
@@ -141,7 +141,7 @@ fun OpeningScreen(modifier: Modifier = Modifier, onFinished: () -> Unit = {}) {
                         val t = clock.value
                         val swipe = LinearOutSlowInEasing.transform(((t - SORTED_AT) / SORTED_MS).coerceIn(0f, 1f))
                         alpha = if (t < SORTED_AT) 0f else 1f
-                        translationX = (1f - swipe) * screenWidth.toPx()
+                        translationX = (1f - swipe) * window.containerSize.width
                     },
                 )
             }

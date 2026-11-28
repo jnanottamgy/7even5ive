@@ -1,0 +1,32 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/calls",
+    "auth": "demo"
+  },
+  "status": 200,
+  "response": {
+    "calls": [
+      {
+        "id": 2,
+        "status": "refused",
+        "reason": "quiet_hours",
+        "created_at": "2030-01-07T08:30+05:30",
+        "ended_at": null,
+        "duration_seconds": null,
+        "title": "DCN CIE-2 (units 3 and 4)",
+        "subject": "Computer Networks"
+      },
+      {
+        "id": 1,
+        "status": "placed",
+        "reason": null,
+        "created_at": "2030-01-07T08:30+05:30",
+        "ended_at": null,
+        "duration_seconds": null,
+        "title": "DCN CIE-2 (units 3 and 4)",
+        "subject": "Computer Networks"
+      }
+    ]
+  }
+}

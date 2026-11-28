@@ -247,7 +247,7 @@ private fun SubjectList(tree: LibraryTree, padding: PaddingValues, onSubject: (I
             }
         }
         items(tree.subjects, key = { it.id }) { subject ->
-            FolderRow(subject.name, "${subject.total} files") { onSubject(subject.id) }
+            FolderRow(subject.name, "${subject.total} ${if (subject.total == 1) "file" else "files"}") { onSubject(subject.id) }
         }
     }
 }

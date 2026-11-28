@@ -322,7 +322,8 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
                         ProfileEditScreen(auth, profile, onBack = { nav.popBackStack() })
                     }
                     composable(Routes.PORTAL_CHECK) {
-                        PortalCheckScreen(vm, vm.portalCheckUrl.value, onBack = { nav.popBackStack() })
+                        val url by vm.portalCheckUrl.collectAsStateWithLifecycle()
+                        PortalCheckScreen(vm, url, onBack = { nav.popBackStack() })
                     }
                     composable(Routes.VOICE) { VoiceScreen(vm, onBack = { nav.popBackStack() }) }
                     val back = { nav.popBackStack(); Unit }
