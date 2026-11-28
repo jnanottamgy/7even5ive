@@ -41,6 +41,7 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.WbSunny
+import androidx.compose.material.icons.outlined.Timer
 import com.sevenfive.app.notify.Alerts
 import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.ContentCopy
@@ -54,6 +55,7 @@ import androidx.compose.material.icons.outlined.SlowMotionVideo
 import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import com.sevenfive.app.ui.components.segmentSlide
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -104,130 +106,148 @@ fun SettingsScreen(
     val account by vm.account.collectAsStateWithLifecycle()
     val demo = account is com.sevenfive.app.data.AccountState.Demo
 
+    // Organised into four short segments instead of one long page.
+    var segment by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableIntStateOf(0) }
     PushScaffold("Settings", onBack) { padding ->
         Column(
             Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(padding),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
-            AccountSection(vm, onEditProfile, onCreateAccount)
-            GoogleSection(vm, demo)
-            CallsSection(vm)
-            NotificationsSection(vm)
-            VoiceSection(vm)
-
-            val searching by vm.searching.collectAsStateWithLifecycle()
             val resetting by vm.resetting.collectAsStateWithLifecycle()
-            val online = vm.container.servers.buildDefault.takeIf { it.isOnline }
+            NeoSegments(
+                listOf(Segment("Account"), Segment("Alerts"), Segment("Connections"), Segment("About")),
+                segment,
+            ) { segment = it }
+            Column(Modifier.segmentSlide(segment), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                when (segment) {
+                    0 -> {
+                        AccountSection(vm, onEditProfile, onCreateAccount)
+                        Group(header = "Your AI", footer = "Every request your AI (or this app) made through " +
+                            "the gateway: what ran, what waited for your tap, what was refused.") {
+                            val nav = com.sevenfive.app.ui.LocalNav.current
+                            GroupRow("AI activity", icon = Icons.Outlined.Shield, iconColor = status.safe, chevron = true) {
+                                nav(com.sevenfive.app.ui.Routes.AI_LOG)
+                            }
+                            GroupDivider()
+                            GroupRow("Ask your semester", icon = Icons.Outlined.AutoAwesome, iconColor = MaterialTheme.colorScheme.primary,
+                                chevron = true) { nav(com.sevenfive.app.ui.Routes.ASK) }
+                        }
 
-            Group(header = "Data source", footer = "Where the app gets its cards. The online demo needs no laptop.") {
-                GroupRow(
-                    if (current.isOnline) "Online server" else "Laptop",
-                    icon = if (current.isOnline) Icons.Outlined.Cloud else Icons.Outlined.Laptop,
-                    iconColor = if (current.isOnline) app.material else app.event,
-                    detail = current.coreUrl,
-                )
-                if (online != null && !current.isOnline) {
-                    GroupDivider()
-                    GroupRow("Use the online server", icon = Icons.Outlined.Cloud, iconColor = app.material,
-                        titleColor = MaterialTheme.colorScheme.primary, chevron = true) {
-                        vm.useOnline()
-                        onBack()
+                        if (demo) Group(header = "Demo tour", footer = "Runs the whole demo from this phone, step by step: each step opens " +
+                            "the right tab, says what to tell the audience, and makes the live moments happen. Works with " +
+                            "the online demo server.") {
+                            GroupRow("Start the tour (fresh)", icon = Icons.Outlined.PlayArrow, iconColor = MaterialTheme.colorScheme.primary,
+                                enabled = !resetting, chevron = true) {
+                                vm.resetDemo()
+                                vm.startTour()
+                            }
+                            GroupDivider()
+                            GroupRow("Start, keep data", icon = Icons.Outlined.SlowMotionVideo, iconColor = app.deadline, chevron = true) {
+                                vm.startTour()
+                            }
+                            GroupDivider()
+                            GroupRow(if (resetting) "Resetting…" else "Reset demo data", icon = Icons.Outlined.Restore,
+                                iconColor = app.notice, enabled = !resetting, busy = resetting) { vm.resetDemo() }
+                        }
+
+                    }
+                    1 -> {
+                        CallsSection(vm)
+                        NotificationsSection(vm)
+                        VoiceSection(vm)
+
+                    }
+                    2 -> {
+                        GoogleSection(vm, demo)
+                        val searching by vm.searching.collectAsStateWithLifecycle()
+                        val online = vm.container.servers.buildDefault.takeIf { it.isOnline }
+
+                        Group(header = "Data source", footer = "Where the app gets its cards. The online demo needs no laptop.") {
+                            GroupRow(
+                                if (current.isOnline) "Online server" else "Laptop",
+                                icon = if (current.isOnline) Icons.Outlined.Cloud else Icons.Outlined.Laptop,
+                                iconColor = if (current.isOnline) app.material else app.event,
+                                detail = current.coreUrl,
+                            )
+                            if (online != null && !current.isOnline) {
+                                GroupDivider()
+                                GroupRow("Use the online server", icon = Icons.Outlined.Cloud, iconColor = app.material,
+                                    titleColor = MaterialTheme.colorScheme.primary, chevron = true) {
+                                    vm.useOnline()
+                                    onBack()
+                                }
+                            }
+                            GroupDivider()
+                            GroupRow(
+                                if (searching) "Looking…" else "Find a laptop on this Wi-Fi",
+                                icon = Icons.Outlined.Wifi,
+                                iconColor = status.safe,
+                                enabled = !searching,
+                                busy = searching,
+                            ) { vm.findLaptop() }
+                            GroupDivider(inset = false)
+                            GroupField(host, { host = it.trim() }, "Online address or laptop IP", "https://… or 192.168.1.20")
+                            GroupDivider(inset = false)
+                            GroupAction("Connect", onClick = { vm.connectTo(host); onBack() }, enabled = host.isNotBlank())
+                        }
+
+                        val checkStart by vm.portalCheckUrl.collectAsStateWithLifecycle()
+                        var checkUrl by remember { mutableStateOf(checkStart) }
+                        val checkTarget = PortalCheck.normalise(checkUrl)
+                        Group(header = "Test a college portal", footer = "Opens your college's real portal in the app, to see " +
+                            "whether it lets you log in from an app. You log in yourself; nothing is read from the page or " +
+                            "sent anywhere, and the demo keeps using its own portal.") {
+                            GroupField(checkUrl, { checkUrl = it.trim() }, "Portal address", PortalCheck.DEFAULT_URL)
+                            GroupDivider(inset = false)
+                            GroupRow("Open portal test", icon = Icons.Outlined.Science, iconColor = app.event,
+                                enabled = checkTarget != null, chevron = true) {
+                                if (checkTarget != null) {
+                                    vm.setPortalCheckUrl(checkTarget)
+                                    onPortalCheck()
+                                }
+                            }
+                        }
+
+                        Group(header = "Portal session", footer = "Your portal login lives only in this phone's browser storage.") {
+                            GroupRow("Log out of portal on this phone", icon = Icons.AutoMirrored.Outlined.Logout,
+                                iconColor = MaterialTheme.colorScheme.error, titleColor = MaterialTheme.colorScheme.error) {
+                                CookieManager.getInstance().removeAllCookies(null)
+                                CookieManager.getInstance().flush()
+                                vm.container.portalStore.forget()
+                                vm.say("Logged out of the portal on this phone")
+                            }
+                        }
+
+                        Group(header = "Addresses (advanced)") {
+                            GroupField(core, { core = it.trim() }, "7even5ive core (cards, approvals)")
+                            GroupDivider(inset = false)
+                            GroupField(portmax, { portmax = it.trim() }, "PortMax (portal settings, upload)")
+                            GroupDivider(inset = false)
+                            GroupField(portal, { portal = it.trim() }, "College portal")
+                            GroupDivider(inset = false)
+                            GroupAction(
+                                "Save and reconnect",
+                                onClick = {
+                                    vm.saveServers(ServerConfig(core, portmax, portal))
+                                    onBack()
+                                },
+                                enabled = listOf(core, portmax, portal).all { it.startsWith("http://") || it.startsWith("https://") },
+                            )
+                        }
+
+                    }
+                    else -> {
+                        DiagnosticsSection(vm)
+
+                        Text(
+                            "Signed in as the demo student (built in) · college ${BuildConfig.COLLEGE} · v${BuildConfig.VERSION_NAME}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = app.tertiaryLabel,
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                        )
                     }
                 }
-                GroupDivider()
-                GroupRow(
-                    if (searching) "Looking…" else "Find a laptop on this Wi-Fi",
-                    icon = Icons.Outlined.Wifi,
-                    iconColor = status.safe,
-                    enabled = !searching,
-                    busy = searching,
-                ) { vm.findLaptop() }
-                GroupDivider(inset = false)
-                GroupField(host, { host = it.trim() }, "Online address or laptop IP", "https://… or 192.168.1.20")
-                GroupDivider(inset = false)
-                GroupAction("Connect", onClick = { vm.connectTo(host); onBack() }, enabled = host.isNotBlank())
             }
-
-            Group(header = "Your AI", footer = "Every request your AI (or this app) made through " +
-                "the gateway: what ran, what waited for your tap, what was refused.") {
-                val nav = com.sevenfive.app.ui.LocalNav.current
-                GroupRow("AI activity", icon = Icons.Outlined.Shield, iconColor = status.safe, chevron = true) {
-                    nav(com.sevenfive.app.ui.Routes.AI_LOG)
-                }
-                GroupDivider()
-                GroupRow("Ask your semester", icon = Icons.Outlined.AutoAwesome, iconColor = MaterialTheme.colorScheme.primary,
-                    chevron = true) { nav(com.sevenfive.app.ui.Routes.ASK) }
-            }
-
-            if (demo) Group(header = "Demo tour", footer = "Runs the whole demo from this phone, step by step: each step opens " +
-                "the right tab, says what to tell the audience, and makes the live moments happen. Works with " +
-                "the online demo server.") {
-                GroupRow("Start the tour (fresh)", icon = Icons.Outlined.PlayArrow, iconColor = MaterialTheme.colorScheme.primary,
-                    enabled = !resetting, chevron = true) {
-                    vm.resetDemo()
-                    vm.startTour()
-                }
-                GroupDivider()
-                GroupRow("Start, keep data", icon = Icons.Outlined.SlowMotionVideo, iconColor = app.deadline, chevron = true) {
-                    vm.startTour()
-                }
-                GroupDivider()
-                GroupRow(if (resetting) "Resetting…" else "Reset demo data", icon = Icons.Outlined.Restore,
-                    iconColor = app.notice, enabled = !resetting, busy = resetting) { vm.resetDemo() }
-            }
-
-            val checkStart by vm.portalCheckUrl.collectAsStateWithLifecycle()
-            var checkUrl by remember { mutableStateOf(checkStart) }
-            val checkTarget = PortalCheck.normalise(checkUrl)
-            Group(header = "Test a college portal", footer = "Opens your college's real portal in the app, to see " +
-                "whether it lets you log in from an app. You log in yourself; nothing is read from the page or " +
-                "sent anywhere, and the demo keeps using its own portal.") {
-                GroupField(checkUrl, { checkUrl = it.trim() }, "Portal address", PortalCheck.DEFAULT_URL)
-                GroupDivider(inset = false)
-                GroupRow("Open portal test", icon = Icons.Outlined.Science, iconColor = app.event,
-                    enabled = checkTarget != null, chevron = true) {
-                    if (checkTarget != null) {
-                        vm.setPortalCheckUrl(checkTarget)
-                        onPortalCheck()
-                    }
-                }
-            }
-
-            Group(header = "Portal session", footer = "Your portal login lives only in this phone's browser storage.") {
-                GroupRow("Log out of portal on this phone", icon = Icons.AutoMirrored.Outlined.Logout,
-                    iconColor = MaterialTheme.colorScheme.error, titleColor = MaterialTheme.colorScheme.error) {
-                    CookieManager.getInstance().removeAllCookies(null)
-                    CookieManager.getInstance().flush()
-                    vm.container.portalStore.forget()
-                    vm.say("Logged out of the portal on this phone")
-                }
-            }
-
-            Group(header = "Addresses (advanced)") {
-                GroupField(core, { core = it.trim() }, "7even5ive core (cards, approvals)")
-                GroupDivider(inset = false)
-                GroupField(portmax, { portmax = it.trim() }, "PortMax (portal settings, upload)")
-                GroupDivider(inset = false)
-                GroupField(portal, { portal = it.trim() }, "College portal")
-                GroupDivider(inset = false)
-                GroupAction(
-                    "Save and reconnect",
-                    onClick = {
-                        vm.saveServers(ServerConfig(core, portmax, portal))
-                        onBack()
-                    },
-                    enabled = listOf(core, portmax, portal).all { it.startsWith("http://") || it.startsWith("https://") },
-                )
-            }
-
-            DiagnosticsSection(vm)
-
-            Text(
-                "Signed in as the demo student (built in) · college ${BuildConfig.COLLEGE} · v${BuildConfig.VERSION_NAME}",
-                style = MaterialTheme.typography.bodySmall,
-                color = app.tertiaryLabel,
-                modifier = Modifier.padding(horizontal = 16.dp),
-            )
         }
     }
 }
@@ -308,7 +328,7 @@ private fun CallsSection(vm: AppViewModel) {
             icon = Icons.Outlined.PhoneInTalk,
             iconColor = app.event,
             detail = calls?.phone ?: "No number on file for calls",
-            enabled = calls != null && "calls" !in busy,
+            enabled = calls != null,
         )
         GroupDivider()
         GroupRow("Quiet hours", icon = Icons.Outlined.Bedtime, iconColor = app.exam,
@@ -423,6 +443,20 @@ private fun NotificationsSection(vm: AppViewModel) {
             icon = Icons.Outlined.WbSunny,
             iconColor = app.deadline,
             detail = "At 8 am, what's due this week. Off unless you turn it on.",
+        )
+        GroupDivider()
+        var countdown by remember { mutableStateOf(com.sevenfive.app.notify.LiveCountdown.enabled(context)) }
+        GroupSwitchRow(
+            "Lock-screen countdown",
+            checked = countdown,
+            onChange = { on ->
+                countdown = on
+                com.sevenfive.app.notify.LiveCountdown.setEnabled(context, on, vm.container.cards.cached())
+                if (on && !permitted) turnOn()
+            },
+            icon = Icons.Outlined.Timer,
+            iconColor = app.exam,
+            detail = "In the last 24 hours before a deadline or exam, a silent live countdown on the lock screen.",
         )
         GroupDivider()
         GroupRow("Send today's digest now", icon = Icons.Outlined.NotificationsActive, iconColor = app.notice) {

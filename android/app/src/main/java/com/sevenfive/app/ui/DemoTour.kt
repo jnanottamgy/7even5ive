@@ -44,7 +44,6 @@ import com.sevenfive.app.ui.theme.Motion
 import com.sevenfive.app.ui.theme.frosted
 import com.sevenfive.app.ui.theme.glassSurface
 import com.sevenfive.app.ui.theme.pressable
-import dev.chrisbanes.haze.HazeState
 
 /** What a step's button makes happen on the demo server. */
 enum class DemoAction(val label: String) {
@@ -138,16 +137,16 @@ object DemoTour {
         ),
         DemoStep(
             Routes.HOME, "Every AI request, logged",
-            "Scroll to AI activity: each request through the gateway, what ran, what waited for " +
+            "Open the AI segment: each request through the gateway, what ran, what waited for " +
                 "a tap and what was refused. The proof the rules hold.",
         ),
         DemoStep(
             Routes.HOME, "Reminders only on request",
             "No spam notifications. Tap Remind me on the quiz card, 1 hour before: it arrives as a " +
-                "notification then. Open the Reminders tab.",
+                "notification then. Open the Reminders card on Home.",
         ),
         DemoStep(
-            Routes.REMINDERS, "The urgent call",
+            Routes.HOME, "The urgent call",
             "For what really matters: Call me, after a one-time consent. ElevenLabs rings shortly " +
                 "before it's due, at most twice a day and never at night; a missed call becomes one " +
                 "notification. Turn calls on in Settings, then ring now.",
@@ -155,7 +154,7 @@ object DemoTour {
         ),
         DemoStep(
             Routes.HOME, "Just ask",
-            "Tap the microphone at the top and ask \"what's due this week?\" or \"can I skip DBMS " +
+            "Tap the orange microphone in the middle of the bar and ask \"what's due this week?\" or \"can I skip DBMS " +
                 "tomorrow?\" ElevenLabs listens and answers; every fact comes from the same gateway " +
                 "as a tap, and adding to the calendar still waits for Approve.",
         ),
@@ -177,7 +176,6 @@ data class TourState(val index: Int = 0, val result: String? = null, val busy: B
 @Composable
 fun DemoBar(
     state: TourState,
-    haze: HazeState,
     onBack: () -> Unit,
     onNext: () -> Unit,
     onAct: () -> Unit,
@@ -196,7 +194,7 @@ fun DemoBar(
     Column(
         modifier
             .fillMaxWidth()
-            .frosted(haze, shape)
+            .frosted(shape)
             .padding(start = 16.dp, end = 10.dp, top = 12.dp, bottom = 12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {

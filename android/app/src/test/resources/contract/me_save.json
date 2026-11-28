@@ -1,0 +1,42 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/api/me",
+    "auth": "account",
+    "body": {
+      "username": "asha.k",
+      "name": "Asha K",
+      "branch": "CSE",
+      "year": 3,
+      "subjects": [
+        "Operating Systems",
+        "Computer Networks"
+      ]
+    }
+  },
+  "status": 200,
+  "response": {
+    "onboarded": true,
+    "email": "asha@example.com",
+    "profile": {
+      "username": "asha.k",
+      "name": "Asha K",
+      "email": "asha@example.com",
+      "college": null,
+      "branch": "CSE",
+      "year": 3,
+      "interests": null,
+      "subjects": [
+        "Operating Systems",
+        "Computer Networks"
+      ],
+      "whatsapp": null,
+      "personal_token": {
+        "exists": false,
+        "created_at": null
+      },
+      "demo": false
+    },
+    "demo": false
+  }
+}

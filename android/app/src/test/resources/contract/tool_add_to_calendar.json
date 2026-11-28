@@ -1,0 +1,17 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/api/tools/add_to_calendar",
+    "auth": "demo",
+    "body": {
+      "args": {
+        "item_id": 10
+      }
+    }
+  },
+  "status": 200,
+  "response": {
+    "status": "approval_needed",
+    "message": "Sent to the student's phone. It runs after they tap Approve."
+  }
+}

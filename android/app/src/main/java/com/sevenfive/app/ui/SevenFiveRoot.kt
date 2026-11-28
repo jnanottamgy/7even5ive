@@ -8,6 +8,8 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -41,6 +43,7 @@ import androidx.compose.material.icons.automirrored.filled.LibraryBooks
 import androidx.compose.material.icons.automirrored.outlined.LibraryBooks
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.outlined.Alarm
@@ -62,6 +65,9 @@ import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.platform.LocalUriHandler
@@ -71,6 +77,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -117,9 +126,7 @@ import com.sevenfive.app.ui.theme.LocalBottomInset
 import com.sevenfive.app.ui.theme.Motion
 import com.sevenfive.app.ui.theme.frosted
 import com.sevenfive.app.ui.theme.pressable
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeSource
-import dev.chrisbanes.haze.rememberHazeState
+import kotlinx.coroutines.launch
 
 object Routes {
     const val HOME = "home"
@@ -153,13 +160,12 @@ private val tabs = listOf(
     Tab(Routes.ATTENDANCE, "Attendance", Icons.Filled.PieChart, Icons.Outlined.PieChart),
     Tab(Routes.MATERIALS, "Files", Icons.AutoMirrored.Filled.LibraryBooks, Icons.AutoMirrored.Outlined.LibraryBooks),
     Tab(Routes.INBOX, "Inbox", Icons.Filled.Inbox, Icons.Outlined.Inbox),
-    Tab(Routes.REMINDERS, "Reminders", Icons.Filled.Alarm, Icons.Outlined.Alarm),
 )
 
 /** Screens pushed on top of the tabs: they slide in from the right, like an iOS navigation stack. */
 private val pushed = setOf(
     Routes.SETTINGS, Routes.PORTAL, Routes.PORTAL_CHECK, Routes.VOICE, Routes.PROFILE, Routes.SEARCH, Routes.ASK,
-    Routes.AI_LOG, Routes.PLANNER, Routes.TIMETABLE, Routes.GRADES,
+    Routes.AI_LOG, Routes.PLANNER, Routes.TIMETABLE, Routes.GRADES, Routes.REMINDERS,
 )
 
 @Composable
@@ -170,16 +176,20 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
     val backStack by nav.currentBackStackEntryAsState()
     val route = backStack?.destination?.route
     // Everything on screen is the source the floating glass blurs.
-    val haze = rememberHazeState()
 
     LaunchedEffect(Unit) {
+        // The newest message replaces the one showing: what was just tapped is what's said now,
+        // never ten seconds later behind an older one.
         vm.messages.collect { m ->
-            val result = snackbar.showSnackbar(
-                m.text,
-                actionLabel = m.action,
-                duration = if (m.action != null) SnackbarDuration.Long else SnackbarDuration.Short,
-            )
-            if (result == SnackbarResult.ActionPerformed) m.onAction?.invoke()
+            snackbar.currentSnackbarData?.dismiss()
+            launch {
+                val result = snackbar.showSnackbar(
+                    m.text,
+                    actionLabel = m.action,
+                    duration = if (m.action != null) SnackbarDuration.Long else SnackbarDuration.Short,
+                )
+                if (result == SnackbarResult.ActionPerformed) m.onAction?.invoke()
+            }
         }
     }
     // Google's sign-in page opens in the phone's browser; the server finishes it there.
@@ -204,7 +214,11 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
         }
     }
 
+    // Screens with their own back arrow have no tab bar; every tab screen has it.
     val showTabs = route == null || route !in pushed
+    // On a screen opened from a tab (Grades from Attendance), that tab stays lit.
+    var lastTab by rememberSaveable { mutableStateOf(Routes.HOME) }
+    LaunchedEffect(route) { if (route != null && tabs.any { it.route == route }) lastTab = route }
     val tour by vm.tour.collectAsStateWithLifecycle()
     // Each demo step opens the tab it talks about.
     LaunchedEffect(tour?.index, tour != null) {
@@ -212,7 +226,8 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
     }
     Scaffold(
         // Each screen draws its own bar under the status bar; content runs under the floating tabs.
-        containerColor = MaterialTheme.colorScheme.background,
+        // See-through: the app's one backdrop is drawn once, behind everything (MainActivity).
+        containerColor = androidx.compose.ui.graphics.Color.Transparent,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = {
             SnackbarHost(snackbar) { data ->
@@ -227,11 +242,15 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
         bottomBar = {
             AnimatedVisibility(
                 visible = showTabs,
-                enter = slideInVertically(spring(stiffness = Spring.StiffnessMediumLow)) { it } + fadeIn(),
-                exit = slideOutVertically(spring(stiffness = Spring.StiffnessMedium)) { it } + fadeOut(),
+                // Part of the tab screens' motion: gone with the one leaving, back with the one arriving.
+                enter = barIn,
+                exit = barOut,
             ) {
                 Column(
-                    Modifier.navigationBarsPadding().padding(start = 14.dp, end = 14.dp, bottom = 8.dp),
+                    Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.background)
+                        .navigationBarsPadding(),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     AnimatedVisibility(
@@ -242,25 +261,33 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
                         tour?.let { t ->
                             DemoBar(
                                 t,
-                                haze = haze,
                                 onBack = { vm.tourBack() },
                                 onNext = { vm.tourNext() },
                                 onAct = { vm.tourAct() },
                                 onClose = { vm.endTour() },
+                                modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 8.dp),
                             )
                         }
                     }
                     GlassTabBar(
-                        haze = haze,
-                        selected = tabs.indexOfFirst { it.route == route }.coerceAtLeast(0),
+                        selected = tabs.indexOfFirst { it.route == (if (tabs.any { t -> t.route == route }) route else lastTab) }.coerceAtLeast(0),
                         badge = { tab ->
                             when (tab.route) {
                                 Routes.HOME -> state.cards?.approvals?.size ?: 0
-                                Routes.REMINDERS -> state.cards?.reminders?.size ?: 0
                                 else -> 0
                             }
                         },
-                        onSelect = { nav.goToTab(it.route) },
+                        onAi = { nav.navigate(Routes.VOICE) { launchSingleTop = true } },
+                        onSelect = { tab ->
+                            if (tab.route == Routes.HOME) {
+                                // Already on Home: no navigation at all (that replayed the
+                                // screen's entry animation), just back to Today, at the top.
+                                if (route != Routes.HOME) nav.goHome()
+                                vm.homeTapped()
+                            } else if (tab.route != route) {
+                                nav.goToTab(tab.route)
+                            }
+                        },
                     )
                 }
             }
@@ -269,9 +296,9 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
         CompositionLocalProvider(
             LocalBottomInset provides inner.calculateBottomPadding(),
             LocalOpenVoice provides { nav.navigate(Routes.VOICE) { launchSingleTop = true } },
-            LocalNav provides { r: String -> nav.navigate(r) { launchSingleTop = true } },
+            LocalNav provides { r: String -> if (tabs.any { it.route == r }) nav.goToTab(r) else nav.navigate(r) { launchSingleTop = true } },
         ) {
-            Box(Modifier.fillMaxSize().hazeSource(haze)) {
+            Box(Modifier.fillMaxSize()) {
                 NavHost(
                     nav,
                     startDestination = Routes.HOME,
@@ -280,19 +307,19 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
                     popEnterTransition = { popEnter() },
                     popExitTransition = { popExit() },
                 ) {
-                    val settings = { nav.navigate(Routes.SETTINGS) }
+                    val settings = { nav.navigate(Routes.SETTINGS) { launchSingleTop = true } }
                     composable(Routes.HOME) { HomeScreen(vm, settings) }
-                    composable(Routes.ATTENDANCE) { AttendanceScreen(vm, settings, onPortal = { nav.navigate(Routes.PORTAL) }) }
+                    composable(Routes.ATTENDANCE) { AttendanceScreen(vm, settings, onPortal = { nav.navigate(Routes.PORTAL) { launchSingleTop = true } }) }
                     composable(Routes.MATERIALS) { FilesScreen(vm, settings) }
                     composable(Routes.INBOX) { InboxScreen(vm, settings) }
-                    composable(Routes.REMINDERS) { RemindersScreen(vm, settings) }
+                    composable(Routes.REMINDERS) { RemindersScreen(vm, onBack = { nav.popBackStack() }) }
                     composable(Routes.PORTAL) { PortalScreen(vm, onDone = { nav.popBackStack() }) }
                     composable(Routes.SETTINGS) {
                         SettingsScreen(
                             vm,
                             onBack = { nav.popBackStack() },
-                            onPortalCheck = { nav.navigate(Routes.PORTAL_CHECK) },
-                            onEditProfile = { nav.navigate(Routes.PROFILE) },
+                            onPortalCheck = { nav.navigate(Routes.PORTAL_CHECK) { launchSingleTop = true } },
+                            onEditProfile = { nav.navigate(Routes.PROFILE) { launchSingleTop = true } },
                             // From the demo to signing up: the login flow opens on Sign up.
                             onCreateAccount = {
                                 auth.go(AuthStep.SignUp)
@@ -306,7 +333,8 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
                         ProfileEditScreen(auth, profile, onBack = { nav.popBackStack() })
                     }
                     composable(Routes.PORTAL_CHECK) {
-                        PortalCheckScreen(vm, vm.portalCheckUrl.value, onBack = { nav.popBackStack() })
+                        val url by vm.portalCheckUrl.collectAsStateWithLifecycle()
+                        PortalCheckScreen(vm, url, onBack = { nav.popBackStack() })
                     }
                     composable(Routes.VOICE) { VoiceScreen(vm, onBack = { nav.popBackStack() }) }
                     val back = { nav.popBackStack(); Unit }
@@ -322,63 +350,78 @@ fun SevenFiveRoot(vm: AppViewModel, auth: AuthViewModel) {
     }
 }
 
-// Navigation motion. A pushed screen slides in over the one below, which drifts a quarter of the
-// way left and dims, and the reverse on back (also driven by the predictive back gesture).
-// Switching tabs is a quick cross-fade with a hint of depth, as tabs aren't a stack.
+// Navigation motion, "fade through": the screen you leave is gone (90 ms) before the one you open
+// comes in (210 ms), so no screen ever shows through another, and the one backdrop under both
+// stays still. A screen opened from a tab also travels a little from the side it comes from (in
+// from the right, back out to the right), and so does the predictive back gesture, which runs
+// the same motion under the finger. Tabs aren't a stack: they only fade.
 
 private typealias Nav = AnimatedContentTransitionScope<NavBackStackEntry>
 
 private val NavBackStackEntry.isPushed get() = destination.route in pushed
 
-private val tabFadeIn = tween<Float>(durationMillis = 180, easing = FastOutSlowInEasing)
-private val tabFadeOut = tween<Float>(durationMillis = 120, easing = FastOutSlowInEasing)
-
 private fun Nav.enter(): EnterTransition =
-    if (targetState.isPushed) slideInHorizontally(Motion.screen) { it }
-    else fadeIn(tabFadeIn)
+    if (targetState.isPushed) slideInHorizontally(Motion.travel) { Motion.nudge(it) } + fadeIn(Motion.arrive)
+    else fadeIn(Motion.arrive)
 
 private fun Nav.exit(): ExitTransition =
-    if (targetState.isPushed) slideOutHorizontally(Motion.screen) { -it / 4 } + fadeOut(Motion.fade, targetAlpha = 0.7f)
-    else fadeOut(tabFadeOut)
+    if (targetState.isPushed) slideOutHorizontally(Motion.travel) { -Motion.nudge(it) } + fadeOut(Motion.leave)
+    else fadeOut(Motion.leave)
 
 private fun Nav.popEnter(): EnterTransition =
-    if (initialState.isPushed) slideInHorizontally(Motion.screen) { -it / 4 } + fadeIn(Motion.fade, initialAlpha = 0.7f)
-    else fadeIn(tabFadeIn)
+    if (initialState.isPushed) slideInHorizontally(Motion.travel) { -Motion.nudge(it) } + fadeIn(Motion.arrive)
+    else fadeIn(Motion.arrive)
 
 private fun Nav.popExit(): ExitTransition =
-    if (initialState.isPushed) slideOutHorizontally(Motion.screen) { it }
-    else fadeOut(tabFadeOut)
+    if (initialState.isPushed) slideOutHorizontally(Motion.travel) { Motion.nudge(it) } + fadeOut(Motion.leave)
+    else fadeOut(Motion.leave)
+
+/** The tab bar comes and goes with the tab screens: out as they leave, in as they arrive. */
+private val barIn = fadeIn(Motion.arrive)
+private val barOut = fadeOut(Motion.leave)
 
 /**
  * The tab bar, iOS style: a frosted capsule floating over the content, with a soft selection
  * pill that glides between tabs on a spring.
  */
 @Composable
-private fun GlassTabBar(haze: HazeState, selected: Int, badge: (Tab) -> Int, onSelect: (Tab) -> Unit) {
+private fun GlassTabBar(selected: Int, badge: (Tab) -> Int, onAi: () -> Unit, onSelect: (Tab) -> Unit) {
     val haptics = LocalHapticFeedback.current
     val app = LocalAppColors.current
     val primary = MaterialTheme.colorScheme.primary
     BoxWithConstraints(
         Modifier
             .fillMaxWidth()
-            .height(64.dp)
-            .frosted(haze, CircleShape),
+            .height(68.dp)
+            .drawBehind {
+                drawLine(app.hairline, androidx.compose.ui.geometry.Offset(0f, 0f), androidx.compose.ui.geometry.Offset(size.width, 0f), strokeWidth = 1.dp.toPx())
+            },
     ) {
-        val itemWidth = maxWidth / tabs.size
-        val pillX by animateDpAsState(itemWidth * selected, Motion.glide, label = "tab pill")
-        Box(
-            Modifier
-                .offset { IntOffset(pillX.roundToPx(), 0) }
-                .width(itemWidth)
-                .fillMaxHeight()
-                .padding(5.dp)
-                .background(primary.copy(alpha = if (app.dark) 0.20f else 0.13f), CircleShape),
-        )
+        // Neo-minimal: an icon and a word per tab; the current one in ink with an orange dot.
+        // In the middle, the AI: one orange button that opens the voice assistant.
+        val itemWidth = maxWidth / (tabs.size + 1)
         Row(Modifier.fillMaxSize()) {
             tabs.forEachIndexed { index, tab ->
+                if (index == AI_SLOT) {
+                    // The AI: one big orange button lifted half out of the bar, ringed in the
+                    // background colour so it sits on top of the bar, with a warm shadow.
+                    Box(Modifier.width(itemWidth).fillMaxHeight()) {
+                        AskAiButton(onAi, Modifier.align(Alignment.TopCenter).offset(y = -AI_RISE))
+                        Text(
+                            "Ask AI",
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 10.5.sp,
+                            lineHeight = 13.sp,
+                            fontFamily = com.sevenfive.app.ui.theme.Neo,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 9.dp),
+                        )
+                    }
+                }
                 val on = index == selected
-                val tint = if (on) primary else app.secondaryLabel
-                val lift by animateFloatAsState(if (on) 1f else 0f, Motion.fade, label = "tab lift")
+                val tint = if (on) MaterialTheme.colorScheme.onSurface else app.secondaryLabel
+                val lift by animateFloatAsState(if (on) 1f else 0f, Motion.fade, label = "tab dot")
                 Column(
                     Modifier
                         .width(itemWidth)
@@ -387,58 +430,103 @@ private fun GlassTabBar(haze: HazeState, selected: Int, badge: (Tab) -> Int, onS
                             this.selected = on
                             contentDescription = tab.label
                         }
-                        .pressable(scaleTo = 0.9f, role = Role.Tab) {
+                        .pressable(scaleTo = 0.94f, role = Role.Tab) {
                             if (!on) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             onSelect(tab)
                         },
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    Box {
+                    // An icon over a word: filled and ink when current, outlined and grey when not.
+                    Box(Modifier.size(ICON_AREA), contentAlignment = Alignment.Center) {
                         Icon(
                             if (on) tab.on else tab.off,
                             contentDescription = null,
                             tint = tint,
-                            modifier = Modifier
-                                .size(24.dp)
-                                .graphicsLayer {
-                                    val s = 1f + 0.06f * lift
-                                    scaleX = s
-                                    scaleY = s
-                                },
+                            modifier = Modifier.size(22.dp),
                         )
                         val count = badge(tab)
                         if (count > 0) {
-                            Box(
-                                Modifier
+                            Text(
+                                if (count > 9) "9+" else "$count",
+                                color = com.sevenfive.app.ui.theme.NeoInk,
+                                fontSize = 9.sp,
+                                lineHeight = 10.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier
                                     .align(Alignment.TopEnd)
-                                    .offset(x = 9.dp, y = (-5).dp)
-                                    .defaultMinSize(minWidth = 17.dp, minHeight = 17.dp)
-                                    .background(MaterialTheme.colorScheme.error, CircleShape)
-                                    .padding(horizontal = 4.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    if (count > 9) "9+" else "$count",
-                                    color = Color.White,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    lineHeight = 12.sp,
-                                )
-                            }
+                                    .offset(x = 2.dp, y = 0.dp)
+                                    .defaultMinSize(minWidth = 15.dp)
+                                    .background(com.sevenfive.app.ui.theme.Orange, CircleShape)
+                                    .padding(horizontal = 3.dp, vertical = 1.dp),
+                            )
                         }
                     }
                     Text(
                         tab.label,
                         color = tint,
-                        fontSize = 10.sp,
-                        lineHeight = 12.sp,
+                        fontSize = 10.5.sp,
+                        lineHeight = 13.sp,
+                        fontFamily = com.sevenfive.app.ui.theme.Neo,
                         fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium,
                         maxLines = 1,
-                        modifier = Modifier.padding(top = 3.dp),
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                    // The one orange touch: a small dot under the current tab.
+                    Box(
+                        Modifier
+                            .padding(top = 4.dp)
+                            .size(4.dp)
+                            .graphicsLayer { alpha = lift; scaleX = lift; scaleY = lift }
+                            .background(com.sevenfive.app.ui.theme.Orange, CircleShape),
                     )
                 }
             }
+        }
+    }
+}
+
+/** Where the AI button sits in the tab bar: after the first two tabs, in the middle. */
+private const val AI_SLOT = 2
+
+/** The square every tab's icon (and the AI's circle) sits in, so all of them line up. */
+private val ICON_AREA = 34.dp
+
+/** The Ask AI button: its size, and how far it rises above the tab bar's top edge. */
+private val AI_SIZE = 58.dp
+private val AI_RISE = 24.dp
+
+/** A raised orange button: a lighter top, a soft orange shadow, ringed in the page's colour. */
+@Composable
+private fun AskAiButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val ground = MaterialTheme.colorScheme.background
+    Box(
+        modifier
+            .size(AI_SIZE)
+            .shadow(10.dp, CircleShape, ambientColor = com.sevenfive.app.ui.theme.Orange, spotColor = com.sevenfive.app.ui.theme.Orange)
+            .semantics { contentDescription = "Talk to your AI" }
+            .pressable(scaleTo = 0.9f, haptic = true, role = Role.Button, onClick = onClick)
+            .background(ground, CircleShape)
+            .padding(4.dp)
+            .background(
+                androidx.compose.ui.graphics.Brush.verticalGradient(
+                    listOf(androidx.compose.ui.graphics.Color(0xFFFFA64D), com.sevenfive.app.ui.theme.Orange, androidx.compose.ui.graphics.Color(0xFFEE7410)),
+                ),
+                CircleShape,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(Icons.Filled.Mic, contentDescription = null, tint = com.sevenfive.app.ui.theme.NeoInk, modifier = Modifier.size(24.dp))
+    }
+}
+
+/** Home, its root, from anywhere: everything above it closes, nothing saved is brought back. */
+private fun NavHostController.goHome() {
+    if (currentDestination?.route == Routes.HOME) return
+    if (!popBackStack(Routes.HOME, inclusive = false)) {
+        navigate(Routes.HOME) {
+            popUpTo(graph.findStartDestination().id) { inclusive = false }
+            launchSingleTop = true
         }
     }
 }

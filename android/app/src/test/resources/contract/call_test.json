@@ -1,0 +1,13 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/api/calls/test",
+    "auth": "demo",
+    "body": {}
+  },
+  "status": 200,
+  "response": {
+    "call_id": 1,
+    "status": "placed"
+  }
+}

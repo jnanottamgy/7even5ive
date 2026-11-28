@@ -1,5 +1,7 @@
 package com.sevenfive.app.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -46,12 +48,22 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.fillMaxSize
+import com.sevenfive.app.ui.components.segmentSlide
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.material.icons.outlined.PieChart
+import androidx.compose.material.icons.outlined.DateRange
+import androidx.compose.material.icons.outlined.Alarm
+import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -107,65 +119,113 @@ fun HomeScreen(vm: AppViewModel, onSettings: () -> Unit) {
         else -> "${due.size} things due in the next 7 days."
     }
 
+    var segment by rememberSaveable { mutableIntStateOf(0) }
+    // Tapping Home brings Today back, wherever the student was.
+    val homeTaps by vm.homeTaps.collectAsStateWithLifecycle()
+    val homeList = androidx.compose.foundation.lazy.rememberLazyListState()
+    LaunchedEffect(homeTaps) {
+        if (homeTaps > 0) {
+            segment = 0
+            if (homeList.firstVisibleItemIndex > 0 || homeList.firstVisibleItemScrollOffset > 0) homeList.animateScrollToItem(0)
+        }
+    }
+    // A tile's details, pulled up over Today: "clash", "briefing" or "ontime".
+    var sheet by rememberSaveable { mutableStateOf<String?>(null) }
+    // The on-time record: every deadline this phone sees is noted, done or not.
+    val context = LocalContext.current
+    val sid = cards?.student?.id ?: 0
+    LaunchedEffect(sid, due) { if (cards != null) com.sevenfive.app.data.LocalLog.noteSeen(context, sid, due) }
+    val month = remember(sid, due, cards?.reminders) { com.sevenfive.app.data.LocalLog.thisMonth(context, sid) }
+    sheet?.let { which ->
+        cards?.let { c -> TodaySheet(which, vm, c) { sheet = null } }
+    }
     TabScaffold(if (name != null) "Hi, $name" else "This week", vm, onSettings) { padding ->
         if (cards == null) {
             LoadingOrError(state.loading, padding)
             return@TabScaffold
         }
-        LazyColumn(contentPadding = padding, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            item(key = "intro") { ScreenIntro(subtitle) }
-            item(key = "ask") { AskBar(Modifier.animateItem(placementSpec = Motion.item)) }
-            item(key = "glance") { Glance(cards, Modifier.animateItem(placementSpec = Motion.item)) }
-            item(key = "briefing") { BriefingCard(vm, Modifier.animateItem(placementSpec = Motion.item)) }
-            item(key = "today") { Today(cards, Modifier.animateItem(placementSpec = Motion.item)) }
-
-            if (cards.approvals.isNotEmpty() || approved.isNotEmpty()) {
-                item(key = "h-approvals") { SectionHeader("Needs your tap", Modifier.animateItem(placementSpec = Motion.item)) }
-                items(cards.approvals, key = { "a-" + it.token }) { approval ->
-                    ApprovalCard(
-                        approval, vm.titleFor(approval), approval.token in busy,
-                        Modifier.animateItem(placementSpec = Motion.item),
-                    ) { vm.approve(approval) }
-                }
-                items(approved, key = { "d-" + it.approval.token }) { done ->
-                    DoneApprovalCard(done, done.approval.token in busy, Modifier.animateItem(placementSpec = Motion.item)) {
-                        vm.approve(done.approval)
+        // Organised into short segments instead of one long scroll.
+        val needs = cards.approvals.size + cards.needsReview.size
+        val segments = listOf(
+            Segment("Today"),
+            Segment("Week", due.size),
+            Segment("Needs you", needs),
+            Segment("AI"),
+        )
+        // The switcher stays pinned; the segment under it slides in when it changes.
+        Column(Modifier.fillMaxSize().padding(start = 16.dp, end = 16.dp, top = padding.calculateTopPadding())) {
+            NeoSegments(segments, segment) { segment = it }
+            LazyColumn(
+                state = homeList,
+                contentPadding = PaddingValues(top = 6.dp, bottom = padding.calculateBottomPadding()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxSize().segmentSlide(segment),
+            ) {                when (segment) {
+                    0 -> {
+                        // One screen, no scrolling: the countdown, six tiles, Ask. Each tile opens the rest.
+                        item(key = "dashboard") { TodayDashboard(vm, cards, month, segment = { segment = it }) { sheet = it } }
+                    }
+                    1 -> {
+                        item(key = "intro") { ScreenIntro(subtitle) }
+                        if (due.isEmpty()) {
+                            item(key = "empty") {
+                                EmptyState(
+                                    Icons.Outlined.EventAvailable,
+                                    "A clear week",
+                                    "Deadlines and exams from your groups, mail and Classroom show up here.",
+                                )
+                            }
+                        }
+                        items(due, key = { "i-${it.id}" }) { item ->
+                            val reminder = cards.reminders.firstOrNull { it.itemId == item.id }
+                                ?: cards.reminders.firstOrNull { it.itemId == null && it.title == item.title && it.dueAt == item.dueAt }
+                            DueCard(
+                                item, reminder, "item:${item.id}" in busy, "done:${item.id}" in busy, settings?.calls,
+                                Modifier.animateItem(placementSpec = Motion.item),
+                                onRemind = { minutes, channel -> vm.remind(item, minutes, channel) },
+                                onCallConsent = { minutes -> vm.enableCallsAndRemind(item, minutes) },
+                                onDone = { vm.markDone(item) },
+                            )
+                        }
+                    }
+                    2 -> {
+                        if (cards.approvals.isEmpty() && approved.isEmpty() && cards.needsReview.isEmpty()) {
+                            item(key = "nothing") {
+                                EmptyState(Icons.Outlined.Done, "Nothing needs you", "Calendar changes your AI asks for, and messages it couldn't read, wait here for your tap.")
+                            }
+                        }
+                        if (cards.approvals.isNotEmpty() || approved.isNotEmpty()) {
+                            item(key = "h-approvals") { SectionHeader("Needs your tap", Modifier.animateItem(placementSpec = Motion.item)) }
+                            items(cards.approvals, key = { "a-" + it.token }) { approval ->
+                                ApprovalCard(
+                                    approval, vm.titleFor(approval), approval.token in busy,
+                                    Modifier.animateItem(placementSpec = Motion.item),
+                                ) { vm.approve(approval) }
+                            }
+                            items(approved, key = { "d-" + it.approval.token }) { done ->
+                                DoneApprovalCard(done, done.approval.token in busy, Modifier.animateItem(placementSpec = Motion.item)) {
+                                    vm.approve(done.approval)
+                                }
+                            }
+                        }
+                        if (cards.needsReview.isNotEmpty()) {
+                            item(key = "h-review") { SectionHeader("Couldn't read these", Modifier.animateItem(placementSpec = Motion.item)) }
+                            items(cards.needsReview, key = { "r-${it.id}" }) { item ->
+                                NeedsReviewCard(item, Modifier.animateItem(placementSpec = Motion.item))
+                            }
+                        }
+                    }
+                    else -> {
+                        if (cards.audit.isNotEmpty()) {
+                            item(key = "ai") { YourAi(cards, Modifier.animateItem(placementSpec = Motion.item)) }
+                        } else {
+                            item(key = "ai-empty") {
+                                EmptyState(Icons.Outlined.Shield, "No AI activity yet", "Every time your AI reads or changes something, it shows here.")
+                            }
+                        }
                     }
                 }
-            }
-
-            item(key = "h-due") { SectionHeader("Due this week", Modifier.animateItem(placementSpec = Motion.item)) }
-            if (due.isEmpty()) {
-                item(key = "empty") {
-                    EmptyState(
-                        Icons.Outlined.EventAvailable,
-                        "A clear week",
-                        "Deadlines and exams from your groups, mail and Classroom show up here.",
-                    )
-                }
-            }
-            items(due, key = { "i-${it.id}" }) { item ->
-                val reminder = cards.reminders.firstOrNull { it.itemId == item.id }
-                    ?: cards.reminders.firstOrNull { it.itemId == null && it.title == item.title && it.dueAt == item.dueAt }
-                DueCard(
-                    item, reminder, "item:${item.id}" in busy, "done:${item.id}" in busy, settings?.calls,
-                    Modifier.animateItem(placementSpec = Motion.item),
-                    onRemind = { minutes, channel -> vm.remind(item, minutes, channel) },
-                    onCallConsent = { minutes -> vm.enableCallsAndRemind(item, minutes) },
-                    onDone = { vm.markDone(item) },
-                )
-            }
-
-            if (cards.audit.isNotEmpty()) {
-                item(key = "ai") { YourAi(cards, Modifier.animateItem(placementSpec = Motion.item)) }
-            }
-
-            if (cards.needsReview.isNotEmpty()) {
-                item(key = "h-review") { SectionHeader("Couldn't read these", Modifier.animateItem(placementSpec = Motion.item)) }
-                items(cards.needsReview, key = { "r-${it.id}" }) { item ->
-                    NeedsReviewCard(item, Modifier.animateItem(placementSpec = Motion.item))
-                }
-            }
+                    }
         }
     }
 }
@@ -305,10 +365,13 @@ private fun GlanceTile(value: String, label: String, color: Color, modifier: Mod
 
 @Composable
 internal fun LoadingOrError(loading: Boolean, padding: PaddingValues) {
+    // Neo-minimal: a skeleton of the screen while the first cards arrive, never a spinner.
+    if (loading) {
+        com.sevenfive.app.ui.components.SkeletonScreen(padding)
+        return
+    }
     Box(Modifier.fillMaxWidth().padding(padding).padding(top = 56.dp), contentAlignment = Alignment.TopCenter) {
-        if (loading) {
-            CircularProgressIndicator(strokeWidth = 3.dp, color = MaterialTheme.colorScheme.primary)
-        } else {
+        run {
             EmptyState(
                 Icons.AutoMirrored.Outlined.HelpOutline,
                 "No cards yet",
@@ -420,10 +483,11 @@ private fun DueCard(
     onCallConsent: (Int) -> Unit,
     onDone: () -> Unit,
 ) {
+    val liveNow by com.sevenfive.app.ui.components.rememberNow(30_000L)
     val due = Time.parse(item.dueAt)
     val app = LocalAppColors.current
     // Within a day reads red; later reads in the brand colour.
-    val urgent = due != null && due.toInstant().isBefore(Instant.now().plus(Duration.ofHours(24)))
+    val urgent = due != null && due.toInstant().isBefore(liveNow.plus(Duration.ofHours(24)))
     AppCard(modifier) {
         Column {
             Row(verticalAlignment = Alignment.Top) {
@@ -439,7 +503,7 @@ private fun DueCard(
                     Spacer(Modifier.width(8.dp))
                     val tint = if (urgent) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                     Text(
-                        Time.until(due),
+                        Time.until(due, liveNow),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = tint,
@@ -568,6 +632,195 @@ private fun NeedsReviewCard(item: Item, modifier: Modifier = Modifier) {
                 style = MaterialTheme.typography.bodySmall,
                 color = app.secondaryLabel,
             )
+        }
+    }
+}
+
+
+// --- Today, on one screen ---------------------------------------------------------------------
+
+/** Today: the countdown, then one calm list where every row has the same shape. */
+@Composable
+private fun TodayDashboard(vm: AppViewModel, cards: Cards, month: com.sevenfive.app.data.LocalLog.Month, segment: (Int) -> Unit = {}, onSheet: (String) -> Unit) {
+    val nav = LocalNav.current
+    val app = LocalAppColors.current
+    val now by com.sevenfive.app.ui.components.rememberNow(30_000L)
+    Column {
+        HomeHero(cards, withAttendance = false)
+        Spacer(Modifier.height(14.dp))
+        RowGroup {
+
+        // Your day.
+        val hour = java.time.LocalTime.now().hour
+        val first = cards.student?.name?.substringBefore(' ')?.takeIf { it.isNotBlank() }
+        val greeting = (if (hour < 12) "Good morning" else if (hour < 17) "Good afternoon" else "Good evening") +
+            (first?.let { ", $it" } ?: "")
+        TodayRow(
+            greeting,
+            "your day, read aloud · about a minute",
+            leading = {
+                Box(Modifier.size(28.dp).clip(CircleShape).background(com.sevenfive.app.ui.theme.Orange), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Filled.PlayArrow, contentDescription = "Play your day", tint = com.sevenfive.app.ui.theme.NeoInk,
+                        modifier = Modifier.size(18.dp))
+                }
+            },
+        ) { onSheet("briefing") }
+        RowDivider()
+
+        // Attendance.
+        val subjects = cards.attendance.subjects
+        val above = subjects.count { it.percent >= it.minimumPercent }
+        val worst = subjects.minByOrNull { it.percent }
+        val low = worst != null && worst.percent < worst.minimumPercent
+        TodayRow(
+            "Attendance",
+            when {
+                worst == null -> "connect the portal"
+                low -> "${shortName(worst.name, worst.code)} is under ${pct(worst.minimumPercent)}%"
+                else -> "all above ${pct(worst.minimumPercent)}%"
+            },
+            icon = Icons.Outlined.PieChart,
+            trailing = {
+                RowBars(subjects)
+                if (subjects.isNotEmpty()) {
+                    Spacer(Modifier.width(10.dp))
+                    Text("$above/${subjects.size}", style = MaterialTheme.typography.titleMedium)
+                }
+            },
+        ) { nav(Routes.ATTENDANCE) }
+        RowDivider()
+
+        // The busy stretch, or a calm week (worked out once per change in the cards).
+        val clash = remember(cards.dueThisWeek) { findClash(cards.dueThisWeek) }
+        if (clash != null) {
+            val exams = clash.items.count { it.first.kind == "exam" }
+            val rest = clash.items.size - exams
+            TodayRow(
+                "${clash.items.size} things close together",
+                listOfNotNull(
+                    exams.takeIf { it > 0 }?.let { if (it == 1) "1 exam" else "$it exams" },
+                    rest.takeIf { it > 0 }?.let { if (it == 1) "1 deadline" else "$it deadlines" },
+                ).joinToString(" and ") + " · " + clash.title.substringBefore(':').substringBefore(" has"),
+                icon = Icons.Outlined.DateRange,
+                trailing = { RowDots(clash) },
+            ) { onSheet("clash") }
+        } else {
+            TodayRow("This week", "nothing bunched up", icon = Icons.Outlined.DateRange,
+                trailing = { Text("Clear", style = MaterialTheme.typography.titleMedium) }) { segment(1) }
+        }
+        RowDivider()
+
+        // Reminders.
+        val nextReminder = cards.reminders
+            .mapNotNull { r -> Time.parse(r.firesAt)?.let { r to it } }
+            .filter { it.second.toInstant().isAfter(now) }
+            .minByOrNull { it.second }
+        TodayRow(
+            "Reminders",
+            nextReminder?.let { "next: ${it.first.title ?: "a reminder"} · ${Time.until(it.second, now)}" } ?: "none set",
+            icon = Icons.Outlined.Alarm,
+            trailing = { Text(if (cards.reminders.isEmpty()) "None" else "${cards.reminders.size}", style = MaterialTheme.typography.titleMedium) },
+        ) { nav(Routes.REMINDERS) }
+        RowDivider()
+
+        // Classes.
+        val today = java.time.LocalTime.now()
+        val left = if (cards.timetable.connected) Week.on(cards.timetable.data, java.time.LocalDate.now().dayOfWeek)
+            .filter { slot -> Week.time(slot.end)?.isAfter(today) ?: true } else emptyList()
+        TodayRow(
+            "Classes",
+            left.firstOrNull()?.let { "next ${Time.hourMinute(it.start.take(5))} · ${cards.subjectName(it.code)}" }
+                ?: if (cards.timetable.connected) "done for today" else "connect the portal",
+            icon = Icons.Outlined.Schedule,
+            trailing = {
+                Text(
+                    when {
+                        !cards.timetable.connected -> "—"
+                        left.isEmpty() -> "Free"
+                        else -> "${left.size} left"
+                    },
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            },
+        ) { nav(Routes.TIMETABLE) }
+        RowDivider()
+
+        // On time.
+        TodayRow(
+            "On time",
+            if (month.total > 0) "deadlines done before they were due, this month" else "counts as you mark things done",
+            icon = Icons.Outlined.TaskAlt,
+            trailing = {
+                if (month.total > 0) {
+                    RowRing(month.onTime.toFloat() / month.total)
+                    Spacer(Modifier.width(10.dp))
+                }
+                Text(if (month.total > 0) "${month.onTime}/${month.total}" else "—", style = MaterialTheme.typography.titleMedium)
+            },
+        ) { onSheet("ontime") }
+        }
+    }
+}
+
+/** One tile: a small label, one big value, one quiet line. Same size as its neighbour. */
+@Composable
+private fun Tile(
+    label: String,
+    value: String,
+    caption: String,
+    modifier: Modifier = Modifier,
+    dot: Boolean = false,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    onClick: () -> Unit,
+) {
+    val app = LocalAppColors.current
+    Column(
+        modifier
+            .height(104.dp)
+            .pressable(scaleTo = 0.97f, onClick = onClick)
+            .glassSurface(shape = MaterialTheme.shapes.large)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.SpaceBetween,
+    ) {
+        NeoLabel(label, dot = if (dot) com.sevenfive.app.ui.theme.Orange else null)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (icon != null) {
+                Icon(icon, contentDescription = null, modifier = Modifier.size(24.dp))
+                Spacer(Modifier.width(4.dp))
+            }
+            Text(value, style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Text(caption, style = MaterialTheme.typography.bodySmall, color = app.secondaryLabel, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** A tile's full details, pulled up from the bottom. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun TodaySheet(which: String, vm: AppViewModel, cards: Cards, onClose: () -> Unit) {
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onClose,
+        containerColor = MaterialTheme.colorScheme.background,
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .verticalScroll(androidx.compose.foundation.rememberScrollState())
+                .padding(start = 16.dp, end = 16.dp, bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            when (which) {
+                "clash" -> findClash(cards.dueThisWeek)?.let { ClashCard(it) }
+                "briefing" -> BriefingCard(vm)
+                "ontime" -> {
+                    NeoLabel("On time")
+                    Text(
+                        "Every deadline and exam this phone sees is counted once its time comes. It's on time if you " +
+                            "marked it done in the app before it was due. Kept on this phone only.",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
+            }
         }
     }
 }

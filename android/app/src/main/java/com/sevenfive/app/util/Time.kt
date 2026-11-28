@@ -49,6 +49,22 @@ object Time {
         }
     }
 
+    /**
+     * A live countdown, to the second: "04:12:09" within a day, "2d 04:12:09" further out,
+     * "now" once it has passed. Shown ticking, so the student sees real time left.
+     */
+    fun countdown(at: OffsetDateTime, now: Instant = Instant.now()): String {
+        val left = Duration.between(now, at.toInstant())
+        if (left.isNegative || left.isZero) return "now"
+        val total = left.seconds
+        val days = total / 86_400
+        val h = (total % 86_400) / 3_600
+        val m = (total % 3_600) / 60
+        val sec = total % 60
+        val clock = String.format(Locale.ENGLISH, "%02d:%02d:%02d", h, m, sec)
+        return if (days > 0) "${days}d $clock" else clock
+    }
+
     /** "just now", "5 min ago", "3 h ago", "2 days ago". */
     fun ago(then: Instant, now: Instant = Instant.now()): String {
         val minutes = Duration.between(then, now).toMinutes()

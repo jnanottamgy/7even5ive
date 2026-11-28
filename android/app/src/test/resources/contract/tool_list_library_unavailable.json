@@ -1,0 +1,18 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/api/tools/list_library",
+    "auth": "account",
+    "body": {
+      "args": {}
+    }
+  },
+  "status": 200,
+  "response": {
+    "status": "ok",
+    "result": {
+      "available": false,
+      "reason": "Your files come from the WhatsApp bot, which isn't connected to this server yet."
+    }
+  }
+}

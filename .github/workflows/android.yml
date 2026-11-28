@@ -23,10 +23,20 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          # 21: the UI tests run on Robolectric's Android 16 runtime, which needs it.
+          java-version: "21"
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # Robolectric's Android runtime (about 200 MB) is downloaded once and kept: Maven Central
+      # limits how often one address may fetch it.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: robolectric-${{ hashFiles('android/app/build.gradle.kts') }}
+          restore-keys: robolectric-
+
+      # Unit, contract and UI tests; the UI tests save screenshots for review (in "reports").
       - name: Unit tests
         run: ./gradlew --no-daemon testDebugUnitTest
 
@@ -60,4 +70,5 @@ jobs:
           path: |
             android/app/build/reports/
             android/app/build/test-results/
+            android/app/build/outputs/roborazzi/
           if-no-files-found: ignore

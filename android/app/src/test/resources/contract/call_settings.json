@@ -1,0 +1,22 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/api/settings/calls",
+    "auth": "demo",
+    "body": {
+      "enabled": true
+    }
+  },
+  "status": 200,
+  "response": {
+    "enabled": true,
+    "consent_at": "2030-01-07T08:30+05:30",
+    "quiet_start": "22:00",
+    "quiet_end": "08:00",
+    "phone": "+91 ••••• •5678",
+    "live": false,
+    "max_per_day": 2,
+    "lead_minutes": 120,
+    "max_seconds": 90
+  }
+}

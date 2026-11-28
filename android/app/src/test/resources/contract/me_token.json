@@ -1,0 +1,14 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/api/me/token",
+    "auth": "account",
+    "body": {}
+  },
+  "status": 200,
+  "response": {
+    "token": "75p_contract-test-token",
+    "created_at": "2030-01-12T09:01+05:30",
+    "mcp_url": "http://testserver/mcp"
+  }
+}

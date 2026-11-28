@@ -1,0 +1,84 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/briefing",
+    "auth": "demo"
+  },
+  "status": 200,
+  "response": {
+    "day": "2030-01-07",
+    "greeting": "Good morning, Demo.",
+    "sections": [
+      {
+        "key": "classes",
+        "title": "Classes",
+        "lines": [
+          "You have 5 classes today, starting with Database Management Systems at 9:00 AM in LH-204."
+        ]
+      },
+      {
+        "key": "due",
+        "title": "Due soon",
+        "lines": [
+          "Due today: DCN CIE-2 (units 3 and 4) at 9:00 AM."
+        ]
+      },
+      {
+        "key": "attendance",
+        "title": "Attendance",
+        "lines": [
+          "Database Management Systems is at 73.33%: attend the next 2 classes in a row, starting Mon 7 Jan, to get back to 75%.",
+          "Probability and Statistics is at 79.17%: you can miss 1 class and stay at 75%. Over the rest of the semester you can miss 5 of 18."
+        ]
+      },
+      {
+        "key": "mail",
+        "title": "College mail",
+        "lines": [
+          "New in college mail: 3 mails worth a look, from Nimbus Systems, Orbitly and Controller of Examinations."
+        ]
+      }
+    ],
+    "classes": [
+      {
+        "start": "09:00",
+        "end": "09:55",
+        "subject_code": "CS52",
+        "subject": "Database Management Systems",
+        "room": "LH-204"
+      },
+      {
+        "start": "10:00",
+        "end": "10:55",
+        "subject_code": "CS54",
+        "subject": "Operating Systems",
+        "room": "LH-204"
+      },
+      {
+        "start": "11:10",
+        "end": "12:05",
+        "subject_code": "MA51",
+        "subject": "Probability and Statistics",
+        "room": "LH-108"
+      },
+      {
+        "start": "14:00",
+        "end": "14:55",
+        "subject_code": "CSL57",
+        "subject": "DBMS Laboratory",
+        "room": "LAB-3"
+      },
+      {
+        "start": "15:00",
+        "end": "15:55",
+        "subject_code": "CSL57",
+        "subject": "DBMS Laboratory",
+        "room": "LAB-3"
+      }
+    ],
+    "text": "Good morning, Demo. You have 5 classes today, starting with Database Management Systems at 9:00 AM in LH-204. Due today: DCN CIE-2 (units 3 and 4) at 9:00 AM. Database Management Systems is at 73.33%: attend the next 2 classes in a row, starting Mon 7 Jan, to get back to 75%. Probability and Statistics is at 79.17%: you can miss 1 class and stay at 75%. Over the rest of the semester you can miss 5 of 18. New in college mail: 3 mails worth a look, from Nimbus Systems, Orbitly and Controller of Examinations.",
+    "audio": {
+      "available": true
+    }
+  }
+}

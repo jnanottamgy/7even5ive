@@ -1,0 +1,21 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/api/tools/open_file",
+    "auth": "demo",
+    "body": {
+      "args": {
+        "file_id": 105
+      }
+    }
+  },
+  "status": 200,
+  "response": {
+    "status": "ok",
+    "result": {
+      "kind": "note",
+      "title": "Lab moved to Thursday",
+      "text": "DCN lab moved to Thursday, 2 pm. Bring your record."
+    }
+  }
+}

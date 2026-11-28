@@ -94,11 +94,12 @@ fun IconTile(icon: ImageVector, color: Color, modifier: Modifier = Modifier, siz
     Box(
         modifier
             .size(size)
-            .clip(RoundedCornerShape(size * 0.28f))
-            .background(Brush.verticalGradient(listOf(color.copy(alpha = 0.92f), color))),
+            .clip(CircleShape)
+            .background(color.copy(alpha = 0.10f)),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(size * 0.52f))
+        // Neo-minimal: a quiet round tile, the glyph in the kind's own ink.
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(size * 0.48f))
     }
 }
 
@@ -134,13 +135,13 @@ fun RouteBadge(route: String?, modifier: Modifier = Modifier) {
 @Composable
 fun SectionHeader(text: String, modifier: Modifier = Modifier, trailing: @Composable (() -> Unit)? = null) {
     Row(
-        modifier.fillMaxWidth().padding(start = 6.dp, end = 4.dp, top = 14.dp, bottom = 2.dp),
+        modifier.fillMaxWidth().padding(top = 26.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text.uppercase(),
-            style = MaterialTheme.typography.labelMedium,
-            letterSpacing = 0.4.sp,
+            style = MaterialTheme.typography.labelSmall,
+            letterSpacing = 1.5.sp,
             color = LocalAppColors.current.secondaryLabel,
             modifier = Modifier.weight(1f),
         )
@@ -155,7 +156,7 @@ fun AppCard(modifier: Modifier = Modifier, muted: Boolean = false, content: @Com
         modifier
             .fillMaxWidth()
             .glassSurface()
-            .padding(16.dp)
+            .padding(18.dp)
             .then(if (muted) Modifier.alpha(0.72f) else Modifier),
     ) { content() }
 }
@@ -170,28 +171,26 @@ fun PrimaryPill(
     busy: Boolean = false,
     icon: ImageVector? = null,
 ) {
-    val primary = MaterialTheme.colorScheme.primary
+    // The one accent: a flat orange capsule with ink text.
+    val accent = com.sevenfive.app.ui.theme.Orange
+    val ink = com.sevenfive.app.ui.theme.NeoInk
     Row(
         modifier
             .pressable(enabled = enabled && !busy, haptic = true, onClick = onClick)
             .clip(CircleShape)
-            .background(
-                Brush.horizontalGradient(
-                    listOf(primary.copy(alpha = if (enabled) 0.88f else 0.35f), primary.copy(alpha = if (enabled) 1f else 0.4f)),
-                ),
-            )
-            .padding(horizontal = 18.dp, vertical = 10.dp),
+            .background(accent.copy(alpha = if (enabled) 1f else 0.4f))
+            .padding(horizontal = 20.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
         if (busy) {
-            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+            CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = ink)
         } else {
             if (icon != null) {
-                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(18.dp))
+                Icon(icon, contentDescription = null, tint = ink, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
             }
-            Text(text, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimary)
+            Text(text, style = MaterialTheme.typography.labelLarge, color = ink)
         }
     }
 }
@@ -211,7 +210,7 @@ fun GlassPill(
         modifier
             .pressable(enabled = enabled && !busy, onClick = onClick)
             .glassSurface(shape = CircleShape, strong = true)
-            .padding(horizontal = 14.dp, vertical = 8.dp)
+            .padding(horizontal = 16.dp, vertical = 10.dp)
             .alpha(if (enabled) 1f else 0.45f),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
@@ -301,16 +300,16 @@ fun SlimBar(fraction: Float, color: Color, modifier: Modifier = Modifier) {
     Box(
         modifier
             .fillMaxWidth()
-            .height(5.dp)
+            .height(4.dp)
             .clip(CircleShape)
             .background(LocalAppColors.current.hairline),
     ) {
         Box(
             Modifier
                 .fillMaxWidth(fraction.coerceIn(0f, 1f))
-                .height(5.dp)
+                .height(4.dp)
                 .clip(CircleShape)
-                .background(Brush.horizontalGradient(listOf(color.copy(alpha = 0.75f), color))),
+                .background(color),
         )
     }
 }

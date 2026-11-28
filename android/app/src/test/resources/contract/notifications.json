@@ -1,0 +1,31 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/api/notifications?after=0",
+    "auth": "demo"
+  },
+  "status": 200,
+  "response": {
+    "notifications": [
+      {
+        "id": 1,
+        "kind": "call",
+        "title": "Computer Networks: DCN CIE-2 (units 3 and 4)",
+        "body": "Due Mon 7 Jan, 9:00 AM. We didn't call because it's within your quiet hours.",
+        "item_id": 3,
+        "reminder_id": null,
+        "created_at": "2030-01-07T08:30+05:30"
+      },
+      {
+        "id": 2,
+        "kind": "reminder",
+        "title": "Miscellaneous: IISc open hackathon",
+        "body": "Due Sat 12 Jan, 10:00 AM",
+        "item_id": 7,
+        "reminder_id": 2,
+        "created_at": "2030-01-12T09:01+05:30"
+      }
+    ],
+    "latest_id": 2
+  }
+}

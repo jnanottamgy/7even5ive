@@ -41,6 +41,9 @@ class SevenFiveApp : Application() {
     override fun onCreate() {
         super.onCreate()
         Diagnostics.install(this)
+        // Starts loading the on-phone log (placement steps, on-time record) in the background,
+        // so the first screen that reads it never waits on the disk.
+        com.sevenfive.app.data.LocalLog.warm(this)
         container = AppContainer(this)
         // Who was signed in, read off the main thread (the Keystore is slow); the app shows its
         // start screen until then. An account made on the server an older build used is signed
@@ -64,12 +67,15 @@ class AppContainer(context: Context) {
     val servers = ServerSettings(context, BuildConfig.DEFAULT_HOST, BuildConfig.DEFAULT_SERVER, BuildConfig.PORTAL)
     private val sessions = SessionStore(context)
 
+    /** One network client for the whole app: a single connection pool and set of threads. */
+    private val network = okhttp3.OkHttpClient()
+
     /** Who is signed in. The demo's token is public (it is "Try the demo"); accounts use Supabase. */
     val accounts = Accounts(
-        sessions, SupabaseAuth(okhttp3.OkHttpClient()), BuildConfig.STUDENT_TOKEN,
+        sessions, SupabaseAuth(network), BuildConfig.STUDENT_TOKEN,
         configCache = AuthConfigStore(context),
     )
-    private val http = Http(accounts)
+    private val http = Http(accounts, base = network)
     val core = CoreApi(http) { servers.config.value.coreUrl }
     val portmax = PortMaxApi(http) { servers.config.value.portmaxUrl }
     val cards = CardsRepository(core, File(context.filesDir, "cards.json")).also { repo ->
@@ -77,11 +83,19 @@ class AppContainer(context: Context) {
         // they show changed, not on every 7-second poll.
         var lastReminders: Any? = null
         var lastWidget: Any? = null
+        var lastCountdown: Any? = "unset"
         repo.onCards = { c ->
             val reminders = c.reminders.map { Triple(it.id, it.firesAt, it.channel) }
             if (reminders != lastReminders) {
                 Alerts.syncReminders(appContext, c.reminders)
                 lastReminders = reminders
+            }
+            // The lock-screen countdown: only when what it would show changes (another item,
+            // another due time, or one crossing into its last 24 hours).
+            val countdown = com.sevenfive.app.notify.LiveCountdown.next(c)?.let { it.first.id to it.second }
+            if (countdown != lastCountdown) {
+                com.sevenfive.app.notify.LiveCountdown.update(appContext, c)
+                lastCountdown = countdown
             }
             val widget = c.dueThisWeek.map { it.id to it.dueAt } to c.attendance.subjects.map { it.percent }
             if (widget != lastWidget) {
@@ -93,7 +107,9 @@ class AppContainer(context: Context) {
         repo.onReset = {
             lastReminders = null
             lastWidget = null
+            lastCountdown = "unset"
             Alerts.cancelReminders(appContext)
+            com.sevenfive.app.notify.LiveCountdown.cancel(appContext)
             WeekWidget.refresh(appContext)
         }
     }

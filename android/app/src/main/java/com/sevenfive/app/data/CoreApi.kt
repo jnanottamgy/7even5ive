@@ -12,6 +12,9 @@ class CoreApi(private val http: Http, val baseUrl: () -> String) {
     /** The cards as the server sent them, so the last good answer can be kept on disk. */
     suspend fun cardsJson(): String = http.get("${baseUrl()}/api/cards")
 
+    /** The cards, or null body when unchanged since [etag] (nothing downloaded, nothing to read). */
+    suspend fun cardsIfChanged(etag: String?): Http.Conditional = http.getIfChanged("${baseUrl()}/api/cards", etag)
+
     /** A material's file, as kept by the server. 404: none kept for this item. */
     suspend fun file(itemId: Int): ByteArray = http.getBytes("${baseUrl()}/api/files/$itemId")
 

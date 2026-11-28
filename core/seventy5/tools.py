@@ -37,7 +37,7 @@ def portal_store() -> Store:
     return _portal
 
 
-MAIL_FIELDS = ("category", "organisation", "role", "link", "mail_link", "summary", "event_at")
+MAIL_FIELDS = ("category", "organisation", "role", "link", "mail_link", "summary", "event_at", "details")
 
 
 def subjects(db: Database, student_id: int) -> list[str]:

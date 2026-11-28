@@ -1,0 +1,16 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/api/me/whatsapp",
+    "auth": "account",
+    "body": {}
+  },
+  "status": 200,
+  "response": {
+    "code": "75-TEST01",
+    "expires_at": "2030-01-12T09:16+05:30",
+    "message": "LINK 75-TEST01",
+    "bot_number": "+919900000075",
+    "link": "https://wa.me/919900000075?text=LINK%2075-TEST01"
+  }
+}

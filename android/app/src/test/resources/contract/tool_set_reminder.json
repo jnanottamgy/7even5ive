@@ -1,0 +1,24 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/api/tools/set_reminder",
+    "auth": "demo",
+    "body": {
+      "args": {
+        "item_id": 10,
+        "before_minutes": 60,
+        "channel": "push"
+      }
+    }
+  },
+  "status": 200,
+  "response": {
+    "status": "ok",
+    "result": {
+      "reminder_id": 1,
+      "fires_at": "2030-01-13T22:59+05:30",
+      "title": "Backend Engineering Internship 2027",
+      "channel": "push"
+    }
+  }
+}
