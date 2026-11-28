@@ -62,8 +62,14 @@ fun AuroraBackground(modifier: Modifier = Modifier) {
     // The contour paths are made once and reshaped in place, so drawing makes no garbage.
     val paths = androidx.compose.runtime.remember { List(8) { androidx.compose.ui.graphics.Path() } }
     Box(
-        // Its own layer: redrawing the background never redraws what sits on top of it.
-        modifier.fillMaxSize().graphicsLayer().drawBehind {
+        // Kept as a finished image (an offscreen layer the phone caches): painted again only when
+        // its clock ticks (10 times a second). Every other frame, and everything moving on top,
+        // reuses the image instead of redrawing the full-screen glow and eight long curves, which
+        // was most of each frame's cost on a 120 Hz phone.
+        modifier
+            .fillMaxSize()
+            .graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
+            .drawBehind {
             val ms = clock.longValue
             val drift = (ms % 60_000L) / 60_000f
             val float = (ms % 40_000L) / 40_000f
